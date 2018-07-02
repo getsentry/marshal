@@ -5,4 +5,5 @@ extern crate regex;
 extern crate serde_json;
 
 mod chunk;
+mod protocol;
 mod ruleconfig;

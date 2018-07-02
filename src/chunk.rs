@@ -13,14 +13,14 @@ pub enum Chunk<'a> {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Annotation {
+pub struct Remark {
     range: (i32, i32),
     note: Note,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Meta {
-    annotations: Vec<Annotation>,
+    remarks: Vec<Remark>,
     errors: Vec<String>,
     original_length: Option<u32>,
 }
@@ -66,7 +66,7 @@ impl<'a> Chunk<'a> {
     }
 }
 
-impl Annotation {
+impl Remark {
     pub fn range(&self) -> (usize, usize) {
         (self.range.0 as usize, self.range.1 as usize)
     }
@@ -79,7 +79,7 @@ impl Annotation {
 impl Default for Meta {
     fn default() -> Meta {
         Meta {
-            annotations: vec![],
+            remarks: vec![],
             errors: vec![],
             original_length: None,
         }
@@ -91,8 +91,8 @@ impl Meta {
         self.original_length.map(|x| x as usize)
     }
 
-    pub fn annotations(&self) -> impl Iterator<Item=&Annotation> {
-        self.annotations.iter()
+    pub fn remarks(&self) -> impl Iterator<Item=&Remark> {
+        self.remarks.iter()
     }
 
     pub fn errors(&self) -> impl Iterator<Item=&str> {
@@ -108,7 +108,7 @@ pub fn get_chunks_from_text<'a>(text: &'a str, meta: &Meta) -> Vec<Chunk<'a>> {
     let mut rv = vec![];
     let mut pos = 0;
 
-    for annotation in &meta.annotations {
+    for annotation in &meta.remarks {
         let (start, end) = annotation.range();
         if start > pos {
             if let Some(piece) = text.get(pos..start) {
@@ -139,14 +139,14 @@ pub fn get_chunks_from_text<'a>(text: &'a str, meta: &Meta) -> Vec<Chunk<'a>> {
 
 pub fn get_text_from_chunks<'a>(chunks: Vec<Chunk<'a>>, mut meta: Meta) -> (String, Meta) {
     let mut rv = String::new();
-    let mut annotations = vec![];
+    let mut remarks = vec![];
     let mut pos = 0;
 
     for chunk in chunks {
         let new_pos = pos + chunk.len();
         rv.push_str(chunk.as_str());
         if let Chunk::Redaction(_, note) = chunk {
-            annotations.push(Annotation {
+            remarks.push(Remark {
                 range: (pos as i32, new_pos as i32),
                 note: note,
             });
@@ -154,7 +154,7 @@ pub fn get_text_from_chunks<'a>(chunks: Vec<Chunk<'a>>, mut meta: Meta) -> (Stri
         pos += new_pos;
     }
 
-    meta.annotations = annotations;
+    meta.remarks = remarks;
     (rv, meta)
 }
 
@@ -163,7 +163,7 @@ fn test_chunking() {
     let chunks = get_chunks_from_text(
         "Hello Peter, my email address is ****@*****.com. See you",
         &Meta {
-            annotations: vec![Annotation {
+            remarks: vec![Remark {
                 range: (33, 47),
                 note: Note::new_well_known("@email-address"),
             }],
@@ -188,7 +188,7 @@ fn test_chunking() {
         (
             "Hello Peter, my email address is ****@*****.com. See you".into(),
             Meta {
-                annotations: vec![Annotation {
+                remarks: vec![Remark {
                     range: (33, 47),
                     note: Note::new_well_known("@email-address"),
                 }],
