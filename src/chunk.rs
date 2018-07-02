@@ -86,6 +86,24 @@ impl Default for Meta {
     }
 }
 
+impl Meta {
+    pub fn original_length(&self) -> Option<usize> {
+        self.original_length.map(|x| x as usize)
+    }
+
+    pub fn annotations(&self) -> impl Iterator<Item=&Annotation> {
+        self.annotations.iter()
+    }
+
+    pub fn errors(&self) -> impl Iterator<Item=&str> {
+        self.errors.iter().map(|x| x.as_str())
+    }
+
+    pub fn has_errors(&self) -> bool {
+        !self.errors.is_empty()
+    }
+}
+
 pub fn get_chunks_from_text<'a>(text: &'a str, meta: &Meta) -> Vec<Chunk<'a>> {
     let mut rv = vec![];
     let mut pos = 0;
