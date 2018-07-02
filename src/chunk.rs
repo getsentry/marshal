@@ -3,24 +3,25 @@ use std::borrow::Cow;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Note {
     rule: Cow<'static, str>,
-    description: Cow<'static, str>,
+    description: Option<Cow<'static, str>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Chunk<'a> {
     Text(Cow<'a, str>),
-    Redaction(Cow<'a, str>, Option<Note>),
+    Redaction(Cow<'a, str>, Note),
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Annotation {
     range: (i32, i32),
-    note: Option<Note>,
+    note: Note,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Meta {
     annotations: Vec<Annotation>,
+    errors: Vec<String>,
     original_length: Option<u32>,
 }
 
@@ -28,14 +29,14 @@ impl Note {
     pub fn new(rule: String, description: String) -> Note {
         Note {
             rule: rule.into(),
-            description: description.into(),
+            description: Some(description.into()),
         }
     }
 
     pub fn new_well_known(rule: &'static str) -> Note {
         Note {
             rule: Cow::Borrowed(rule),
-            description: Cow::Borrowed(""),
+            description: None,
         }
     }
 
@@ -43,8 +44,12 @@ impl Note {
         &self.rule
     }
 
-    pub fn description(&self) -> &str {
-        &self.description
+    pub fn description(&self) -> Option<&str> {
+        if let Some(ref description) = self.description {
+            Some(&description)
+        } else {
+            None
+        }
     }
 }
 
@@ -65,12 +70,17 @@ impl Annotation {
     pub fn range(&self) -> (usize, usize) {
         (self.range.0 as usize, self.range.1 as usize)
     }
+
+    pub fn note(&self) -> &Note {
+        &self.note
+    }
 }
 
 impl Default for Meta {
     fn default() -> Meta {
         Meta {
             annotations: vec![],
+            errors: vec![],
             original_length: None,
         }
     }
@@ -92,7 +102,7 @@ pub fn get_chunks_from_text<'a>(text: &'a str, meta: &Meta) -> Vec<Chunk<'a>> {
         if let Some(piece) = text.get(start..end) {
             rv.push(Chunk::Redaction(
                 Cow::Borrowed(piece),
-                annotation.note.clone(),
+                annotation.note().clone(),
             ));
         } else {
             break;
@@ -137,7 +147,7 @@ fn test_chunking() {
         &Meta {
             annotations: vec![Annotation {
                 range: (33, 47),
-                note: Some(Note::new_well_known("@email-address")),
+                note: Note::new_well_known("@email-address"),
             }],
             ..Default::default()
         },
@@ -149,7 +159,7 @@ fn test_chunking() {
             Chunk::Text(Cow::Borrowed("Hello Peter, my email address is ")),
             Chunk::Redaction(
                 Cow::Borrowed("****@*****.com"),
-                Some(Note::new_well_known("@email-address")),
+                Note::new_well_known("@email-address"),
             ),
             Chunk::Text(Cow::Borrowed(". See you")),
         ]
@@ -162,7 +172,7 @@ fn test_chunking() {
             Meta {
                 annotations: vec![Annotation {
                     range: (33, 47),
-                    note: Some(Note::new_well_known("@email-address")),
+                    note: Note::new_well_known("@email-address"),
                 }],
                 ..Default::default()
             }

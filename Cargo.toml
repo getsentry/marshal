@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["Armin Ronacher <armin.ronacher@active-4.com>"]
 
 [dependencies]
-sentry-types = { path = "../rust-sentry-types" }
 serde = "1.0.66"
 serde_derive = "1.0.66"
 regex = "1.0.1"
