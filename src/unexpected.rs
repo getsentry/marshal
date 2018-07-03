@@ -43,19 +43,19 @@ impl<'de> Visitor<'de> for UnexpectedVisitor {
     #[inline]
     fn visit_i64<E>(self, x: i64) -> Result<Self::Value, E> {
         let _ = x;
-        Ok(UnexpectedType("integer"))
+        Ok(UnexpectedType("number"))
     }
 
     #[inline]
     fn visit_u64<E>(self, x: u64) -> Result<Self::Value, E> {
         let _ = x;
-        Ok(UnexpectedType("integer"))
+        Ok(UnexpectedType("number"))
     }
 
     #[inline]
     fn visit_f64<E>(self, x: f64) -> Result<Self::Value, E> {
         let _ = x;
-        Ok(UnexpectedType("integer"))
+        Ok(UnexpectedType("number"))
     }
 
     #[inline]

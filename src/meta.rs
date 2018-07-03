@@ -110,6 +110,15 @@ pub struct Meta {
 }
 
 impl Meta {
+    /// Creates a new meta data object from an error message.
+    pub(crate) fn from_error<S: Into<String>>(message: S) -> Self {
+        Meta {
+            remarks: Vec::new(),
+            errors: vec![message.into()],
+            original_length: None,
+        }
+    }
+
     /// The original length of this field, if applicable.
     pub fn original_length(&self) -> Option<usize> {
         self.original_length.map(|x| x as usize)
@@ -208,14 +217,10 @@ impl<T> Annotated<T> {
 
 impl<T: Default> Annotated<T> {
     /// Creates an annotated wrapper for invalid data with an error message.
-    pub fn error<S: Into<String>>(message: S) -> Self {
+    pub fn from_error<S: Into<String>>(message: S) -> Self {
         Annotated {
             value: Default::default(),
-            meta: Meta {
-                remarks: Vec::new(),
-                errors: vec![message.into()],
-                original_length: None,
-            },
+            meta: Meta::from_error(message),
         }
     }
 }
@@ -236,7 +241,7 @@ impl<T: Default> From<Maybe<T>> for Annotated<T> {
     fn from(maybe: Maybe<T>) -> Self {
         match maybe {
             Maybe::Valid(value) => Annotated::from(value),
-            Maybe::Invalid(u) => Annotated::error(format!("unexpected {}", u.0)),
+            Maybe::Invalid(u) => Annotated::from_error(format!("unexpected {}", u.0)),
         }
     }
 }
@@ -247,5 +252,61 @@ where
 {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         Ok(Maybe::deserialize(deserializer)?.into())
+    }
+}
+
+#[cfg(test)]
+mod test_annotated {
+    use super::*;
+
+    use serde::de::IgnoredAny;
+    use serde_json;
+
+    #[derive(Debug, Default, Deserialize, PartialEq)]
+    struct Test {
+        answer: Annotated<i32>,
+    }
+
+    #[test]
+    fn test_valid() {
+        assert_eq!(Annotated::from(42), serde_json::from_str("42").unwrap());
+    }
+
+    #[test]
+    fn test_valid_nested() {
+        assert_eq!(
+            Annotated::from(Test {
+                answer: Annotated::from(42),
+            }),
+            serde_json::from_str(r#"{"answer": 42}"#).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_invalid() {
+        assert_eq!(
+            Annotated::new(0, Meta::from_error("unexpected null")),
+            serde_json::from_str(r#"null"#).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_invalid_nested() {
+        assert_eq!(
+            Annotated::from(Test {
+                answer: Annotated::new(0, Meta::from_error("unexpected string"))
+            }),
+            serde_json::from_str(r#"{"answer": "invalid"}"#).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_syntax_error() {
+        assert!(serde_json::from_str::<i32>("nul").is_err());
+    }
+
+    #[test]
+    fn test_syntax_error_nested() {
+        assert!(serde_json::from_str::<Test>(r#"{"answer": nul}"#).is_err());
     }
 }
