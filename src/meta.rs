@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use unexpected::UnexpectedType;
 
@@ -266,33 +266,46 @@ where
     }
 }
 
+impl<T: Serialize> Serialize for Annotated<T> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self.value {
+            Some(ref value) => value.serialize(serializer),
+            None => serializer.serialize_unit(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod test_annotated {
     use super::*;
     use serde_json;
+    use tests::assert_roundtrip;
 
-    #[derive(Debug, Default, Deserialize, PartialEq)]
+    #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
     struct Test {
         answer: Annotated<i32>,
     }
 
     #[test]
     fn test_valid() {
-        assert_eq!(Annotated::from(42), serde_json::from_str("42").unwrap());
+        let value = Annotated::from(42);
+        assert_roundtrip(&value);
+        assert_eq!(value, serde_json::from_str("42").unwrap());
     }
 
     #[test]
     fn test_valid_nested() {
-        assert_eq!(
-            Annotated::from(Test {
-                answer: Annotated::from(42),
-            }),
-            serde_json::from_str(r#"{"answer": 42}"#).unwrap()
-        );
+        let value = Annotated::from(Test {
+            answer: Annotated::from(42),
+        });
+
+        assert_roundtrip(&value);
+        assert_eq!(value, serde_json::from_str(r#"{"answer": 42}"#).unwrap());
     }
 
     #[test]
     fn test_invalid() {
+        // TODO: Test roundtrip when metadata state is ready
         assert_eq!(
             Annotated::<i32>::from_error("unexpected object"),
             serde_json::from_str(r#"{}"#).unwrap()
@@ -301,6 +314,7 @@ mod test_annotated {
 
     #[test]
     fn test_invalid_nested() {
+        // TODO: Test roundtrip when metadata state is ready
         assert_eq!(
             Annotated::from(Test {
                 answer: Annotated::from_error("unexpected string")
@@ -311,20 +325,19 @@ mod test_annotated {
 
     #[test]
     fn test_empty() {
-        assert_eq!(
-            Annotated::<i32>::empty(),
-            serde_json::from_str("null").unwrap()
-        );
+        let value = Annotated::<i32>::empty();
+        assert_roundtrip(&value);
+        assert_eq!(value, serde_json::from_str("null").unwrap());
     }
 
     #[test]
     fn test_empty_nested() {
-        assert_eq!(
-            Annotated::from(Test {
-                answer: Annotated::empty(),
-            }),
-            serde_json::from_str(r#"{"answer": null}"#).unwrap()
-        );
+        let value = Annotated::from(Test {
+            answer: Annotated::empty(),
+        });
+
+        assert_roundtrip(&value);
+        assert_eq!(value, serde_json::from_str(r#"{"answer": null}"#).unwrap());
     }
 
     #[test]

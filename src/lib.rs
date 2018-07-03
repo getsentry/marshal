@@ -21,3 +21,6 @@ pub mod rule;
 
 mod unexpected;
 mod utils;
+
+#[cfg(test)]
+mod tests;
