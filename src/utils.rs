@@ -29,7 +29,12 @@ pub mod serde_chrono {
     where
         S: ser::Serializer,
     {
-        let datetime = value.value();
+        // TODO: This will serialize an invalid payload!
+        let datetime = match value.value() {
+            Some(dt) => dt,
+            None => return serializer.serialize_none(),
+        };
+
         if datetime.timestamp_subsec_nanos() == 0 {
             serializer.serialize_i64(datetime.timestamp())
         } else {

@@ -176,7 +176,7 @@ enum Maybe<T> {
 /// Wrapper for data fields with optional meta data.
 #[derive(Debug, PartialEq)]
 pub struct Annotated<T> {
-    value: T,
+    value: Option<T>,
     meta: Meta,
 }
 
@@ -184,19 +184,27 @@ impl<T> Annotated<T> {
     /// Creates a new annotated value with meta data.
     pub fn new(value: T, meta: Meta) -> Self {
         Annotated {
-            value: value,
+            value: Some(value),
             meta: meta,
         }
     }
 
+    /// Creates an annotated wrapper for invalid data with an error message.
+    pub fn from_error<S: Into<String>>(message: S) -> Self {
+        Annotated {
+            value: None,
+            meta: Meta::from_error(message),
+        }
+    }
+
     /// The actual value.
-    pub fn value(&self) -> &T {
-        &self.value
+    pub fn value(&self) -> Option<&T> {
+        self.value.as_ref()
     }
 
     /// Mutable reference to the actual value.
-    pub fn value_mut(&mut self) -> &mut T {
-        &mut self.value
+    pub fn value_mut(&mut self) -> Option<&mut T> {
+        self.value.as_mut()
     }
 
     /// Meta information on the value.
@@ -210,18 +218,8 @@ impl<T> Annotated<T> {
     }
 
     /// Unwraps into the inner value.
-    pub fn into_value(self) -> T {
-        self.value
-    }
-}
-
-impl<T: Default> Annotated<T> {
-    /// Creates an annotated wrapper for invalid data with an error message.
-    pub fn from_error<S: Into<String>>(message: S) -> Self {
-        Annotated {
-            value: Default::default(),
-            meta: Meta::from_error(message),
-        }
+    pub fn take(&mut self) -> Option<T> {
+        self.value.take()
     }
 }
 
@@ -237,7 +235,7 @@ impl<T> From<T> for Annotated<T> {
     }
 }
 
-impl<T: Default> From<Maybe<T>> for Annotated<T> {
+impl<T> From<Maybe<T>> for Annotated<T> {
     fn from(maybe: Maybe<T>) -> Self {
         match maybe {
             Maybe::Valid(value) => Annotated::from(value),
@@ -248,7 +246,7 @@ impl<T: Default> From<Maybe<T>> for Annotated<T> {
 
 impl<'de, T> Deserialize<'de> for Annotated<T>
 where
-    T: Deserialize<'de> + Default,
+    T: Deserialize<'de>,
 {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         Ok(Maybe::deserialize(deserializer)?.into())
@@ -283,7 +281,7 @@ mod test_annotated {
     #[test]
     fn test_invalid() {
         assert_eq!(
-            Annotated::new(0, Meta::from_error("unexpected null")),
+            Annotated::<i32>::from_error("unexpected null"),
             serde_json::from_str(r#"null"#).unwrap()
         );
     }
@@ -292,7 +290,7 @@ mod test_annotated {
     fn test_invalid_nested() {
         assert_eq!(
             Annotated::from(Test {
-                answer: Annotated::new(0, Meta::from_error("unexpected string"))
+                answer: Annotated::from_error("unexpected string")
             }),
             serde_json::from_str(r#"{"answer": "invalid"}"#).unwrap()
         );
