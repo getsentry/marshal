@@ -9,7 +9,7 @@ pub mod serde_chrono {
 
     use meta::Annotated;
 
-    fn timestamp_to_datetime(ts: f64) -> DateTime<Utc> {
+    pub fn timestamp_to_datetime(ts: f64) -> DateTime<Utc> {
         let secs = ts as i64;
         let micros = (ts.fract() * 1_000_000f64) as u32;
         Utc.timestamp_opt(secs, micros * 1000).unwrap()
