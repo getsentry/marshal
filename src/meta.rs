@@ -170,6 +170,10 @@ impl Default for Meta {
 #[serde(untagged)]
 enum Maybe<T> {
     Valid(T),
+    // TODO: This is semantics when Annotated::value is None. We should be more intelligent about
+    // this, in case an SDK explicitly sends null. One way would be to cross reference with meta
+    // data from the deserialization state, once this is implemented.
+    Empty(()),
     Invalid(UnexpectedType),
 }
 
@@ -181,6 +185,14 @@ pub struct Annotated<T> {
 }
 
 impl<T> Annotated<T> {
+    /// Creates an empty annotated shell without value or meta data.
+    pub fn empty() -> Self {
+        Annotated {
+            value: None,
+            meta: Default::default(),
+        }
+    }
+
     /// Creates a new annotated value with meta data.
     pub fn new(value: T, meta: Meta) -> Self {
         Annotated {
@@ -239,6 +251,7 @@ impl<T> From<Maybe<T>> for Annotated<T> {
     fn from(maybe: Maybe<T>) -> Self {
         match maybe {
             Maybe::Valid(value) => Annotated::from(value),
+            Maybe::Empty(()) => Annotated::empty(),
             Maybe::Invalid(u) => Annotated::from_error(format!("unexpected {}", u.0)),
         }
     }
@@ -281,8 +294,8 @@ mod test_annotated {
     #[test]
     fn test_invalid() {
         assert_eq!(
-            Annotated::<i32>::from_error("unexpected null"),
-            serde_json::from_str(r#"null"#).unwrap()
+            Annotated::<i32>::from_error("unexpected object"),
+            serde_json::from_str(r#"{}"#).unwrap()
         );
     }
 
@@ -293,6 +306,24 @@ mod test_annotated {
                 answer: Annotated::from_error("unexpected string")
             }),
             serde_json::from_str(r#"{"answer": "invalid"}"#).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_empty() {
+        assert_eq!(
+            Annotated::<i32>::empty(),
+            serde_json::from_str("null").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_empty_nested() {
+        assert_eq!(
+            Annotated::from(Test {
+                answer: Annotated::empty(),
+            }),
+            serde_json::from_str(r#"{"answer": null}"#).unwrap()
         );
     }
 
