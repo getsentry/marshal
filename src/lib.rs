@@ -1,3 +1,10 @@
+//! Event processing library used at Sentry.
+//!
+//! This crate contains types and utility functions for parsing Sentry event payloads, normalizing
+//! them into the canonical protocol, and stripping PII.
+
+#![warn(missing_docs)]
+
 extern crate chrono;
 extern crate regex;
 extern crate serde;
@@ -10,6 +17,7 @@ pub mod chunk;
 pub mod common;
 pub mod meta;
 pub mod protocol;
-pub mod ruleconfig;
+pub mod rule;
 
 mod unexpected;
+mod utils;

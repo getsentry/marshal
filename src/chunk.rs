@@ -1,14 +1,20 @@
+//! Utilities for dealing with annotated strings.
+
 use std::borrow::Cow;
 
 use meta::{Meta, Note, Remark};
 
+/// A type for dealing with chunks of annotated text.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Chunk<'a> {
+    /// Unmodified text chunk.
     Text(Cow<'a, str>),
+    /// Redacted text chunk with a note.
     Redaction(Cow<'a, str>, Note),
 }
 
 impl<'a> Chunk<'a> {
+    /// The text of this chunk.
     pub fn as_str(&self) -> &str {
         match *self {
             Chunk::Text(ref text) => &text,
@@ -16,12 +22,48 @@ impl<'a> Chunk<'a> {
         }
     }
 
+    /// Effective length of the text in this chunk.
     pub fn len(&self) -> usize {
         self.as_str().len()
     }
 }
 
-pub fn get_text_from_chunks<'a>(chunks: Vec<Chunk<'a>>, mut meta: Meta) -> (String, Meta) {
+/// Chunks the given text based on remarks.
+pub fn from_str<'a>(text: &'a str, meta: &Meta) -> Vec<Chunk<'a>> {
+    let mut rv = vec![];
+    let mut pos = 0;
+
+    for remark in meta.remarks() {
+        let (start, end) = remark.range();
+        if start > pos {
+            if let Some(piece) = text.get(pos..start) {
+                rv.push(Chunk::Text(Cow::Borrowed(piece)));
+            } else {
+                break;
+            }
+        }
+        if let Some(piece) = text.get(start..end) {
+            rv.push(Chunk::Redaction(
+                Cow::Borrowed(piece),
+                remark.note().clone(),
+            ));
+        } else {
+            break;
+        }
+        pos = end;
+    }
+
+    if pos < text.len() {
+        if let Some(piece) = text.get(pos..) {
+            rv.push(Chunk::Text(Cow::Borrowed(piece)));
+        }
+    }
+
+    rv
+}
+
+/// Concatenates chunks into a string and places remarks inside the given meta.
+pub fn to_string<'a>(chunks: Vec<Chunk<'a>>, mut meta: Meta) -> (String, Meta) {
     let mut rv = String::new();
     let mut remarks = vec![];
     let mut pos = 0;
@@ -39,42 +81,9 @@ pub fn get_text_from_chunks<'a>(chunks: Vec<Chunk<'a>>, mut meta: Meta) -> (Stri
     (rv, meta)
 }
 
-pub fn get_chunks_from_text<'a>(text: &'a str, meta: &Meta) -> Vec<Chunk<'a>> {
-    let mut rv = vec![];
-    let mut pos = 0;
-
-    for annotation in meta.remarks() {
-        let (start, end) = annotation.range();
-        if start > pos {
-            if let Some(piece) = text.get(pos..start) {
-                rv.push(Chunk::Text(Cow::Borrowed(piece)));
-            } else {
-                break;
-            }
-        }
-        if let Some(piece) = text.get(start..end) {
-            rv.push(Chunk::Redaction(
-                Cow::Borrowed(piece),
-                annotation.note().clone(),
-            ));
-        } else {
-            break;
-        }
-        pos = end;
-    }
-
-    if pos < text.len() {
-        if let Some(piece) = text.get(pos..) {
-            rv.push(Chunk::Text(Cow::Borrowed(piece)));
-        }
-    }
-
-    rv
-}
-
 #[test]
 fn test_chunking() {
-    let chunks = get_chunks_from_text(
+    let chunks = from_str(
         "Hello Peter, my email address is ****@*****.com. See you",
         &Meta {
             remarks: vec![Remark::new(
@@ -98,7 +107,7 @@ fn test_chunking() {
     );
 
     assert_eq!(
-        get_text_from_chunks(chunks, Default::default()),
+        to_string(chunks, Default::default()),
         (
             "Hello Peter, my email address is ****@*****.com. See you".into(),
             Meta {

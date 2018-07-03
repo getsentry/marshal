@@ -1,3 +1,5 @@
+//! PII stripping and normalization rule configuration.
+
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -5,6 +7,7 @@ use regex::{Regex, RegexBuilder};
 use serde::de::{Deserialize, Deserializer, Error};
 use serde::ser::{Serialize, Serializer};
 
+/// A regex pattern for text replacement.
 pub struct Pattern(Regex);
 
 impl fmt::Debug for Pattern {
@@ -14,22 +17,14 @@ impl fmt::Debug for Pattern {
 }
 
 impl Serialize for Pattern {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(&self.0.to_string())
     }
 }
 
 impl<'de> Deserialize<'de> for Pattern {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let raw: String = String::deserialize(deserializer)?
-            .parse()
-            .map_err(Error::custom)?;
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = String::deserialize(deserializer)?;
         let pattern = RegexBuilder::new(&raw)
             .size_limit(262_144)
             .build()
@@ -38,42 +33,62 @@ impl<'de> Deserialize<'de> for Pattern {
     }
 }
 
+/// Supported stripping rules.
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RuleType {
+    /// Truncates a string's tail.
     TruncateString {
+        /// The maximum length of the string.
         max_length: u32,
     },
+    /// Truncates a path in the middle.
     TruncatePath {
+        /// Maximum length of the path.
         max_length: u32,
     },
+    /// Truncates deep objects.
     DepthLimit {
+        /// Maximum depth starting at the rule entry point.
         max_depth: u32,
     },
+    /// Applies a regular expression.
     Pattern {
+        /// The regular expression to apply.
         pattern: Pattern,
+        /// The match group indices to replace.
         replace_groups: Option<Vec<u8>>,
     },
+    /// Replaces the value for well-known keys in accociative
     RemovePairValue {
+        /// A pattern to match for keys.
         key_pattern: Pattern,
     },
 }
 
+///
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged, rename_all = "snake_case")]
 pub enum Replacement {
+    /// Overwrites the matched groups with a mask.
     Mask {
+        /// The character to mask with.
         mask_with_char: char,
+        /// Characters to skip during masking to preserve structure.
         #[serde(default)]
         chars_to_ignore: String,
+        /// Index range to mask in. Negative indices count from the string's end.
         #[serde(default)]
         mask_range: (Option<i32>, Option<i32>),
     },
+    /// Replaces the matched group with a new value.
     NewValue {
+        /// The replacement string.
         new_value: String,
     },
 }
 
+/// A single rule configuration.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Rule {
     #[serde(flatten)]
@@ -82,6 +97,7 @@ pub struct Rule {
     note: Option<String>,
 }
 
+/// A set of named rule configurations.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RuleConfig {
     rules: BTreeMap<String, Rule>,
@@ -146,5 +162,4 @@ fn test_config() {
         }
     }"#).unwrap();
     println!("{:#?}", &cfg);
-    //panic!();
 }

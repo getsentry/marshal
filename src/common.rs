@@ -1,3 +1,5 @@
+//! Common data structures.
+
 use std::iter::FromIterator;
 use std::ops;
 

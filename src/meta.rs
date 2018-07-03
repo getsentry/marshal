@@ -1,9 +1,12 @@
+//! Event meta data.
+
 use std::borrow::Cow;
 
 use serde::{Deserialize, Deserializer};
 
 use unexpected::UnexpectedType;
 
+/// Description of a remark.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Note {
     rule: Cow<'static, str>,
@@ -11,24 +14,34 @@ pub struct Note {
 }
 
 impl Note {
+    /// Creates a new Note.
     pub fn new(rule: String, description: String) -> Note {
+        debug_assert!(!rule.starts_with("@"));
+
         Note {
             rule: rule.into(),
             description: Some(description.into()),
         }
     }
 
+    /// Creates a new well-known note without description.
+    ///
+    /// By convention, the rule name must start with "@".
     pub fn new_well_known(rule: &'static str) -> Note {
+        debug_assert!(rule.starts_with("@"));
+
         Note {
             rule: Cow::Borrowed(rule),
             description: None,
         }
     }
 
+    /// Returns the rule name of this note.
     pub fn rule(&self) -> &str {
         &self.rule
     }
 
+    /// Returns the human readable description. Empty for well-known rules.
     pub fn description(&self) -> Option<&str> {
         if let Some(ref description) = self.description {
             Some(&description)
@@ -36,71 +49,98 @@ impl Note {
             None
         }
     }
+
+    /// Returns if this is a well-known rule.
+    ///
+    /// Such rules do not include a description.
+    pub fn well_known(&self) -> bool {
+        self.rule.starts_with("@")
+    }
 }
 
+/// The start (inclusive) and end (exclusive) indices of a `Remark`.
 pub type Range = (usize, usize);
 
+/// Information on a modified section in a string.
 #[derive(Debug, PartialEq)]
 pub struct Remark {
-    range: Range,
+    range: (usize, usize),
     note: Note,
 }
 
 impl Remark {
+    /// Creates a new remark.
     pub fn new(range: Range, note: Note) -> Self {
         Remark { range, note }
     }
 
+    /// The range of this remark.
     pub fn range(&self) -> Range {
         self.range
     }
 
+    /// Updates the range of this remark.
     pub fn set_range(&mut self, range: Range) {
         self.range = range;
     }
 
+    /// The length of this range.
+    pub fn len(&self) -> usize {
+        self.range.1 - self.range.0
+    }
+
+    /// The note of this remark.
     pub fn note(&self) -> &Note {
         &self.note
     }
 
+    /// The mutable note of this remark.
     pub fn note_mut(&mut self) -> &mut Note {
         &mut self.note
     }
 }
 
+/// Meta information for a data field in the event payload.
 #[derive(Debug, PartialEq)]
 pub struct Meta {
-    // TODO: These should probably be pub
+    // TODO: These should probably be pub, similar to structs in crate::protocol.
     pub(crate) remarks: Vec<Remark>,
     pub(crate) errors: Vec<String>,
     pub(crate) original_length: Option<u32>,
 }
 
 impl Meta {
+    /// The original length of this field, if applicable.
     pub fn original_length(&self) -> Option<usize> {
         self.original_length.map(|x| x as usize)
     }
 
+    /// Updates the original length of this annotation.
     pub fn set_original_length(&mut self, original_length: Option<u32>) {
         self.original_length = original_length;
     }
 
+    /// Iterates all remarks on this field.
     pub fn remarks(&self) -> impl Iterator<Item = &Remark> {
         self.remarks.iter()
     }
 
+    /// Mutable reference to remarks of this field.
     pub fn remarks_mut(&mut self) -> &mut Vec<Remark> {
         &mut self.remarks
     }
 
+    /// Iterates errors on this field.
     pub fn errors(&self) -> impl Iterator<Item = &str> {
         self.errors.iter().map(|x| x.as_str())
     }
 
+    /// Mutable reference to errors of this field.
     pub fn errors_mut(&mut self) -> &mut Vec<String> {
         &mut self.errors
     }
 
+    /// Indicates whether this field has errors.
     pub fn has_errors(&self) -> bool {
         !self.errors.is_empty()
     }
@@ -116,6 +156,7 @@ impl Default for Meta {
     }
 }
 
+/// Internal deserialization helper for potentially invalid data.
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum Maybe<T> {
@@ -123,6 +164,7 @@ enum Maybe<T> {
     Invalid(UnexpectedType),
 }
 
+/// Wrapper for data fields with optional meta data.
 #[derive(Debug, PartialEq)]
 pub struct Annotated<T> {
     value: T,
@@ -130,6 +172,7 @@ pub struct Annotated<T> {
 }
 
 impl<T> Annotated<T> {
+    /// Creates a new annotated value with meta data.
     pub fn new(value: T, meta: Meta) -> Self {
         Annotated {
             value: value,
@@ -137,20 +180,34 @@ impl<T> Annotated<T> {
         }
     }
 
+    /// The actual value.
     pub fn value(&self) -> &T {
         &self.value
     }
 
+    /// Mutable reference to the actual value.
+    pub fn value_mut(&mut self) -> &mut T {
+        &mut self.value
+    }
+
+    /// Meta information on the value.
     pub fn meta(&self) -> &Meta {
         &self.meta
     }
 
+    /// Mutable reference to the value's meta information.
+    pub fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+
+    /// Unwraps into the inner value.
     pub fn into_value(self) -> T {
         self.value
     }
 }
 
 impl<T: Default> Annotated<T> {
+    /// Creates an annotated wrapper for invalid data with an error message.
     pub fn error<S: Into<String>>(message: S) -> Self {
         Annotated {
             value: Default::default(),
