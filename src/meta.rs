@@ -258,8 +258,6 @@ where
 #[cfg(test)]
 mod test_annotated {
     use super::*;
-
-    use serde::de::IgnoredAny;
     use serde_json;
 
     #[derive(Debug, Default, Deserialize, PartialEq)]
