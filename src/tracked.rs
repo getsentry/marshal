@@ -1,15 +1,6 @@
-use serde::de::{self, Deserialize, DeserializeSeed, Deserializer, Error, State, Visitor};
+use serde::de::{self, DeserializeSeed, Deserializer, Error, State, Visitor};
 use std::fmt::{self, Display};
 use std::rc::Rc;
-
-/// Entry point. See crate documentation for an example.
-pub fn deserialize<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    T::deserialize(TrackedDeserializer::new(deserializer))
-}
 
 fn state_with_parent_path<F: FnOnce(Rc<Path>) -> Rc<Path>>(state: &State, f: F) -> State {
     let mut rv = state.clone();
@@ -64,10 +55,8 @@ pub struct TrackedDeserializer<D> {
 }
 
 impl<D> TrackedDeserializer<D> {
-    pub fn new(de: D) -> Self {
-        let mut state = State::empty().clone();
+    pub fn new(de: D, mut state: State) -> Self {
         state.set(Rc::new(Path::Root));
-
         TrackedDeserializer {
             de: de,
             state: state,

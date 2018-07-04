@@ -20,7 +20,6 @@ pub mod protocol;
 pub mod rule;
 
 mod tracked;
-mod unexpected;
 mod utils;
 
 #[cfg(test)]

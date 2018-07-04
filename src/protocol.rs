@@ -47,7 +47,9 @@ mod test_breadcrumb {
     // TODO: Test errors
 
     #[test]
-    fn test_default_type() {
+    fn test_default_values() {
+        let json = r#"{"timestamp": 47.11}"#;
+
         let breadcrumb = Breadcrumb {
             timestamp: serde_chrono::timestamp_to_datetime(47.11).into(),
             ty: default_breadcrumb_type(),
@@ -56,7 +58,7 @@ mod test_breadcrumb {
 
         assert_eq!(
             Annotated::from(breadcrumb),
-            serde_json::from_str(r#"{"timestamp": 47.11}"#).unwrap()
+            serde_json::from_str(json).unwrap()
         );
     }
 }
