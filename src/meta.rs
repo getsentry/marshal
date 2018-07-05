@@ -348,26 +348,19 @@ where
 }
 
 #[cfg(test)]
-mod test_annotated {
+mod test_with_meta {
     use super::*;
-    use serde_json;
-    use tests::assert_roundtrip;
+    use serde_json::Deserializer;
 
     #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
     struct Test {
         answer: Annotated<i32>,
+        other: i32,
     }
 
     #[test]
     fn test_valid() {
-        let value = Annotated::from(42);
-        assert_roundtrip(&value);
-        assert_eq!(value, serde_json::from_str("42").unwrap());
-    }
-
-    #[test]
-    fn test_valid_with_meta() {
-        let deserializer = &mut serde_json::Deserializer::from_str("42");
+        let deserializer = &mut Deserializer::from_str("42");
         let mut meta_map = MetaMap::new();
         meta_map.insert(".".to_string(), Meta::from_error("some prior error"));
 
@@ -377,69 +370,118 @@ mod test_annotated {
 
     #[test]
     fn test_valid_nested() {
-        let value = Annotated::from(Test {
-            answer: Annotated::from(42),
-        });
-
-        assert_roundtrip(&value);
-        assert_eq!(value, serde_json::from_str(r#"{"answer": 42}"#).unwrap());
-    }
-
-    #[test]
-    fn test_valid_nested_meta() {
-        let deserializer = &mut serde_json::Deserializer::from_str(r#"{"answer": 42}"#);
+        let deserializer = &mut Deserializer::from_str(r#"{"answer":42,"other":21}"#);
         let mut meta_map = MetaMap::new();
         meta_map.insert("answer".to_string(), Meta::from_error("some prior error"));
 
         let value = Annotated::from(Test {
             answer: Annotated::new(42, Meta::from_error("some prior error")),
+            other: 21,
         });
         assert_eq!(value, deserialize(deserializer, meta_map).unwrap());
     }
 
     #[test]
     fn test_invalid() {
-        // TODO: Test roundtrip when metadata serialization is ready
-        assert_eq!(
-            Annotated::<i32>::from_error("invalid type: map, expected i32"),
-            serde_json::from_str(r#"{}"#).unwrap()
-        );
-    }
-
-    #[test]
-    fn test_invalid_nested() {
-        // TODO: Test roundtrip when metadata serialization is ready
-        assert_eq!(
-            Annotated::from(Test {
-                answer: Annotated::from_error("invalid type: string \"invalid\", expected i32")
-            }),
-            serde_json::from_str(r#"{"answer": "invalid"}"#).unwrap()
-        );
-    }
-
-    #[test]
-    fn test_empty() {
-        // TODO: Test roundtrip when metadata serialization is ready
-        let deserializer = &mut serde_json::Deserializer::from_str("null");
+        let deserializer = &mut Deserializer::from_str("null");
         let mut meta_map = MetaMap::new();
         meta_map.insert(".".to_string(), Meta::from_error("some prior error"));
 
+        // It should accept the "null" (unit) value and use the given error message
         let value = Annotated::<i32>::from_error("some prior error");
         assert_eq!(value, deserialize(deserializer, meta_map).unwrap());
     }
 
-    // TODO: Test with existing metadata
     #[test]
-    fn test_empty_nested() {
-        // TODO: Test roundtrip when metadata serialization is ready
-        let deserializer = &mut serde_json::Deserializer::from_str(r#"{"answer": null}"#);
+    fn test_invalid_nested() {
+        let deserializer = &mut Deserializer::from_str(r#"{"answer":null, "other":21}"#);
         let mut meta_map = MetaMap::new();
         meta_map.insert("answer".to_string(), Meta::from_error("some prior error"));
 
+        // It should accept the "null" (unit) value and use the given error message
         let value = Annotated::from(Test {
             answer: Annotated::from_error("some prior error"),
+            other: 21,
         });
         assert_eq!(value, deserialize(deserializer, meta_map).unwrap());
+    }
+
+    #[test]
+    fn test_missing() {
+        let deserializer = &mut Deserializer::from_str("null");
+
+        // It should reject the "null" value and add an error
+        let value = Annotated::<i32>::from_error("invalid type: null, expected i32");
+        assert_eq!(value, deserialize(deserializer, MetaMap::new()).unwrap());
+    }
+
+    #[test]
+    fn test_missing_nested() {
+        let deserializer = &mut Deserializer::from_str(r#"{"answer":null, "other":21}"#);
+
+        // It should reject the "null" value and add an error
+        let value = Annotated::from(Test {
+            answer: Annotated::from_error("invalid type: null, expected i32"),
+            other: 21,
+        });
+        assert_eq!(value, deserialize(deserializer, MetaMap::new()).unwrap());
+    }
+}
+
+#[cfg(test)]
+mod test_without_meta {
+    use super::*;
+    use serde_json;
+
+    #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+    struct Test {
+        answer: Annotated<i32>,
+        other: i32,
+    }
+
+    #[test]
+    fn test_valid() {
+        let json = "42";
+        let value = Annotated::from(42);
+
+        assert_eq!(value, serde_json::from_str(json).unwrap());
+        assert_eq!(json, &serde_json::to_string(&value).unwrap());
+    }
+
+    #[test]
+    fn test_valid_nested() {
+        let json = r#"{"answer":42,"other":21}"#;
+        let value = Annotated::from(Test {
+            answer: Annotated::from(42),
+            other: 21,
+        });
+
+        assert_eq!(value, serde_json::from_str(json).unwrap());
+        assert_eq!(json, &serde_json::to_string(&value).unwrap());
+    }
+
+    #[test]
+    fn test_invalid() {
+        let value = Annotated::<i32>::from_error("invalid type: map, expected i32");
+        assert_eq!(value, serde_json::from_str(r#"{}"#).unwrap());
+        assert_eq!("null", &serde_json::to_string(&value).unwrap());
+    }
+
+    #[test]
+    fn test_invalid_nested() {
+        let value = Annotated::from(Test {
+            answer: Annotated::from_error("invalid type: string \"invalid\", expected i32"),
+            other: 21,
+        });
+
+        assert_eq!(
+            value,
+            serde_json::from_str(r#"{"answer":"invalid","other":21}"#).unwrap()
+        );
+        assert_eq!(
+            r#"{"answer":null,"other":21}"#,
+            &serde_json::to_string(&value).unwrap()
+        )
     }
 
     #[test]

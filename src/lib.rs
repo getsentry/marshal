@@ -21,6 +21,3 @@ pub mod rule;
 
 mod tracked;
 mod utils;
-
-#[cfg(test)]
-mod tests;
