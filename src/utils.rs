@@ -1,5 +1,35 @@
 //! Various utilities, like serialization and deserialization helpers.
 
+/// Defines the `CustomDeserialize` trait.
+pub mod serde {
+    use serde::{Deserialize, Deserializer};
+    use std::marker::PhantomData;
+
+    /// Provides a custom `serde::Deserialize` implementation for another type.
+    pub trait CustomDeserialize<'de, T> {
+        /// Deserialize the value from the given Serde deserializer.
+        fn deserialize<D>(deserializer: D) -> Result<T, D::Error>
+        where
+            D: Deserializer<'de>;
+    }
+
+    /// Implementation of `CustomDeserialize` that uses the types `Deserialize` implementation.
+    #[derive(Debug)]
+    pub struct DefaultDeserialize<T>(PhantomData<T>);
+
+    impl<T> Default for DefaultDeserialize<T> {
+        fn default() -> Self {
+            DefaultDeserialize(PhantomData)
+        }
+    }
+
+    impl<'de, T: Deserialize<'de>> CustomDeserialize<'de, T> for DefaultDeserialize<T> {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<T, D::Error> {
+            T::deserialize(deserializer)
+        }
+    }
+}
+
 /// Serde module for `chrono::DateTime`.
 pub mod serde_chrono {
     use std::fmt;

@@ -9,6 +9,7 @@ use serde::private::de::{Content, ContentDeserializer, ContentRepr};
 use serde::{de::State, Deserialize, Deserializer, Serialize, Serializer};
 
 use tracked::{Path, TrackedDeserializer};
+use utils::serde::{CustomDeserialize, DefaultDeserialize};
 
 /// Description of a remark.
 #[derive(Clone, Debug, PartialEq)]
@@ -201,6 +202,53 @@ impl<T> Annotated<T> {
         }
     }
 
+    /// Custom deserialize implementation that merges meta data from the deserializer.
+    pub fn deserialize_with<'de, D, C>(deserializer: D, _custom: C) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+        C: CustomDeserialize<'de, T>,
+    {
+        let mut annotated = {
+            let mut annotated = Annotated::<T>::empty();
+
+            let path: Option<&Rc<Path>> = deserializer.state().get();
+            let meta_map: Option<&Rc<MetaMap>> = deserializer.state().get();
+            if let (Some(path), Some(meta_map)) = (path, meta_map) {
+                if let Some(meta) = meta_map.remove(&path.to_string()) {
+                    *annotated.meta_mut() = meta;
+                }
+            }
+
+            annotated
+        };
+
+        // Deserialize into a buffer first to catch syntax errors and fail fast. We use Serde's
+        // private Content type instead of serde-value so we retain deserializer state.
+        let content = Content::deserialize(deserializer)?;
+
+        // Do not add an error to "meta" if the content is empty and there is already an error. This
+        // would indicate that this field was previously validated and the value removed. Otherwise,
+        // we would potentially generate error duplicates. We use the internal ContentRepr here to
+        // avoid deserializing the content multiple times.
+        let is_unit = match content.repr() {
+            ContentRepr::Unit => true,
+            _ => false,
+        };
+
+        // Continue deserialization into the target type. If this returns an error, we leave the
+        // value as None and add the error to the meta data.
+        match C::deserialize(ContentDeserializer::<D::Error>::new(content)) {
+            Ok(value) => *annotated.value_mut() = Some(value),
+            Err(err) => {
+                if !is_unit || !annotated.meta().has_errors() {
+                    annotated.meta_mut().errors_mut().push(err.to_string())
+                }
+            }
+        }
+
+        Ok(annotated)
+    }
+
     /// The actual value.
     pub fn value(&self) -> Option<&T> {
         self.value.as_ref()
@@ -244,41 +292,7 @@ where
     T: Deserialize<'de>,
 {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let mut annotated = {
-            let mut annotated = Annotated::<T>::empty();
-
-            let path: Option<&Rc<Path>> = deserializer.state().get();
-            let meta_map: Option<&Rc<MetaMap>> = deserializer.state().get();
-            if let (Some(path), Some(meta_map)) = (path, meta_map) {
-                if let Some(meta) = meta_map.remove(&path.to_string()) {
-                    *annotated.meta_mut() = meta;
-                }
-            }
-
-            annotated
-        };
-
-        let content = Content::deserialize(deserializer)?;
-
-        // Do not add an error to "meta" if the content is empty and there is already an error. This
-        // would indicate that this field was previously validated and the value removed. Otherwise,
-        // we would potentially generate error duplicates. We use the internal ContentRepr here to
-        // avoid deserializing the content multiple times.
-        let is_unit = match content.repr() {
-            ContentRepr::Unit => true,
-            _ => false,
-        };
-
-        match T::deserialize(ContentDeserializer::<D::Error>::new(content)) {
-            Ok(value) => *annotated.value_mut() = Some(value),
-            Err(err) => {
-                if !is_unit || !annotated.meta().has_errors() {
-                    annotated.meta_mut().errors_mut().push(err.to_string());
-                }
-            }
-        }
-
-        Ok(annotated)
+        Annotated::deserialize_with(deserializer, DefaultDeserialize::default())
     }
 }
 
