@@ -15,10 +15,10 @@ pub mod annotated {
 
 /// Defines the `CustomDeserialize` trait.
 pub mod serde {
-    use serde::{Deserialize, Deserializer};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use std::marker::PhantomData;
 
-    /// Provides a custom `serde::Deserialize` implementation for another type.
+    /// Provides a custom `serde::Deserialize` implementation for a type.
     pub trait CustomDeserialize<'de, T> {
         /// Deserialize the value from the given Serde deserializer.
         fn deserialize<D>(deserializer: D) -> Result<T, D::Error>
@@ -26,7 +26,7 @@ pub mod serde {
             D: Deserializer<'de>;
     }
 
-    /// Implementation of `CustomDeserialize` that uses the types `Deserialize` implementation.
+    /// Implementation of `CustomDeserialize` that uses the type's `Deserialize` implementation.
     #[derive(Debug)]
     pub struct DefaultDeserialize<T>(PhantomData<T>);
 
@@ -41,6 +41,30 @@ pub mod serde {
             T::deserialize(deserializer)
         }
     }
+
+    /// Provides a custom `serde::Serialize` implementation for a type.
+    pub trait CustomSerialize<T> {
+        /// Serialize this value into the given Serde serializer.
+        fn serialize<S>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer;
+    }
+
+    /// Implementation of `CustomSerialize` that uses the type's `Serialize` implementation.
+    #[derive(Debug)]
+    pub struct DefaultSerialize<T>(PhantomData<T>);
+
+    impl<T> Default for DefaultSerialize<T> {
+        fn default() -> Self {
+            DefaultSerialize(PhantomData)
+        }
+    }
+
+    impl<T: Serialize> CustomSerialize<T> for DefaultSerialize<T> {
+        fn serialize<S: Serializer>(value: &T, serializer: S) -> Result<S::Ok, S::Error> {
+            value.serialize(serializer)
+        }
+    }
 }
 
 /// Serde module for `chrono::DateTime`.
@@ -51,7 +75,7 @@ pub mod serde_chrono {
     use serde::{de, ser};
 
     use meta::Annotated;
-    use utils::serde::CustomDeserialize;
+    use utils::serde::{CustomDeserialize, CustomSerialize};
 
     pub fn timestamp_to_datetime(ts: f64) -> DateTime<Utc> {
         let secs = ts as i64;
@@ -98,6 +122,20 @@ pub mod serde_chrono {
         }
     }
 
+    impl CustomSerialize<DateTime<Utc>> for SerdeDateTime {
+        fn serialize<S>(datetime: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: ser::Serializer,
+        {
+            if datetime.timestamp_subsec_nanos() == 0 {
+                serializer.serialize_i64(datetime.timestamp())
+            } else {
+                let micros = datetime.timestamp_subsec_micros() as f64 / 1_000_000f64;
+                serializer.serialize_f64(datetime.timestamp() as f64 + micros)
+            }
+        }
+    }
+
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Annotated<DateTime<Utc>>, D::Error>
     where
         D: de::Deserializer<'de>,
@@ -109,17 +147,7 @@ pub mod serde_chrono {
     where
         S: ser::Serializer,
     {
-        let datetime = match value.value() {
-            Some(dt) => dt,
-            None => return serializer.serialize_unit(),
-        };
-
-        if datetime.timestamp_subsec_nanos() == 0 {
-            serializer.serialize_i64(datetime.timestamp())
-        } else {
-            let micros = datetime.timestamp_subsec_micros() as f64 / 1_000_000f64;
-            serializer.serialize_f64(datetime.timestamp() as f64 + micros)
-        }
+        value.serialize_with(serializer, SerdeDateTime)
     }
 
     #[cfg(test)]

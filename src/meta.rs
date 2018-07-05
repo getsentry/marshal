@@ -9,7 +9,7 @@ use serde::private::de::{Content, ContentDeserializer, ContentRepr};
 use serde::{de::State, Deserialize, Deserializer, Serialize, Serializer};
 
 use tracked::{Path, TrackedDeserializer};
-use utils::serde::{CustomDeserialize, DefaultDeserialize};
+use utils::serde::{CustomDeserialize, CustomSerialize, DefaultDeserialize, DefaultSerialize};
 
 /// Description of a remark.
 #[derive(Clone, Debug, PartialEq)]
@@ -249,6 +249,18 @@ impl<T> Annotated<T> {
         Ok(annotated)
     }
 
+    /// Custom serialize implementation that optionally emits meta data.
+    pub fn serialize_with<S, C>(&self, serializer: S, _custom: C) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        C: CustomSerialize<T>,
+    {
+        match self.value {
+            Some(ref value) => C::serialize(value, serializer),
+            None => serializer.serialize_unit(),
+        }
+    }
+
     /// The actual value.
     pub fn value(&self) -> Option<&T> {
         self.value.as_ref()
@@ -298,10 +310,7 @@ where
 
 impl<T: Serialize> Serialize for Annotated<T> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self.value {
-            Some(ref value) => value.serialize(serializer),
-            None => serializer.serialize_unit(),
-        }
+        self.serialize_with(serializer, DefaultSerialize::default())
     }
 }
 
