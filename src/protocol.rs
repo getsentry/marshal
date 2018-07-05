@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use common::Values;
 use meta::Annotated;
-use utils::serde_chrono;
+use utils::{annotated, serde_chrono};
 
 fn default_breadcrumb_type() -> Annotated<String> {
     "default".to_string().into()
@@ -23,7 +23,7 @@ pub struct Breadcrumb {
     pub ty: Annotated<String>,
 
     /// The optional category of the breadcrumb.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "annotated::is_none")]
     pub category: Annotated<Option<String>>,
 }
 
@@ -52,37 +52,17 @@ mod test_breadcrumb {
 
     #[test]
     fn test_default_values() {
-        let json = r#"{"timestamp": 42}"#;
+        let input = r#"{"timestamp":42}"#;
+        let output = r#"{"timestamp":42,"type":"default"}"#;
 
-        let breadcrumb = Breadcrumb {
+        let breadcrumb = Annotated::from(Breadcrumb {
             timestamp: serde_chrono::timestamp_to_datetime(42.0).into(),
             ty: default_breadcrumb_type(),
             category: None.into(),
-        };
-
-        assert_eq!(
-            Annotated::from(breadcrumb),
-            serde_json::from_str(json).unwrap()
-        );
-    }
-
-    #[test]
-    fn test_partial_errors() {
-        let json = r#"{
-            "timestamp": false,
-            "type": "mytype",
-            "category": null
-        }"#;
-
-        let breadcrumb = Annotated::from(Breadcrumb {
-            timestamp: Annotated::from_error(
-                "invalid type: boolean `false`, expected a unix timestamp",
-            ),
-            ty: "mytype".to_string().into(),
-            category: None.into(),
         });
 
-        assert_eq!(breadcrumb, serde_json::from_str(json).unwrap());
+        assert_eq!(breadcrumb, serde_json::from_str(input).unwrap());
+        assert_eq!(output, &serde_json::to_string(&breadcrumb).unwrap());
     }
 }
 
@@ -90,11 +70,11 @@ mod test_breadcrumb {
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct Event {
     /// The unique identifier of this event.
-    #[serde(default, rename = "event_id")]
+    #[serde(default, rename = "event_id", skip_serializing_if = "annotated::is_none")]
     pub id: Annotated<Option<Uuid>>,
 
     /// List of breadcrumbs recorded before this event.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "annotated::is_empty_values")]
     pub breadcrumbs: Annotated<Values<Annotated<Breadcrumb>>>,
 }
 
@@ -105,16 +85,14 @@ mod test_event {
 
     #[test]
     fn test_roundtrip() {
+        // NOTE: Interfaces will be tested separately.
         let json = r#"{
-  "event_id": "52df9022-8352-46ee-b317-dbd739ccd059",
-  "breadcrumbs": {
-    "values": []
-  }
+  "event_id": "52df9022-8352-46ee-b317-dbd739ccd059"
 }"#;
 
         let event = Annotated::from(Event {
             id: Some("52df9022-8352-46ee-b317-dbd739ccd059".parse().unwrap()).into(),
-            breadcrumbs: Values::new().into(),
+            breadcrumbs: Default::default(),
         });
 
         assert_eq!(event, serde_json::from_str(json).unwrap());
@@ -123,27 +101,13 @@ mod test_event {
 
     #[test]
     fn test_default_values() {
-        let json = r#"{"event_id": "52df9022-8352-46ee-b317-dbd739ccd059"}"#;
+        let json = r#"{"event_id":"52df9022-8352-46ee-b317-dbd739ccd059"}"#;
         let event = Annotated::from(Event {
             id: Some("52df9022-8352-46ee-b317-dbd739ccd059".parse().unwrap()).into(),
             breadcrumbs: Default::default(),
         });
-        assert_eq!(event, serde_json::from_str(json).unwrap());
-    }
-    #[test]
-    fn test_partial_errors() {
-        let json = r#"{
-            "event_id": false,
-            "breadcrumbs": {
-                "values": []
-            }
-        }"#;
-
-        let event = Annotated::from(Event {
-            id: Annotated::from_error("invalid type: boolean `false`, expected a UUID string"),
-            breadcrumbs: Default::default(),
-        });
 
         assert_eq!(event, serde_json::from_str(json).unwrap());
+        assert_eq!(json, &serde_json::to_string(&event).unwrap());
     }
 }

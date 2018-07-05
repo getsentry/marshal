@@ -1,5 +1,18 @@
 //! Various utilities, like serialization and deserialization helpers.
 
+pub mod annotated {
+    use common::Values;
+    use meta::Annotated;
+
+    pub fn is_none<T>(annotated: &Annotated<Option<T>>) -> bool {
+        annotated.value().map_or(true, Option::is_none)
+    }
+
+    pub fn is_empty_values<T>(annotated: &Annotated<Values<T>>) -> bool {
+        annotated.value().map_or(true, Values::is_empty)
+    }
+}
+
 /// Defines the `CustomDeserialize` trait.
 pub mod serde {
     use serde::{Deserialize, Deserializer};
