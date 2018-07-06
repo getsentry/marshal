@@ -24,8 +24,5 @@ pub mod rule;
 mod tracked;
 mod utils;
 
-#[cfg(test)]
-mod tests;
-
 // at the end for now to aid cargo expand testing
 pub mod protocol;

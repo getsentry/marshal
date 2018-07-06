@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use common::Values;
 use meta::Annotated;
-use utils::serde_chrono;
+use utils::{annotated, serde_chrono};
 
 fn default_breadcrumb_type() -> Annotated<String> {
     "default".to_string().into()
@@ -23,11 +23,11 @@ pub struct Breadcrumb {
     pub timestamp: Annotated<DateTime<Utc>>,
 
     /// The type of the breadcrumb.
-    #[serde(default = "default_breadcrumb_type")]
+    #[serde(default = "default_breadcrumb_type", rename = "type")]
     pub ty: Annotated<String>,
 
     /// The optional category of the breadcrumb.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "annotated::is_none")]
     pub category: Annotated<Option<String>>,
 }
 
@@ -35,35 +35,38 @@ pub struct Breadcrumb {
 mod test_breadcrumb {
     use super::*;
     use serde_json;
-    use tests::assert_roundtrip;
 
     #[test]
     fn test_roundtrip() {
-        let breadcrumb = Breadcrumb {
-            timestamp: serde_chrono::timestamp_to_datetime(47.11).into(),
+        let json = r#"{
+  "timestamp": 42,
+  "type": "mytype",
+  "category": "mycategory"
+}"#;
+
+        let breadcrumb = Annotated::from(Breadcrumb {
+            timestamp: serde_chrono::timestamp_to_datetime(42.0).into(),
             ty: "mytype".to_string().into(),
             category: Some("mycategory".to_string()).into(),
-        };
+        });
 
-        assert_roundtrip(&breadcrumb);
+        assert_eq!(breadcrumb, serde_json::from_str(json).unwrap());
+        assert_eq!(json, &serde_json::to_string_pretty(&breadcrumb).unwrap());
     }
-
-    // TODO: Test errors
 
     #[test]
     fn test_default_values() {
-        let json = r#"{"timestamp": 47.11}"#;
+        let input = r#"{"timestamp":42}"#;
+        let output = r#"{"timestamp":42,"type":"default"}"#;
 
-        let breadcrumb = Breadcrumb {
-            timestamp: serde_chrono::timestamp_to_datetime(47.11).into(),
+        let breadcrumb = Annotated::from(Breadcrumb {
+            timestamp: serde_chrono::timestamp_to_datetime(42.0).into(),
             ty: default_breadcrumb_type(),
             category: None.into(),
-        };
+        });
 
-        assert_eq!(
-            Annotated::from(breadcrumb),
-            serde_json::from_str(json).unwrap()
-        );
+        assert_eq!(breadcrumb, serde_json::from_str(input).unwrap());
+        assert_eq!(output, &serde_json::to_string(&breadcrumb).unwrap());
     }
 }
 
@@ -71,30 +74,46 @@ mod test_breadcrumb {
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct Event {
     /// The unique identifier of this event.
-    #[serde(default, rename = "event_id")]
+    #[serde(default, rename = "event_id", skip_serializing_if = "annotated::is_none")]
     pub id: Annotated<Option<Uuid>>,
 
     /// List of breadcrumbs recorded before this event.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "annotated::is_empty_values")]
     pub breadcrumbs: Annotated<Values<Annotated<Breadcrumb>>>,
 }
 
 #[cfg(test)]
 mod test_event {
     use super::*;
-    use tests::assert_roundtrip;
+    use serde_json;
 
     #[test]
     fn test_roundtrip() {
-        let event = Event {
-            id: Some(Uuid::new_v4()).into(),
-            breadcrumbs: Values::new().into(),
-        };
+        // NOTE: Interfaces will be tested separately.
+        let json = r#"{
+  "event_id": "52df9022-8352-46ee-b317-dbd739ccd059"
+}"#;
 
-        assert_roundtrip(&event);
+        let event = Annotated::from(Event {
+            id: Some("52df9022-8352-46ee-b317-dbd739ccd059".parse().unwrap()).into(),
+            breadcrumbs: Default::default(),
+        });
+
+        assert_eq!(event, serde_json::from_str(json).unwrap());
+        assert_eq!(json, &serde_json::to_string_pretty(&event).unwrap());
     }
 
-    // TODO: Test errors
+    #[test]
+    fn test_default_values() {
+        let json = r#"{"event_id":"52df9022-8352-46ee-b317-dbd739ccd059"}"#;
+        let event = Annotated::from(Event {
+            id: Some("52df9022-8352-46ee-b317-dbd739ccd059".parse().unwrap()).into(),
+            breadcrumbs: Default::default(),
+        });
+
+        assert_eq!(event, serde_json::from_str(json).unwrap());
+        assert_eq!(json, &serde_json::to_string(&event).unwrap());
+    }
 }
 
 pub enum PiiKind {

@@ -9,6 +9,7 @@ use serde::private::de::{Content, ContentDeserializer, ContentRepr};
 use serde::{de::State, Deserialize, Deserializer, Serialize, Serializer};
 
 use tracked::{Path, TrackedDeserializer};
+use utils::serde::{CustomDeserialize, CustomSerialize, DefaultDeserialize, DefaultSerialize};
 
 /// Description of a remark.
 #[derive(Clone, Debug, PartialEq)]
@@ -201,6 +202,65 @@ impl<T> Annotated<T> {
         }
     }
 
+    /// Custom deserialize implementation that merges meta data from the deserializer.
+    pub fn deserialize_with<'de, D, C>(deserializer: D, _custom: C) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+        C: CustomDeserialize<'de, T>,
+    {
+        let mut annotated = {
+            let mut annotated = Annotated::<T>::empty();
+
+            let path: Option<&Rc<Path>> = deserializer.state().get();
+            let meta_map: Option<&Rc<MetaMap>> = deserializer.state().get();
+            if let (Some(path), Some(meta_map)) = (path, meta_map) {
+                if let Some(meta) = meta_map.remove(&path.to_string()) {
+                    *annotated.meta_mut() = meta;
+                }
+            }
+
+            annotated
+        };
+
+        // Deserialize into a buffer first to catch syntax errors and fail fast. We use Serde's
+        // private Content type instead of serde-value so we retain deserializer state.
+        let content = Content::deserialize(deserializer)?;
+
+        // Do not add an error to "meta" if the content is empty and there is already an error. This
+        // would indicate that this field was previously validated and the value removed. Otherwise,
+        // we would potentially generate error duplicates. We use the internal ContentRepr here to
+        // avoid deserializing the content multiple times.
+        let is_unit = match content.repr() {
+            ContentRepr::Unit => true,
+            _ => false,
+        };
+
+        // Continue deserialization into the target type. If this returns an error, we leave the
+        // value as None and add the error to the meta data.
+        match C::deserialize(ContentDeserializer::<D::Error>::new(content)) {
+            Ok(value) => *annotated.value_mut() = Some(value),
+            Err(err) => {
+                if !is_unit || !annotated.meta().has_errors() {
+                    annotated.meta_mut().errors_mut().push(err.to_string())
+                }
+            }
+        }
+
+        Ok(annotated)
+    }
+
+    /// Custom serialize implementation that optionally emits meta data.
+    pub fn serialize_with<S, C>(&self, serializer: S, _custom: C) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        C: CustomSerialize<T>,
+    {
+        match self.value {
+            Some(ref value) => C::serialize(value, serializer),
+            None => serializer.serialize_unit(),
+        }
+    }
+
     /// The actual value.
     pub fn value(&self) -> Option<&T> {
         self.value.as_ref()
@@ -244,50 +304,13 @@ where
     T: Deserialize<'de>,
 {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let mut annotated = {
-            let mut annotated = Annotated::<T>::empty();
-
-            let path: Option<&Rc<Path>> = deserializer.state().get();
-            let meta_map: Option<&Rc<MetaMap>> = deserializer.state().get();
-            if let (Some(path), Some(meta_map)) = (path, meta_map) {
-                if let Some(meta) = meta_map.remove(&path.to_string()) {
-                    *annotated.meta_mut() = meta;
-                }
-            }
-
-            annotated
-        };
-
-        let content = Content::deserialize(deserializer)?;
-
-        // Do not add an error to "meta" if the content is empty and there is already an error. This
-        // would indicate that this field was previously validated and the value removed. Otherwise,
-        // we would potentially generate error duplicates. We use the internal ContentRepr here to
-        // avoid deserializing the content multiple times.
-        let is_unit = match content.repr() {
-            ContentRepr::Unit => true,
-            _ => false,
-        };
-
-        match T::deserialize(ContentDeserializer::<D::Error>::new(content)) {
-            Ok(value) => *annotated.value_mut() = Some(value),
-            Err(err) => {
-                if !is_unit || !annotated.meta().has_errors() {
-                    annotated.meta_mut().errors_mut().push(err.to_string());
-                }
-            }
-        }
-
-        Ok(annotated)
+        Annotated::deserialize_with(deserializer, DefaultDeserialize::default())
     }
 }
 
 impl<T: Serialize> Serialize for Annotated<T> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self.value {
-            Some(ref value) => value.serialize(serializer),
-            None => serializer.serialize_unit(),
-        }
+        self.serialize_with(serializer, DefaultSerialize::default())
     }
 }
 
@@ -334,26 +357,19 @@ where
 }
 
 #[cfg(test)]
-mod test_annotated {
+mod test_with_meta {
     use super::*;
-    use serde_json;
-    use tests::assert_roundtrip;
+    use serde_json::Deserializer;
 
     #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
     struct Test {
         answer: Annotated<i32>,
+        other: i32,
     }
 
     #[test]
     fn test_valid() {
-        let value = Annotated::from(42);
-        assert_roundtrip(&value);
-        assert_eq!(value, serde_json::from_str("42").unwrap());
-    }
-
-    #[test]
-    fn test_valid_with_meta() {
-        let deserializer = &mut serde_json::Deserializer::from_str("42");
+        let deserializer = &mut Deserializer::from_str("42");
         let mut meta_map = MetaMap::new();
         meta_map.insert(".".to_string(), Meta::from_error("some prior error"));
 
@@ -363,69 +379,118 @@ mod test_annotated {
 
     #[test]
     fn test_valid_nested() {
-        let value = Annotated::from(Test {
-            answer: Annotated::from(42),
-        });
-
-        assert_roundtrip(&value);
-        assert_eq!(value, serde_json::from_str(r#"{"answer": 42}"#).unwrap());
-    }
-
-    #[test]
-    fn test_valid_nested_meta() {
-        let deserializer = &mut serde_json::Deserializer::from_str(r#"{"answer": 42}"#);
+        let deserializer = &mut Deserializer::from_str(r#"{"answer":42,"other":21}"#);
         let mut meta_map = MetaMap::new();
         meta_map.insert("answer".to_string(), Meta::from_error("some prior error"));
 
         let value = Annotated::from(Test {
             answer: Annotated::new(42, Meta::from_error("some prior error")),
+            other: 21,
         });
         assert_eq!(value, deserialize(deserializer, meta_map).unwrap());
     }
 
     #[test]
     fn test_invalid() {
-        // TODO: Test roundtrip when metadata serialization is ready
-        assert_eq!(
-            Annotated::<i32>::from_error("invalid type: map, expected i32"),
-            serde_json::from_str(r#"{}"#).unwrap()
-        );
-    }
-
-    #[test]
-    fn test_invalid_nested() {
-        // TODO: Test roundtrip when metadata serialization is ready
-        assert_eq!(
-            Annotated::from(Test {
-                answer: Annotated::from_error("invalid type: string \"invalid\", expected i32")
-            }),
-            serde_json::from_str(r#"{"answer": "invalid"}"#).unwrap()
-        );
-    }
-
-    #[test]
-    fn test_empty() {
-        // TODO: Test roundtrip when metadata serialization is ready
-        let deserializer = &mut serde_json::Deserializer::from_str("null");
+        let deserializer = &mut Deserializer::from_str("null");
         let mut meta_map = MetaMap::new();
         meta_map.insert(".".to_string(), Meta::from_error("some prior error"));
 
+        // It should accept the "null" (unit) value and use the given error message
         let value = Annotated::<i32>::from_error("some prior error");
         assert_eq!(value, deserialize(deserializer, meta_map).unwrap());
     }
 
-    // TODO: Test with existing metadata
     #[test]
-    fn test_empty_nested() {
-        // TODO: Test roundtrip when metadata serialization is ready
-        let deserializer = &mut serde_json::Deserializer::from_str(r#"{"answer": null}"#);
+    fn test_invalid_nested() {
+        let deserializer = &mut Deserializer::from_str(r#"{"answer":null, "other":21}"#);
         let mut meta_map = MetaMap::new();
         meta_map.insert("answer".to_string(), Meta::from_error("some prior error"));
 
+        // It should accept the "null" (unit) value and use the given error message
         let value = Annotated::from(Test {
             answer: Annotated::from_error("some prior error"),
+            other: 21,
         });
         assert_eq!(value, deserialize(deserializer, meta_map).unwrap());
+    }
+
+    #[test]
+    fn test_missing() {
+        let deserializer = &mut Deserializer::from_str("null");
+
+        // It should reject the "null" value and add an error
+        let value = Annotated::<i32>::from_error("invalid type: null, expected i32");
+        assert_eq!(value, deserialize(deserializer, MetaMap::new()).unwrap());
+    }
+
+    #[test]
+    fn test_missing_nested() {
+        let deserializer = &mut Deserializer::from_str(r#"{"answer":null, "other":21}"#);
+
+        // It should reject the "null" value and add an error
+        let value = Annotated::from(Test {
+            answer: Annotated::from_error("invalid type: null, expected i32"),
+            other: 21,
+        });
+        assert_eq!(value, deserialize(deserializer, MetaMap::new()).unwrap());
+    }
+}
+
+#[cfg(test)]
+mod test_without_meta {
+    use super::*;
+    use serde_json;
+
+    #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+    struct Test {
+        answer: Annotated<i32>,
+        other: i32,
+    }
+
+    #[test]
+    fn test_valid() {
+        let json = "42";
+        let value = Annotated::from(42);
+
+        assert_eq!(value, serde_json::from_str(json).unwrap());
+        assert_eq!(json, &serde_json::to_string(&value).unwrap());
+    }
+
+    #[test]
+    fn test_valid_nested() {
+        let json = r#"{"answer":42,"other":21}"#;
+        let value = Annotated::from(Test {
+            answer: Annotated::from(42),
+            other: 21,
+        });
+
+        assert_eq!(value, serde_json::from_str(json).unwrap());
+        assert_eq!(json, &serde_json::to_string(&value).unwrap());
+    }
+
+    #[test]
+    fn test_invalid() {
+        let value = Annotated::<i32>::from_error("invalid type: map, expected i32");
+        assert_eq!(value, serde_json::from_str(r#"{}"#).unwrap());
+        assert_eq!("null", &serde_json::to_string(&value).unwrap());
+    }
+
+    #[test]
+    fn test_invalid_nested() {
+        let value = Annotated::from(Test {
+            answer: Annotated::from_error("invalid type: string \"invalid\", expected i32"),
+            other: 21,
+        });
+
+        assert_eq!(
+            value,
+            serde_json::from_str(r#"{"answer":"invalid","other":21}"#).unwrap()
+        );
+        assert_eq!(
+            r#"{"answer":null,"other":21}"#,
+            &serde_json::to_string(&value).unwrap()
+        )
     }
 
     #[test]
