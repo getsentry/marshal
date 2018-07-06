@@ -161,7 +161,7 @@ impl ProcessValue for Value {
                 Annotated(val_opt.map(Value::String), meta)
             }
             Annotated(Some(Value::Array(val)), meta) => {
-                let mut rv = vec![];
+                let mut rv = Vec::with_capacity(val.len());
                 for item in val.into_iter() {
                     rv.push(ProcessValue::process_value(
                         item,
