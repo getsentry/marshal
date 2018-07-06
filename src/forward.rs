@@ -1,6 +1,7 @@
 use serde::ser::{
-    Serialize, SerializeMap, SerializeSeq, SerializeStruct, SerializeStructVariant, SerializeTuple,
-    SerializeTupleStruct, SerializeTupleVariant, Serializer,
+    Error, Impossible, Serialize, SerializeMap, SerializeSeq, SerializeStruct,
+    SerializeStructVariant, SerializeTuple, SerializeTupleStruct, SerializeTupleVariant,
+    Serializer,
 };
 
 pub struct ForwardMapSerializer<'a, M: 'a>(pub &'a mut M);
@@ -17,8 +18,8 @@ where
     type SerializeTupleStruct = SerializeTupleStructAsMap<'a, M>;
     type SerializeMap = SerializeMapForward<'a, M>;
     type SerializeStruct = SerializeStructAsMap<'a, M>;
-    type SerializeTupleVariant = SerializeTupleVariantAsMap<'a, M>;
-    type SerializeStructVariant = SerializeStructVariantAsMap<'a, M>;
+    type SerializeTupleVariant = Impossible<Self::Ok, Self::Error>;
+    type SerializeStructVariant = Impossible<Self::Ok, Self::Error>;
 
     fn serialize_bool(self, _: bool) -> Result<Self::Ok, Self::Error> {
         Ok(())
@@ -152,8 +153,7 @@ where
         variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        self.0.serialize_key(variant)?;
-        Ok(SerializeTupleVariantAsMap(self.0, 0))
+        Err(Error::custom("Tuple variants not supported"))
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
@@ -175,8 +175,7 @@ where
         variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        self.0.serialize_key(variant)?;
-        Ok(SerializeStructVariantAsMap(self.0))
+        Err(Error::custom("Struct variants not supported"))
     }
 }
 
@@ -249,29 +248,6 @@ where
     }
 }
 
-pub struct SerializeTupleVariantAsMap<'a, M: 'a>(&'a mut M, usize);
-
-impl<'a, M> SerializeTupleVariant for SerializeTupleVariantAsMap<'a, M>
-where
-    M: SerializeMap + 'a,
-{
-    type Ok = ();
-    type Error = M::Error;
-
-    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
-    where
-        T: Serialize,
-    {
-        let key = self.1.to_string();
-        self.1 += 1;
-        self.0.serialize_entry(&key, value)
-    }
-
-    fn end(self) -> Result<Self::Ok, Self::Error> {
-        Ok(())
-    }
-}
-
 pub struct SerializeMapForward<'a, M: 'a>(&'a mut M);
 
 impl<'a, M> SerializeMap for SerializeMapForward<'a, M>
@@ -303,31 +279,6 @@ where
 pub struct SerializeStructAsMap<'a, M: 'a>(&'a mut M);
 
 impl<'a, M> SerializeStruct for SerializeStructAsMap<'a, M>
-where
-    M: SerializeMap + 'a,
-{
-    type Ok = ();
-    type Error = M::Error;
-
-    fn serialize_field<T: ?Sized>(
-        &mut self,
-        key: &'static str,
-        value: &T,
-    ) -> Result<(), Self::Error>
-    where
-        T: Serialize,
-    {
-        self.0.serialize_entry(key, value)
-    }
-
-    fn end(self) -> Result<Self::Ok, Self::Error> {
-        Ok(())
-    }
-}
-
-pub struct SerializeStructVariantAsMap<'a, M: 'a>(&'a mut M);
-
-impl<'a, M> SerializeStructVariant for SerializeStructVariantAsMap<'a, M>
 where
     M: SerializeMap + 'a,
 {
@@ -425,22 +376,11 @@ mod forward_tests {
         enum Test {
             A,
             B(i32),
-            C(i32, i32),
-            D { e: i32 },
         }
 
         assert_eq!(r#"{"foo":"bar"}"#, serialize(&Test::A).unwrap());
         assert_eq!(r#"{"foo":"bar","B":1}"#, serialize(&Test::B(1)).unwrap());
-        // TODO: This is invalid
-        assert_eq!(
-            r#"{"foo":"bar","C","0":1,"1":2}"#,
-            serialize(&Test::C(1, 2)).unwrap()
-        );
-        // TODO: This is invalid
-        assert_eq!(
-            r#"{"foo":"bar","D","e":1}"#,
-            serialize(&Test::D { e: 1 }).unwrap()
-        );
+        // NOTE: Tuple variants are invalid
+        // NOTE: Struct variants are invalid
     }
-
 }
