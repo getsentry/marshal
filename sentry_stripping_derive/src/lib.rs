@@ -22,38 +22,46 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
             let mut cap = None;
             let mut process_value = false;
             for attr in &bi.ast().attrs {
-                if let Some(Meta::List(metalist)) = attr.interpret_meta() {
-                    if metalist.ident == "process_value" {
-                        process_value = true;
-                        for nested_meta in metalist.nested {
-                            match nested_meta {
-                                NestedMeta::Literal(..) => panic!("unexpected literal attribute"),
-                                NestedMeta::Meta(meta) => {
-                                    match meta {
-                                        Meta::NameValue(MetaNameValue { ident, lit, .. }) => {
-                                            if ident == "pii_kind" {
-                                                match lit {
-                                                    Lit::Str(litstr) => {
-                                                        pii_kind = Some(pii_kind_to_enum_variant(&litstr.value()));
-                                                    }
-                                                    _ => {
-                                                        panic!("Got non string literal for pii_kind");
-                                                    }
+                let meta = match attr.interpret_meta() {
+                    Some(meta) => meta,
+                    None => continue,
+                };
+                if meta.name() == "process_value" {
+                    process_value = true;
+                } else {
+                    continue;
+                }
+
+                if let Meta::List(metalist) = meta {
+                    process_value = true;
+                    for nested_meta in metalist.nested {
+                        match nested_meta {
+                            NestedMeta::Literal(..) => panic!("unexpected literal attribute"),
+                            NestedMeta::Meta(meta) => {
+                                match meta {
+                                    Meta::NameValue(MetaNameValue { ident, lit, .. }) => {
+                                        if ident == "pii_kind" {
+                                            match lit {
+                                                Lit::Str(litstr) => {
+                                                    pii_kind = Some(pii_kind_to_enum_variant(&litstr.value()));
                                                 }
-                                            } else if ident == "cap" {
-                                                match lit {
-                                                    Lit::Str(litstr) => {
-                                                        cap = Some(cap_to_enum_variant(&litstr.value()));
-                                                    }
-                                                    _ => {
-                                                        panic!("Got non string literal for cap");
-                                                    }
+                                                _ => {
+                                                    panic!("Got non string literal for pii_kind");
+                                                }
+                                            }
+                                        } else if ident == "cap" {
+                                            match lit {
+                                                Lit::Str(litstr) => {
+                                                    cap = Some(cap_to_enum_variant(&litstr.value()));
+                                                }
+                                                _ => {
+                                                    panic!("Got non string literal for cap");
                                                 }
                                             }
                                         }
-                                        other => {
-                                            panic!("Unexpected or bad attribute {}", other.name());
-                                        }
+                                    }
+                                    other => {
+                                        panic!("Unexpected or bad attribute {}", other.name());
                                     }
                                 }
                             }
@@ -61,6 +69,7 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
                     }
                 }
             }
+
             if process_value {
                 let pii_kind = pii_kind.map(|x| quote!(Some(__processor::#x))).unwrap_or_else(|| quote!(None));
                 let cap = cap.map(|x| quote!(Some(__processor::#x))).unwrap_or_else(|| quote!(None));

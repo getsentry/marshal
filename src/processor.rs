@@ -38,11 +38,11 @@ pub enum Cap {
     Databag,
 }
 
-/// Information about how to process PII in the field.
+/// Information about how to process certain annotated values.
 #[derive(Clone, Debug)]
 pub struct ValueInfo {
     pub pii_kind: Option<PiiKind>,
-    pub cap: Cap,
+    pub cap: Option<Cap>,
 }
 
 impl ValueInfo {
@@ -59,6 +59,12 @@ impl ValueInfo {
 
 macro_rules! declare_primitive_process {
     ($ty:ident, $func:ident) => {
+        declare_primitive_process!($ty, $func, stringify!($ty));
+    };
+    ($ty:ident, $func:ident, $help_ty:expr) => {
+        #[doc = "Processes an annotated value of type `"]
+        #[doc = $help_ty]
+        #[doc = "`."]
         fn $func(&self, annotated: &mut Annotated<$ty>, info: &ValueInfo);
     }
 }
@@ -73,6 +79,7 @@ macro_rules! impl_primitive_process {
     }
 }
 
+/// A general processing trait for annotated values.
 pub trait Processor {
     declare_primitive_process!(bool, process_bool);
     declare_primitive_process!(u32, process_u32);
@@ -84,6 +91,7 @@ pub trait Processor {
     declare_primitive_process!(String, process_string);
 }
 
+/// A trait implemented for annotated types that support processing.
 pub trait ProcessValue {
     fn process_value(annotated: &mut Annotated<Self>, processor: &Processor, info: &ValueInfo)
     where
@@ -101,6 +109,7 @@ impl_primitive_process!(String, process_string);
 
 #[derive(ProcessValue)]
 struct TestEvent {
+    #[process_value]
     id: Annotated<u32>,
     #[process_value(pii_kind = "freeform", cap = "message")]
     message: Annotated<String>,
