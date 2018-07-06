@@ -151,8 +151,8 @@ impl ProcessInfo {
 }
 
 trait Processor {
-    fn process_string(annotated: &mut Annotated<String>, info: &ProcessInfo) {}
-    fn process_u32(annotated: &mut Annotated<u32>, info: &ProcessInfo) {}
+    fn process_string(&self, annotated: &mut Annotated<String>, info: &ProcessInfo) {}
+    fn process_u32(&self, annotated: &mut Annotated<u32>, info: &ProcessInfo) {}
 }
 
 pub trait ProcessItem {
