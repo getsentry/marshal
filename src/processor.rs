@@ -139,6 +139,7 @@ impl ProcessValue for Value {
         }
     }
 }
+*/
 
 #[derive(ProcessValue)]
 struct TestEvent {
@@ -147,4 +148,3 @@ struct TestEvent {
     #[process_value(pii_kind = "freeform", cap = "message")]
     message: Annotated<String>,
 }
-*/

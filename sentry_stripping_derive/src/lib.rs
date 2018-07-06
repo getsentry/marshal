@@ -15,9 +15,10 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
     for variant in s.variants() {
         let mut variant = variant.clone();
         for binding in variant.bindings_mut() {
-            binding.style = synstructure::BindStyle::Move;
+            binding.style = synstructure::BindStyle::MoveMut;
         }
-        variant.each(|bi| {
+        let mut variant_body = TokenStream::new();
+        for bi in variant.bindings() {
             let mut pii_kind = None;
             let mut cap = None;
             let mut process_value = false;
@@ -73,17 +74,32 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
             if process_value {
                 let pii_kind = pii_kind.map(|x| quote!(Some(__processor::#x))).unwrap_or_else(|| quote!(None));
                 let cap = cap.map(|x| quote!(Some(__processor::#x))).unwrap_or_else(|| quote!(None));
-                quote! {
-                    __processor::ProcessValue::process_value(#bi, __processor, &__processor::ValueInfo {
+                (quote! {
+                    #bi = __processor::ProcessValue::process_value(#bi, __processor, &__processor::ValueInfo {
                         pii_kind: #pii_kind,
                         cap: #cap,
                     });
-                }
+                }).to_tokens(&mut variant_body);
             } else {
-                quote! {
+                (quote! {
                     ::std::mem::drop(#bi);
-                }
+                }).to_tokens(&mut variant_body);
             }
+        }
+
+        let pat = variant.pat();
+        let mut variant = variant.clone();
+        for binding in variant.bindings_mut() {
+            binding.style = synstructure::BindStyle::Move;
+        }
+        let assemble_pat = variant.pat();
+
+        (quote! {
+            __meta::Annotated(Some(#pat), __meta) => {
+                #variant_body
+                __meta::Annotated(Some(#assemble_pat), __meta)
+            }
+            __annotated @ __meta::Annotated(..) => __annotated
         }).to_tokens(&mut body);
     }
 
@@ -96,16 +112,9 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
                              __processor: &__processor::Processor,
                              __info: &__processor::ValueInfo) -> __meta::Annotated<Self>
             {
-                let __meta::Annotated(__value, __meta) = __annotated;
-                let __new_value = match __value {
-                    Some(__value) => {
-                        Some(match __value {
-                            #body
-                        })
-                    }
-                    None => None
-                };
-                __meta::Annotated(__value, __meta)
+                match __annotated {
+                    #body
+                }
             }
         }
     })
