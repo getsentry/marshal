@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use meta::Annotated;
 use value::Value;
@@ -125,24 +125,71 @@ impl<T: ProcessValue> ProcessValue for Vec<Annotated<T>> {
     }
 }
 
-/*
 impl ProcessValue for Value {
     fn process_value(annotated: Annotated<Self>, processor: &Processor, info: &ValueInfo) -> Annotated<Self> {
-        if let Some(value) = annotated.value_mut() {
-            match value {
-                Value::U32(value) => {
-                    let rv = processor.process_u32(Annotated::from(value), info);
-                    Annotated::new(rv.take.map(Value::U32), rv.take_meta())
-                }
-                _ => unreachable!()
+        match annotated {
+            Annotated(Some(Value::Bool(val)), meta) => {
+                let Annotated(val_opt, meta) = processor.process_bool(Annotated::new(val, meta), info);
+                Annotated(val_opt.map(Value::Bool), meta)
             }
+            Annotated(Some(Value::U32(val)), meta) => {
+                let Annotated(val_opt, meta) = processor.process_u32(Annotated::new(val, meta), info);
+                Annotated(val_opt.map(Value::U32), meta)
+            }
+            Annotated(Some(Value::I32(val)), meta) => {
+                let Annotated(val_opt, meta) = processor.process_i32(Annotated::new(val, meta), info);
+                Annotated(val_opt.map(Value::I32), meta)
+            }
+            Annotated(Some(Value::U64(val)), meta) => {
+                let Annotated(val_opt, meta) = processor.process_u64(Annotated::new(val, meta), info);
+                Annotated(val_opt.map(Value::U64), meta)
+            }
+            Annotated(Some(Value::I64(val)), meta) => {
+                let Annotated(val_opt, meta) = processor.process_i64(Annotated::new(val, meta), info);
+                Annotated(val_opt.map(Value::I64), meta)
+            }
+            Annotated(Some(Value::F32(val)), meta) => {
+                let Annotated(val_opt, meta) = processor.process_f32(Annotated::new(val, meta), info);
+                Annotated(val_opt.map(Value::F32), meta)
+            }
+            Annotated(Some(Value::F64(val)), meta) => {
+                let Annotated(val_opt, meta) = processor.process_f64(Annotated::new(val, meta), info);
+                Annotated(val_opt.map(Value::F64), meta)
+            }
+            Annotated(Some(Value::String(val)), meta) => {
+                let Annotated(val_opt, meta) = processor.process_string(Annotated::new(val, meta), info);
+                Annotated(val_opt.map(Value::String), meta)
+            }
+            Annotated(Some(Value::Array(val)), meta) => {
+                let mut rv = vec![];
+                for item in val.into_iter() {
+                    rv.push(ProcessValue::process_value(
+                        item,
+                        processor,
+                        &info.derive()
+                    ));
+                }
+                Annotated(Some(Value::Array(rv)), meta)
+            }
+            Annotated(Some(Value::Map(val)), meta) => {
+                let mut rv = BTreeMap::new();
+                for (key, value) in val.into_iter() {
+                    rv.insert(key, ProcessValue::process_value(
+                        value,
+                        processor,
+                        &info.derive()
+                    ));
+                }
+                Annotated(Some(Value::Map(rv)), meta)
+            }
+            other @ Annotated(..) => other,
         }
     }
 }
-*/
 
 #[derive(ProcessValue)]
 struct TestEvent {
+    flag: bool,
     #[process_value]
     id: Annotated<u32>,
     #[process_value(pii_kind = "freeform", cap = "message")]

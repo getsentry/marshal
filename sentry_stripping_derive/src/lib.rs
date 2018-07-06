@@ -81,8 +81,9 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
                     });
                 }).to_tokens(&mut variant_body);
             } else {
+                // just do nothing
                 (quote! {
-                    ::std::mem::drop(#bi);
+                    #bi = #bi;
                 }).to_tokens(&mut variant_body);
             }
         }
