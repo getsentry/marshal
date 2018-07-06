@@ -182,7 +182,7 @@ impl ProcessValue for Value {
                 }
                 Annotated(Some(Value::Map(rv)), meta)
             }
-            other @ Annotated(..) => other,
+            other @ Annotated(None, _) => other,
         }
     }
 }
