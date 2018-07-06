@@ -15,7 +15,7 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
     for variant in s.variants() {
         let mut variant = variant.clone();
         for binding in variant.bindings_mut() {
-            binding.style = synstructure::BindStyle::RefMut;
+            binding.style = synstructure::BindStyle::Move;
         }
         variant.each(|bi| {
             let mut pii_kind = None;
@@ -89,20 +89,23 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
 
     s.gen_impl(quote! {
         use processor as __processor;
+        use meta as __meta;
 
         gen impl __processor::ProcessValue for @Self {
-            fn process_value(__annotated: &mut Annotated<Self>,
-                            __processor: &__processor::Processor,
-                            __info: &__processor::ValueInfo)
+            fn process_value(__annotated: __meta::Annotated<Self>,
+                             __processor: &__processor::Processor,
+                             __info: &__processor::ValueInfo) -> __meta::Annotated<Self>
             {
-                match __annotated.value_mut() {
+                let __meta::Annotated(__value, __meta) = __annotated;
+                let __new_value = match __value {
                     Some(__value) => {
-                        match *__value {
+                        Some(match __value {
                             #body
-                        }
+                        })
                     }
-                    None => {}
-                }
+                    None => None
+                };
+                __meta::Annotated(__value, __meta)
             }
         }
     })
@@ -117,7 +120,7 @@ fn pii_kind_to_enum_variant(name: &str) -> TokenStream {
         "sensitive" => quote!(PiiKind::Sensitive),
         "name" => quote!(PiiKind::Name),
         "email" => quote!(PiiKind::Email),
-        "databag" => quote!(PiiKind::DataBag),
+        "databag" => quote!(PiiKind::Databag),
         _ => panic!("invalid pii_kind variant '{}'", name)
     }
 }

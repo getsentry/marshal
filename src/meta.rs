@@ -277,35 +277,23 @@ impl Default for Meta {
 }
 
 /// Wrapper for data fields with optional meta data.
-#[derive(Debug, PartialEq)]
-pub struct Annotated<T> {
-    value: Option<T>,
-    meta: Meta,
-}
+#[derive(Debug, PartialEq, Clone)]
+pub struct Annotated<T>(pub Option<T>, pub Meta);
 
 impl<T> Annotated<T> {
     /// Creates an empty annotated shell without value or meta data.
     pub fn empty() -> Self {
-        Annotated {
-            value: None,
-            meta: Default::default(),
-        }
+        Annotated(None, Default::default())
     }
 
     /// Creates a new annotated value with meta data.
     pub fn new(value: T, meta: Meta) -> Self {
-        Annotated {
-            value: Some(value),
-            meta: meta,
-        }
+        Annotated(Some(value), meta)
     }
 
     /// Creates an annotated wrapper for invalid data with an error message.
     pub fn from_error<S: Into<String>>(message: S) -> Self {
-        Annotated {
-            value: None,
-            meta: Meta::from_error(message),
-        }
+        Annotated(None, Meta::from_error(message))
     }
 
     /// Custom deserialize implementation that merges meta data from the deserializer.
@@ -361,7 +349,7 @@ impl<T> Annotated<T> {
         S: Serializer,
         C: CustomSerialize<T>,
     {
-        match self.value {
+        match self.0 {
             Some(ref value) => C::serialize(value, serializer),
             None => serializer.serialize_unit(),
         }
@@ -369,38 +357,39 @@ impl<T> Annotated<T> {
 
     /// The actual value.
     pub fn value(&self) -> Option<&T> {
-        self.value.as_ref()
+        self.0.as_ref()
     }
 
     /// Mutable reference to the actual value.
     pub fn value_mut(&mut self) -> Option<&mut T> {
-        self.value.as_mut()
+        self.0.as_mut()
     }
 
     /// Update the value.
     pub fn set_value(&mut self, value: Option<T>) {
-        self.value = value;
+        self.0 = value;
     }
 
     /// Meta information on the value.
     pub fn meta(&self) -> &Meta {
-        &self.meta
+        &self.1
     }
 
     /// Mutable reference to the value's meta information.
     pub fn meta_mut(&mut self) -> &mut Meta {
-        &mut self.meta
+        &mut self.1
     }
 
-    /// Unwraps into the inner value.
-    pub fn take(&mut self) -> Option<T> {
-        self.value.take()
+    /// Transforms the value if it's set.
+    pub fn map<F: FnOnce(T) -> T>(mut self, f: F) -> Self {
+        self.0 = self.0.map(f);
+        self
     }
 }
 
 impl<T: Default> Default for Annotated<T> {
     fn default() -> Self {
-        T::default().into()
+        Self::from(T::default())
     }
 }
 

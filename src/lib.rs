@@ -21,6 +21,7 @@ pub mod common;
 pub mod meta;
 pub mod rule;
 pub mod protocol;
+pub mod value;
 
 mod tracked;
 mod utils;
