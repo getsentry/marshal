@@ -3,16 +3,18 @@
 use std::borrow::{self, Cow};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::fmt;
+use std::iter::FromIterator;
 use std::rc::Rc;
 
 use serde::private::de::{Content, ContentDeserializer, ContentRepr};
-use serde::{de::State, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 use tracked::{Path, TrackedDeserializer};
 use utils::serde::{CustomDeserialize, CustomSerialize, DefaultDeserialize, DefaultSerialize};
 
 /// Description of a remark.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct Note {
     rule: Cow<'static, str>,
     description: Option<Cow<'static, str>>,
@@ -67,7 +69,7 @@ impl Note {
 pub type Range = (usize, usize);
 
 /// Information on a modified section in a string.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct Remark {
     range: (usize, usize),
     note: Note,
@@ -106,11 +108,14 @@ impl Remark {
 }
 
 /// Meta information for a data field in the event payload.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct Meta {
     // TODO: These should probably be pub, similar to structs in crate::protocol.
+    #[serde(default)]
     pub(crate) remarks: Vec<Remark>,
+    #[serde(default)]
     pub(crate) errors: Vec<String>,
+    #[serde(default)]
     pub(crate) original_length: Option<u32>,
 }
 
@@ -315,7 +320,7 @@ impl<T: Serialize> Serialize for Annotated<T> {
 }
 
 /// A map of meta data entries for paths in a model.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct MetaMap {
     inner: RefCell<BTreeMap<String, Meta>>,
 }
@@ -343,13 +348,70 @@ impl MetaMap {
     }
 }
 
+impl FromIterator<(String, Meta)> for MetaMap {
+    fn from_iter<I>(iter: I) -> Self
+    where
+        I: IntoIterator<Item = (String, Meta)>,
+    {
+        MetaMap {
+            inner: RefCell::new(iter.into_iter().collect()),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct MetaMapHelper(Vec<(String, Meta)>);
+
+struct MetaMapVisitor(Option<String>);
+
+impl<'de> de::Visitor<'de> for MetaMapVisitor {
+    type Value = MetaMapHelper;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(formatter, "a meta data map")
+    }
+
+    fn visit_map<A: de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+        let MetaMapVisitor(mut path) = self;
+        let mut vec = Vec::new();
+
+        while let Some(key) = map.next_key::<String>()? {
+            if key.is_empty() {
+                let meta = map.next_value()?;
+                // The empty path can only occur once
+                vec.push((path.take().unwrap(), meta));
+            } else {
+                let MetaMapHelper(entries) = map.next_value()?;
+                vec.extend(entries);
+            }
+        }
+
+        Ok(MetaMapHelper(vec))
+    }
+}
+
+impl<'de> Deserialize<'de> for MetaMapHelper {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let path = deserializer.state().get().map(|p: &Rc<Path>| p.to_string());
+        deserializer.deserialize_map(MetaMapVisitor(path))
+    }
+}
+
+impl<'de> Deserialize<'de> for MetaMap {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let tracked = TrackedDeserializer::new(deserializer, Default::default());
+        let MetaMapHelper(entries) = MetaMapHelper::deserialize(tracked)?;
+        Ok(entries.into_iter().collect())
+    }
+}
+
 /// Deserializes an annotated type with given meta data.
 pub fn deserialize<'de, D, T>(deserializer: D, meta_map: MetaMap) -> Result<Annotated<T>, D::Error>
 where
     D: Deserializer<'de>,
     T: Deserialize<'de>,
 {
-    let mut state = State::default();
+    let mut state = de::State::default();
     state.set(Rc::new(meta_map));
 
     let tracked = TrackedDeserializer::new(deserializer, state);
@@ -357,7 +419,7 @@ where
 }
 
 #[cfg(test)]
-mod test_with_meta {
+mod test_annotated_with_meta {
     use super::*;
     use serde_json::Deserializer;
 
@@ -387,6 +449,20 @@ mod test_with_meta {
             answer: Annotated::new(42, Meta::from_error("some prior error")),
             other: 21,
         });
+        assert_eq!(value, deserialize(deserializer, meta_map).unwrap());
+    }
+
+    #[test]
+    fn test_valid_array() {
+        let deserializer = &mut Deserializer::from_str(r#"[1,2]"#);
+        let mut meta_map = MetaMap::new();
+        meta_map.insert("0".to_string(), Meta::from_error("a"));
+        meta_map.insert("1".to_string(), Meta::from_error("b"));
+
+        let value = Annotated::from(vec![
+            Annotated::new(1, Meta::from_error("a")),
+            Annotated::new(2, Meta::from_error("b")),
+        ]);
         assert_eq!(value, deserialize(deserializer, meta_map).unwrap());
     }
 
@@ -438,7 +514,7 @@ mod test_with_meta {
 }
 
 #[cfg(test)]
-mod test_without_meta {
+mod test_annotated_without_meta {
     use super::*;
     use serde_json;
 
@@ -501,5 +577,48 @@ mod test_without_meta {
     #[test]
     fn test_syntax_error_nested() {
         assert!(serde_json::from_str::<Test>(r#"{"answer": nul}"#).is_err());
+    }
+}
+
+#[cfg(test)]
+mod test_meta_map {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_empty() {
+        assert_eq!(MetaMap::new(), serde_json::from_str("{}").unwrap());
+    }
+
+    #[test]
+    fn test_root() {
+        let json = r#"{
+            "": {}
+        }"#;
+
+        let mut map = MetaMap::new();
+        map.insert(".".to_string(), Meta::default());
+
+        assert_eq!(map, serde_json::from_str(json).unwrap());
+    }
+
+    #[test]
+    fn test_nested() {
+        let json = r#"{
+            "": {},
+            "foo": {
+                "": {},
+                "bar": {
+                    "": {}
+                }
+            }
+        }"#;
+
+        let mut map = MetaMap::new();
+        map.insert(".".to_string(), Meta::default());
+        map.insert("foo".to_string(), Meta::default());
+        map.insert("foo.bar".to_string(), Meta::default());
+
+        assert_eq!(map, serde_json::from_str(json).unwrap());
     }
 }
