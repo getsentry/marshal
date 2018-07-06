@@ -13,10 +13,12 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate uuid;
 
+#[macro_use]
+extern crate sentry_stripping_derive;
+
 pub mod chunk;
 pub mod common;
 pub mod meta;
-pub mod protocol;
 pub mod rule;
 
 mod tracked;
@@ -24,3 +26,6 @@ mod utils;
 
 #[cfg(test)]
 mod tests;
+
+// at the end for now to aid cargo expand testing
+pub mod protocol;
