@@ -40,7 +40,7 @@ pub enum Cap {
 }
 
 /// Information about how to process certain annotated values.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ValueInfo {
     pub pii_kind: Option<PiiKind>,
     pub cap: Option<Cap>,
@@ -187,11 +187,35 @@ impl ProcessValue for Value {
     }
 }
 
-#[derive(ProcessValue)]
-struct TestEvent {
-    flag: bool,
-    #[process_value]
-    id: Annotated<u32>,
-    #[process_value(pii_kind = "freeform", cap = "message")]
-    message: Annotated<String>,
+#[test]
+fn test_basic_processing() {
+    #[derive(ProcessValue)]
+    struct Event {
+        flag: bool,
+        #[process_value]
+        id: Annotated<u32>,
+        #[process_value(pii_kind = "freeform", cap = "message")]
+        message: Annotated<String>,
+    }
+
+    struct MyProcessor;
+
+    impl Processor for MyProcessor {
+        fn process_u32(&self, mut annotated: Annotated<u32>, info: &ValueInfo) -> Annotated<u32> {
+            annotated.set_value(None);
+            annotated.meta_mut().errors.push("Whatever mate".into());
+            annotated
+        }
+    }
+
+    let event = Annotated::from(Event {
+        flag: true,
+        id: Annotated::from(42),
+        message: Annotated::from("Hello World!".to_string()),
+    });
+    
+    let new_event = ProcessValue::process_value(event, &MyProcessor, &ValueInfo::default());
+    let id = new_event.0.unwrap().id;
+    assert!(id.value().is_none());
+    assert_eq!(&id.meta().errors[0], "Whatever mate");
 }
