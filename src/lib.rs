@@ -20,9 +20,10 @@ pub mod chunk;
 pub mod common;
 pub mod meta;
 pub mod rule;
+pub mod protocol;
 
 mod tracked;
 mod utils;
 
 // at the end for now to aid cargo expand testing
-pub mod protocol;
+pub mod processor;

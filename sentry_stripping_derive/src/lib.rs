@@ -8,7 +8,7 @@ use syn::{Meta, NestedMeta, MetaNameValue, Lit};
 use quote::ToTokens;
 use proc_macro2::TokenStream;
 
-decl_derive!([ProcessItem, attributes(process_item)] => process_item_derive);
+decl_derive!([PiiProcess, attributes(pii_process)] => process_item_derive);
 
 fn process_item_derive(s: synstructure::Structure) -> TokenStream {
     let mut body = TokenStream::new();
@@ -21,7 +21,7 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
             let mut pii_kind = None;
             for attr in &bi.ast().attrs {
                 if let Some(Meta::List(metalist)) = attr.interpret_meta() {
-                    if metalist.ident == "process_item" {
+                    if metalist.ident == "pii_process" {
                         for nested_meta in metalist.nested {
                             match nested_meta {
                                 NestedMeta::Literal(..) => panic!("unexpected literal attribute"),
@@ -51,7 +51,7 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
             }
             let pii_kind = pii_kind.map(|x| quote!(Some(#x))).unwrap_or_else(|| quote!(None));
             quote! {
-                __protocol::ProcessItem::process_item(#bi, __processor, &__protocol::ProcessInfo {
+                __processor::PiiProcess::pii_process(#bi, __processor, &__processor::PiiInfo {
                     pii_kind: #pii_kind,
                 });
             }
@@ -59,15 +59,20 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
     }
 
     s.gen_impl(quote! {
-        use protocol as __protocol;
+        use processor as __processor;
 
-        gen impl __protocol::ProcessItem for @Self {
-            fn process_item(annotated: &mut Annotated<Self>,
-                            __processor: &__protocol::Processor,
-                            __info: &__protocol::ProcessInfo)
+        gen impl __processor::PiiProcess for @Self {
+            fn pii_process(__annotated: &mut Annotated<Self>,
+                            __processor: &__processor::PiiProcessor,
+                            __info: &__processor::PiiInfo)
             {
-                match *annotated {
-                    #body
+                match __annotated.value_mut() {
+                    Some(__value) => {
+                        match *__value {
+                            #body
+                        }
+                    }
+                    None => {}
                 }
             }
         }
