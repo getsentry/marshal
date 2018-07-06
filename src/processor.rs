@@ -56,7 +56,7 @@ impl ValueInfo {
             cap: match self.cap {
                 Some(Cap::Databag) => Some(Cap::Databag),
                 _ => None,
-            }
+            },
         }
     }
 }
@@ -79,11 +79,15 @@ macro_rules! declare_primitive_process {
 macro_rules! impl_primitive_process {
     ($ty:ident, $func:ident) => {
         impl ProcessValue for $ty {
-            fn process_value(annotated: Annotated<$ty>, processor: &Processor, info: &ValueInfo) -> Annotated<$ty> {
+            fn process_value(
+                annotated: Annotated<$ty>,
+                processor: &Processor,
+                info: &ValueInfo,
+            ) -> Annotated<$ty> {
                 processor.$func(annotated, info)
             }
         }
-    }
+    };
 }
 
 /// A general processing trait for annotated values.
@@ -100,7 +104,11 @@ pub trait Processor {
 
 /// A trait implemented for annotated types that support processing.
 pub trait ProcessValue {
-    fn process_value(annotated: Annotated<Self>, processor: &Processor, info: &ValueInfo) -> Annotated<Self>
+    fn process_value(
+        annotated: Annotated<Self>,
+        processor: &Processor,
+        info: &ValueInfo,
+    ) -> Annotated<Self>
     where
         Self: Sized;
 }
@@ -115,7 +123,11 @@ impl_primitive_process!(f64, process_f64);
 impl_primitive_process!(String, process_string);
 
 impl<T: ProcessValue> ProcessValue for Vec<Annotated<T>> {
-    fn process_value(annotated: Annotated<Self>, processor: &Processor, info: &ValueInfo) -> Annotated<Self> {
+    fn process_value(
+        annotated: Annotated<Self>,
+        processor: &Processor,
+        info: &ValueInfo,
+    ) -> Annotated<Self> {
         annotated.map(|value| {
             value
                 .into_iter()
@@ -126,59 +138,66 @@ impl<T: ProcessValue> ProcessValue for Vec<Annotated<T>> {
 }
 
 impl ProcessValue for Value {
-    fn process_value(annotated: Annotated<Self>, processor: &Processor, info: &ValueInfo) -> Annotated<Self> {
+    fn process_value(
+        annotated: Annotated<Self>,
+        processor: &Processor,
+        info: &ValueInfo,
+    ) -> Annotated<Self> {
         match annotated {
             Annotated(Some(Value::Bool(val)), meta) => {
-                let Annotated(val_opt, meta) = processor.process_bool(Annotated::new(val, meta), info);
+                let Annotated(val_opt, meta) =
+                    processor.process_bool(Annotated::new(val, meta), info);
                 Annotated(val_opt.map(Value::Bool), meta)
             }
             Annotated(Some(Value::U32(val)), meta) => {
-                let Annotated(val_opt, meta) = processor.process_u32(Annotated::new(val, meta), info);
+                let Annotated(val_opt, meta) =
+                    processor.process_u32(Annotated::new(val, meta), info);
                 Annotated(val_opt.map(Value::U32), meta)
             }
             Annotated(Some(Value::I32(val)), meta) => {
-                let Annotated(val_opt, meta) = processor.process_i32(Annotated::new(val, meta), info);
+                let Annotated(val_opt, meta) =
+                    processor.process_i32(Annotated::new(val, meta), info);
                 Annotated(val_opt.map(Value::I32), meta)
             }
             Annotated(Some(Value::U64(val)), meta) => {
-                let Annotated(val_opt, meta) = processor.process_u64(Annotated::new(val, meta), info);
+                let Annotated(val_opt, meta) =
+                    processor.process_u64(Annotated::new(val, meta), info);
                 Annotated(val_opt.map(Value::U64), meta)
             }
             Annotated(Some(Value::I64(val)), meta) => {
-                let Annotated(val_opt, meta) = processor.process_i64(Annotated::new(val, meta), info);
+                let Annotated(val_opt, meta) =
+                    processor.process_i64(Annotated::new(val, meta), info);
                 Annotated(val_opt.map(Value::I64), meta)
             }
             Annotated(Some(Value::F32(val)), meta) => {
-                let Annotated(val_opt, meta) = processor.process_f32(Annotated::new(val, meta), info);
+                let Annotated(val_opt, meta) =
+                    processor.process_f32(Annotated::new(val, meta), info);
                 Annotated(val_opt.map(Value::F32), meta)
             }
             Annotated(Some(Value::F64(val)), meta) => {
-                let Annotated(val_opt, meta) = processor.process_f64(Annotated::new(val, meta), info);
+                let Annotated(val_opt, meta) =
+                    processor.process_f64(Annotated::new(val, meta), info);
                 Annotated(val_opt.map(Value::F64), meta)
             }
             Annotated(Some(Value::String(val)), meta) => {
-                let Annotated(val_opt, meta) = processor.process_string(Annotated::new(val, meta), info);
+                let Annotated(val_opt, meta) =
+                    processor.process_string(Annotated::new(val, meta), info);
                 Annotated(val_opt.map(Value::String), meta)
             }
             Annotated(Some(Value::Array(val)), meta) => {
                 let mut rv = Vec::with_capacity(val.len());
                 for item in val.into_iter() {
-                    rv.push(ProcessValue::process_value(
-                        item,
-                        processor,
-                        &info.derive()
-                    ));
+                    rv.push(ProcessValue::process_value(item, processor, &info.derive()));
                 }
                 Annotated(Some(Value::Array(rv)), meta)
             }
             Annotated(Some(Value::Map(val)), meta) => {
                 let mut rv = BTreeMap::new();
                 for (key, value) in val.into_iter() {
-                    rv.insert(key, ProcessValue::process_value(
-                        value,
-                        processor,
-                        &info.derive()
-                    ));
+                    rv.insert(
+                        key,
+                        ProcessValue::process_value(value, processor, &info.derive()),
+                    );
                 }
                 Annotated(Some(Value::Map(rv)), meta)
             }
@@ -201,7 +220,7 @@ fn test_basic_processing() {
     struct MyProcessor;
 
     impl Processor for MyProcessor {
-        fn process_u32(&self, mut annotated: Annotated<u32>, info: &ValueInfo) -> Annotated<u32> {
+        fn process_u32(&self, mut annotated: Annotated<u32>, _info: &ValueInfo) -> Annotated<u32> {
             annotated.set_value(None);
             annotated.meta_mut().errors.push("Whatever mate".into());
             annotated
@@ -213,7 +232,7 @@ fn test_basic_processing() {
         id: Annotated::from(42),
         message: Annotated::from("Hello World!".to_string()),
     });
-    
+
     let new_event = ProcessValue::process_value(event, &MyProcessor, &ValueInfo::default());
     let id = new_event.0.unwrap().id;
     assert!(id.value().is_none());

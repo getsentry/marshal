@@ -1,7 +1,4 @@
 //! The current latest sentry protocol version.
-use std::any::Any;
-
-use meta::Meta;
 
 use chrono::{DateTime, Utc};
 use uuid::Uuid;

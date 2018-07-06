@@ -6,13 +6,18 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::iter::FromIterator;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::de::{self, Deserialize, Deserializer, IgnoredAny};
 use serde::private::de::{Content, ContentDeserializer, ContentRepr};
-use serde::ser::{Serialize, SerializeSeq, Serializer};
+use serde::ser::{Serialize, SerializeMap, SerializeSeq, Serializer};
 
+use forward::ForwardMapSerializer;
 use tracked::{Path, TrackedDeserializer};
 use utils::serde::{CustomDeserialize, CustomSerialize, DefaultDeserialize, DefaultSerialize};
+
+/// Internal synchronization for meta data serialization.
+thread_local!(static SERIALIZE_META: AtomicBool = AtomicBool::new(false));
 
 /// Description of a remark.
 #[derive(Clone, Debug, PartialEq)]
@@ -129,6 +134,7 @@ impl Remark {
         Remark { note, range: None }
     }
 
+    /// Creates a new text remark with range indices.
     pub fn with_range(note: Note, range: Range) -> Self {
         Remark {
             note,
@@ -211,13 +217,17 @@ impl Serialize for Remark {
 /// Meta information for a data field in the event payload.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct Meta {
-    // TODO: These should probably be pub, similar to structs in crate::protocol.
-    #[serde(default)]
-    pub(crate) remarks: Vec<Remark>,
-    #[serde(default)]
-    pub(crate) errors: Vec<String>,
-    #[serde(default)]
-    pub(crate) original_length: Option<u32>,
+    /// Remarks detailling modifications of this field.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub remarks: Vec<Remark>,
+
+    /// Errors that happened during deserialization or processing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub errors: Vec<String>,
+
+    /// The original length of modified text fields or collections.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original_length: Option<u32>,
 }
 
 impl Meta {
@@ -250,6 +260,11 @@ impl Meta {
         &mut self.remarks
     }
 
+    /// Indicates whether this field has remarks.
+    pub fn has_remarks(&self) -> bool {
+        !self.remarks.is_empty()
+    }
+
     /// Iterates errors on this field.
     pub fn errors(&self) -> impl Iterator<Item = &str> {
         self.errors.iter().map(|x| x.as_str())
@@ -263,6 +278,11 @@ impl Meta {
     /// Indicates whether this field has errors.
     pub fn has_errors(&self) -> bool {
         !self.errors.is_empty()
+    }
+
+    /// Indicates whether this field has meta data attached.
+    pub fn is_empty(&self) -> bool {
+        self.original_length.is_none() && self.remarks.is_empty() && self.errors.is_empty()
     }
 }
 
@@ -349,9 +369,23 @@ impl<T> Annotated<T> {
         S: Serializer,
         C: CustomSerialize<T>,
     {
-        match self.0 {
-            Some(ref value) => C::serialize(value, serializer),
-            None => serializer.serialize_unit(),
+        if SERIALIZE_META.with(|b| b.load(Ordering::Relaxed)) {
+            let mut map = serializer.serialize_map(None)?;
+
+            if !self.1.is_empty() {
+                map.serialize_entry("", &self.1)?;
+            }
+
+            if let Some(ref value) = self.0 {
+                C::serialize(value, ForwardMapSerializer(&mut map))?;
+            }
+
+            map.end()
+        } else {
+            match self.0 {
+                Some(ref value) => C::serialize(value, serializer),
+                None => serializer.serialize_unit(),
+            }
         }
     }
 
@@ -497,7 +531,7 @@ impl<'de> Deserialize<'de> for MetaMap {
     }
 }
 
-/// Deserializes an annotated type with given meta data.
+/// Deserializes an annotated value with given meta data.
 pub fn deserialize<'de, D, T>(deserializer: D, meta_map: MetaMap) -> Result<Annotated<T>, D::Error>
 where
     D: Deserializer<'de>,
@@ -508,6 +542,31 @@ where
 
     let tracked = TrackedDeserializer::new(deserializer, state);
     Annotated::<T>::deserialize(tracked)
+}
+
+/// Serializes meta data of an annotated value into a nested map structure.
+pub fn serialize_meta_with<T, S, F>(
+    value: &Annotated<T>,
+    serializer: S,
+    serialize: F,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+    F: FnOnce(&Annotated<T>, S) -> Result<S::Ok, S::Error>,
+{
+    SERIALIZE_META.with(|b| b.store(true, Ordering::Relaxed));
+    let result = serialize(value, serializer);
+    SERIALIZE_META.with(|b| b.store(false, Ordering::Relaxed));
+    result
+}
+
+/// Serializes meta data of an annotated value into a nested map structure.
+pub fn serialize_meta<T, S>(value: &Annotated<T>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    Annotated<T>: Serialize,
+    S: Serializer,
+{
+    serialize_meta_with(value, serializer, Annotated::<T>::serialize)
 }
 
 #[cfg(test)]

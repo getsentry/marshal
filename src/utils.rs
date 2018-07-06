@@ -5,10 +5,12 @@ pub mod annotated {
     use meta::Annotated;
 
     pub fn is_none<T>(annotated: &Annotated<Option<T>>) -> bool {
+        // TODO: Consider meta serialization
         annotated.value().map_or(true, Option::is_none)
     }
 
     pub fn is_empty_values<T>(annotated: &Annotated<Values<T>>) -> bool {
+        // TODO: Consider meta serialization
         annotated.value().map_or(true, Values::is_empty)
     }
 }
