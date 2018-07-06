@@ -7,14 +7,15 @@ use std::fmt;
 use std::iter::FromIterator;
 use std::rc::Rc;
 
+use serde::de::{self, Deserialize, Deserializer, IgnoredAny};
 use serde::private::de::{Content, ContentDeserializer, ContentRepr};
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::ser::{Serialize, SerializeSeq, Serializer};
 
 use tracked::{Path, TrackedDeserializer};
 use utils::serde::{CustomDeserialize, CustomSerialize, DefaultDeserialize, DefaultSerialize};
 
 /// Description of a remark.
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Note {
     rule: Cow<'static, str>,
     description: Option<Cow<'static, str>>,
@@ -22,19 +23,25 @@ pub struct Note {
 
 impl Note {
     /// Creates a new Note.
-    pub fn new(rule: String, description: String) -> Note {
+    pub fn new<S, T>(rule: S, description: T) -> Note
+    where
+        S: Into<Cow<'static, str>>,
+        T: Into<Cow<'static, str>>,
+    {
+        let rule = rule.into();
+        let description = description.into();
         debug_assert!(!rule.starts_with("@"));
 
         Note {
-            rule: rule.into(),
-            description: Some(description.into()),
+            rule,
+            description: Some(description),
         }
     }
 
     /// Creates a new well-known note without description.
     ///
     /// By convention, the rule name must start with "@".
-    pub fn new_well_known(rule: &'static str) -> Note {
+    pub fn well_known(rule: &'static str) -> Note {
         debug_assert!(rule.starts_with("@"));
 
         Note {
@@ -60,8 +67,49 @@ impl Note {
     /// Returns if this is a well-known rule.
     ///
     /// Such rules do not include a description.
-    pub fn well_known(&self) -> bool {
+    pub fn is_well_known(&self) -> bool {
         self.rule.starts_with("@")
+    }
+}
+
+struct NoteVisitor;
+
+impl<'de> de::Visitor<'de> for NoteVisitor {
+    type Value = Note;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(formatter, "a meta note")
+    }
+
+    fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+        let rule = seq.next_element()?
+            .ok_or_else(|| de::Error::custom("missing required rule name"))?;
+        let description = seq.next_element()?;
+
+        // Drain the sequence
+        while let Some(IgnoredAny) = seq.next_element()? {}
+
+        Ok(Note { rule, description })
+    }
+}
+
+impl<'de> Deserialize<'de> for Note {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_seq(NoteVisitor)
+    }
+}
+
+impl Serialize for Note {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let len = self.description().map_or(1, |_| 2);
+
+        let mut seq = serializer.serialize_seq(Some(len))?;
+        seq.serialize_element(self.rule())?;
+        if let Some(description) = self.description() {
+            seq.serialize_element(description)?;
+        }
+
+        seq.end()
     }
 }
 
@@ -69,31 +117,23 @@ impl Note {
 pub type Range = (usize, usize);
 
 /// Information on a modified section in a string.
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Remark {
-    range: (usize, usize),
     note: Note,
+    range: Option<Range>,
 }
 
 impl Remark {
     /// Creates a new remark.
-    pub fn new(range: Range, note: Note) -> Self {
-        Remark { range, note }
+    pub fn new(note: Note) -> Self {
+        Remark { note, range: None }
     }
 
-    /// The range of this remark.
-    pub fn range(&self) -> Range {
-        self.range
-    }
-
-    /// Updates the range of this remark.
-    pub fn set_range(&mut self, range: Range) {
-        self.range = range;
-    }
-
-    /// The length of this range.
-    pub fn len(&self) -> usize {
-        self.range.1 - self.range.0
+    pub fn with_range(note: Note, range: Range) -> Self {
+        Remark {
+            note,
+            range: Some(range),
+        }
     }
 
     /// The note of this remark.
@@ -104,6 +144,67 @@ impl Remark {
     /// The mutable note of this remark.
     pub fn note_mut(&mut self) -> &mut Note {
         &mut self.note
+    }
+
+    /// The range of this remark.
+    pub fn range(&self) -> Option<&Range> {
+        self.range.as_ref()
+    }
+
+    /// Mutable range of this remark.
+    pub fn range_mut(&mut self) -> Option<&mut Range> {
+        self.range.as_mut()
+    }
+
+    /// Updates the range of this remark.
+    pub fn set_range(&mut self, range: Option<Range>) {
+        self.range = range;
+    }
+
+    /// The length of this range.
+    pub fn len(&self) -> Option<usize> {
+        self.range.map(|r| r.1 - r.0)
+    }
+}
+
+struct RemarkVisitor;
+
+impl<'de> de::Visitor<'de> for RemarkVisitor {
+    type Value = Remark;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(formatter, "a meta remark")
+    }
+
+    fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+        let note = seq.next_element()?
+            .ok_or_else(|| de::Error::custom("missing required note"))?;
+        let range = seq.next_element()?;
+
+        // Drain the sequence
+        while let Some(IgnoredAny) = seq.next_element()? {}
+
+        Ok(Remark { note, range })
+    }
+}
+
+impl<'de> Deserialize<'de> for Remark {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_seq(RemarkVisitor)
+    }
+}
+
+impl Serialize for Remark {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let len = self.range().map_or(1, |_| 2);
+
+        let mut seq = serializer.serialize_seq(Some(len))?;
+        seq.serialize_element(self.note())?;
+        if let Some(range) = self.range() {
+            seq.serialize_element(range)?;
+        }
+
+        seq.end()
     }
 }
 
@@ -243,7 +344,7 @@ impl<T> Annotated<T> {
         // Continue deserialization into the target type. If this returns an error, we leave the
         // value as None and add the error to the meta data.
         match C::deserialize(ContentDeserializer::<D::Error>::new(content)) {
-            Ok(value) => *annotated.value_mut() = Some(value),
+            Ok(value) => annotated.set_value(Some(value)),
             Err(err) => {
                 if !is_unit || !annotated.meta().has_errors() {
                     annotated.meta_mut().errors_mut().push(err.to_string())
@@ -272,8 +373,13 @@ impl<T> Annotated<T> {
     }
 
     /// Mutable reference to the actual value.
-    pub fn value_mut(&mut self) -> &mut Option<T> {
-        &mut self.value
+    pub fn value_mut(&mut self) -> Option<&mut T> {
+        self.value.as_mut()
+    }
+
+    /// Update the value.
+    pub fn set_value(&mut self, value: Option<T>) {
+        self.value = value;
     }
 
     /// Meta information on the value.
@@ -304,10 +410,7 @@ impl<T> From<T> for Annotated<T> {
     }
 }
 
-impl<'de, T> Deserialize<'de> for Annotated<T>
-where
-    T: Deserialize<'de>,
-{
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Annotated<T> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         Annotated::deserialize_with(deserializer, DefaultDeserialize::default())
     }
@@ -593,11 +696,11 @@ mod test_meta_map {
     #[test]
     fn test_root() {
         let json = r#"{
-            "": {}
+            "": {"errors": ["a"]}
         }"#;
 
         let mut map = MetaMap::new();
-        map.insert(".".to_string(), Meta::default());
+        map.insert(".".to_string(), Meta::from_error("a"));
 
         assert_eq!(map, serde_json::from_str(json).unwrap());
     }
@@ -605,20 +708,63 @@ mod test_meta_map {
     #[test]
     fn test_nested() {
         let json = r#"{
-            "": {},
+            "": {"errors": ["a"]},
             "foo": {
-                "": {},
+                "": {"errors": ["b"]},
                 "bar": {
-                    "": {}
+                    "": {"errors": ["c"]}
                 }
             }
         }"#;
 
         let mut map = MetaMap::new();
-        map.insert(".".to_string(), Meta::default());
-        map.insert("foo".to_string(), Meta::default());
-        map.insert("foo.bar".to_string(), Meta::default());
+        map.insert(".".to_string(), Meta::from_error("a"));
+        map.insert("foo".to_string(), Meta::from_error("b"));
+        map.insert("foo.bar".to_string(), Meta::from_error("c"));
 
         assert_eq!(map, serde_json::from_str(json).unwrap());
+    }
+}
+
+#[cfg(test)]
+mod test_remarks {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_rule_only() {
+        let json = r#"[["@test"]]"#;
+        let remark = Remark::new(Note::well_known("@test"));
+
+        assert_eq!(remark, serde_json::from_str(json).unwrap());
+        assert_eq!(json, &serde_json::to_string(&remark).unwrap());
+    }
+
+    #[test]
+    fn test_with_description() {
+        let json = r#"[["test","my custom description"]]"#;
+        let remark = Remark::new(Note::new("test", "my custom description"));
+
+        assert_eq!(remark, serde_json::from_str(json).unwrap());
+        assert_eq!(json, &serde_json::to_string(&remark).unwrap());
+    }
+
+    #[test]
+    fn test_with_range() {
+        let json = r#"[["@test"],[21,42]]"#;
+        let remark = Remark::with_range(Note::well_known("@test"), (21, 42));
+
+        assert_eq!(remark, serde_json::from_str(json).unwrap());
+        assert_eq!(json, &serde_json::to_string(&remark).unwrap());
+    }
+
+    #[test]
+    fn test_with_additional() {
+        let input = r#"[["test","custom",null],[21,42],null]"#;
+        let output = r#"[["test","custom"],[21,42]]"#;
+        let remark = Remark::with_range(Note::new("test", "custom"), (21, 42));
+
+        assert_eq!(remark, serde_json::from_str(input).unwrap());
+        assert_eq!(output, &serde_json::to_string(&remark).unwrap());
     }
 }

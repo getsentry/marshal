@@ -34,7 +34,11 @@ pub fn from_str<'a>(text: &'a str, meta: &Meta) -> Vec<Chunk<'a>> {
     let mut pos = 0;
 
     for remark in meta.remarks() {
-        let (start, end) = remark.range();
+        let (start, end) = match remark.range() {
+            Some(range) => range.clone(),
+            None => continue,
+        };
+
         if start > pos {
             if let Some(piece) = text.get(pos..start) {
                 rv.push(Chunk::Text(Cow::Borrowed(piece)));
@@ -72,7 +76,7 @@ pub fn to_string<'a>(chunks: Vec<Chunk<'a>>, mut meta: Meta) -> (String, Meta) {
         let new_pos = pos + chunk.len();
         rv.push_str(chunk.as_str());
         if let Chunk::Redaction(_, note) = chunk {
-            remarks.push(Remark::new((pos, new_pos), note));
+            remarks.push(Remark::with_range(note, (pos, new_pos)));
         }
         pos += new_pos;
     }
@@ -86,9 +90,9 @@ fn test_chunking() {
     let chunks = from_str(
         "Hello Peter, my email address is ****@*****.com. See you",
         &Meta {
-            remarks: vec![Remark::new(
+            remarks: vec![Remark::with_range(
+                Note::well_known("@email-address"),
                 (33, 47),
-                Note::new_well_known("@email-address"),
             )],
             ..Default::default()
         },
@@ -100,7 +104,7 @@ fn test_chunking() {
             Chunk::Text(Cow::Borrowed("Hello Peter, my email address is ")),
             Chunk::Redaction(
                 Cow::Borrowed("****@*****.com"),
-                Note::new_well_known("@email-address"),
+                Note::well_known("@email-address"),
             ),
             Chunk::Text(Cow::Borrowed(". See you")),
         ]
@@ -111,9 +115,9 @@ fn test_chunking() {
         (
             "Hello Peter, my email address is ****@*****.com. See you".into(),
             Meta {
-                remarks: vec![Remark::new(
+                remarks: vec![Remark::with_range(
+                    Note::well_known("@email-address"),
                     (33, 47),
-                    Note::new_well_known("@email-address"),
                 )],
                 ..Default::default()
             }
