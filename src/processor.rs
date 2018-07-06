@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use meta::Annotated;
 
 /// The type of PII that's contained in the field.
+#[derive(Copy, Clone, Debug)]
 pub enum PiiKind {
     /// A freeform text potentially containing PII data.
     Freeform,
@@ -22,39 +23,57 @@ pub enum PiiKind {
     DataBag,
 }
 
-/// Information about how to process PII in the field.
-pub struct PiiInfo {
-    pub pii_kind: Option<PiiKind>,
+/// The type of cap applied to the value.
+#[derive(Copy, Clone, Debug)]
+pub enum Cap {
+    /// A summary text
+    Summary,
+    /// A message text
+    Message,
+    /// A path
+    Path,
+    /// A short path (typically just filename)
+    ShortPath,
+    /// Default limits for databags
+    Databag,
 }
 
-impl PiiInfo {
-    pub fn derive(&self) -> PiiInfo {
-        PiiInfo {
+/// Information about how to process PII in the field.
+#[derive(Clone, Debug)]
+pub struct ValueInfo {
+    pub pii_kind: Option<PiiKind>,
+    pub cap: Cap,
+}
+
+impl ValueInfo {
+    pub fn derive(&self) -> ValueInfo {
+        ValueInfo {
             pii_kind: match self.pii_kind {
                 Some(PiiKind::DataBag) => Some(PiiKind::DataBag),
                 _ => None,
             },
+            cap: self.cap,
         }
     }
 }
 
 macro_rules! declare_primitive_process {
     ($ty:ident, $func:ident) => {
-        fn $func(&self, annotated: &mut Annotated<$ty>, info: &PiiInfo);
+        fn $func(&self, annotated: &mut Annotated<$ty>, info: &ValueInfo);
     }
 }
 
 macro_rules! impl_primitive_process {
     ($ty:ident, $func:ident) => {
-        impl PiiProcess for $ty {
-            fn pii_process(annotated: &mut Annotated<$ty>, processor: &PiiProcessor, info: &PiiInfo) {
+        impl ProcessValue for $ty {
+            fn process_value(annotated: &mut Annotated<$ty>, processor: &Processor, info: &ValueInfo) {
                 processor.$func(annotated, info);
             }
         }
     }
 }
 
-pub trait PiiProcessor {
+pub trait Processor {
     declare_primitive_process!(bool, process_bool);
     declare_primitive_process!(u32, process_u32);
     declare_primitive_process!(i32, process_i32);
@@ -65,8 +84,8 @@ pub trait PiiProcessor {
     declare_primitive_process!(String, process_string);
 }
 
-pub trait PiiProcess {
-    fn pii_process(annotated: &mut Annotated<Self>, processor: &PiiProcessor, info: &PiiInfo)
+pub trait ProcessValue {
+    fn process_value(annotated: &mut Annotated<Self>, processor: &Processor, info: &ValueInfo)
     where
         Self: Sized;
 }
@@ -80,9 +99,9 @@ impl_primitive_process!(f32, process_f32);
 impl_primitive_process!(f64, process_f64);
 impl_primitive_process!(String, process_string);
 
-#[derive(PiiProcess)]
+#[derive(ProcessValue)]
 struct TestEvent {
     id: Annotated<u32>,
-    #[pii_process(pii_kind = "freeform")]
+    #[process_value(pii_kind = "freeform", cap = "message")]
     message: Annotated<String>,
 }

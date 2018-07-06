@@ -8,7 +8,7 @@ use syn::{Meta, NestedMeta, MetaNameValue, Lit};
 use quote::ToTokens;
 use proc_macro2::TokenStream;
 
-decl_derive!([PiiProcess, attributes(pii_process)] => process_item_derive);
+decl_derive!([ProcessValue, attributes(process_value)] => process_item_derive);
 
 fn process_item_derive(s: synstructure::Structure) -> TokenStream {
     let mut body = TokenStream::new();
@@ -19,9 +19,12 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
         }
         variant.each(|bi| {
             let mut pii_kind = None;
+            let mut cap = None;
+            let mut process_value = false;
             for attr in &bi.ast().attrs {
                 if let Some(Meta::List(metalist)) = attr.interpret_meta() {
-                    if metalist.ident == "pii_process" {
+                    if metalist.ident == "process_value" {
+                        process_value = true;
                         for nested_meta in metalist.nested {
                             match nested_meta {
                                 NestedMeta::Literal(..) => panic!("unexpected literal attribute"),
@@ -37,6 +40,15 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
                                                         panic!("Got non string literal for pii_kind");
                                                     }
                                                 }
+                                            } else if ident == "cap" {
+                                                match lit {
+                                                    Lit::Str(litstr) => {
+                                                        cap = Some(cap_to_enum_variant(&litstr.value()));
+                                                    }
+                                                    _ => {
+                                                        panic!("Got non string literal for cap");
+                                                    }
+                                                }
                                             }
                                         }
                                         other => {
@@ -49,11 +61,19 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
                     }
                 }
             }
-            let pii_kind = pii_kind.map(|x| quote!(Some(#x))).unwrap_or_else(|| quote!(None));
-            quote! {
-                __processor::PiiProcess::pii_process(#bi, __processor, &__processor::PiiInfo {
-                    pii_kind: #pii_kind,
-                });
+            if process_value {
+                let pii_kind = pii_kind.map(|x| quote!(Some(__processor::#x))).unwrap_or_else(|| quote!(None));
+                let cap = cap.map(|x| quote!(Some(__processor::#x))).unwrap_or_else(|| quote!(None));
+                quote! {
+                    __processor::ProcessValue::process_value(#bi, __processor, &__processor::ValueInfo {
+                        pii_kind: #pii_kind,
+                        cap: #cap,
+                    });
+                }
+            } else {
+                quote! {
+                    ::std::mem::drop(#bi);
+                }
             }
         }).to_tokens(&mut body);
     }
@@ -61,10 +81,10 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
     s.gen_impl(quote! {
         use processor as __processor;
 
-        gen impl __processor::PiiProcess for @Self {
-            fn pii_process(__annotated: &mut Annotated<Self>,
-                            __processor: &__processor::PiiProcessor,
-                            __info: &__processor::PiiInfo)
+        gen impl __processor::ProcessValue for @Self {
+            fn process_value(__annotated: &mut Annotated<Self>,
+                            __processor: &__processor::Processor,
+                            __info: &__processor::ValueInfo)
             {
                 match __annotated.value_mut() {
                     Some(__value) => {
@@ -90,5 +110,16 @@ fn pii_kind_to_enum_variant(name: &str) -> TokenStream {
         "email" => quote!(PiiKind::Email),
         "databag" => quote!(PiiKind::DataBag),
         _ => panic!("invalid pii_kind variant '{}'", name)
+    }
+}
+
+fn cap_to_enum_variant(name: &str) -> TokenStream {
+    match name {
+        "summary" => quote!(Cap::Summary),
+        "message" => quote!(Cap::Message),
+        "path" => quote!(Cap::Path),
+        "short_path" => quote!(Cap::ShortPath),
+        "databag" => quote!(Cap::Databag),
+        _ => panic!("invalid cap variant '{}'", name)
     }
 }
