@@ -8,7 +8,7 @@ use syn::{Meta, NestedMeta, MetaNameValue, Lit};
 use quote::ToTokens;
 use proc_macro2::TokenStream;
 
-decl_derive!([ProcessValue, attributes(process_value)] => process_item_derive);
+decl_derive!([ProcessAnnotatedValue, attributes(process_annotated_value)] => process_item_derive);
 
 fn process_item_derive(s: synstructure::Structure) -> TokenStream {
     let mut body = TokenStream::new();
@@ -21,20 +21,20 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
         for bi in variant.bindings() {
             let mut pii_kind = None;
             let mut cap = None;
-            let mut process_value = false;
+            let mut process_annotated_value = false;
             for attr in &bi.ast().attrs {
                 let meta = match attr.interpret_meta() {
                     Some(meta) => meta,
                     None => continue,
                 };
-                if meta.name() == "process_value" {
-                    process_value = true;
+                if meta.name() == "process_annotated_value" {
+                    process_annotated_value = true;
                 } else {
                     continue;
                 }
 
                 if let Meta::List(metalist) = meta {
-                    process_value = true;
+                    process_annotated_value = true;
                     for nested_meta in metalist.nested {
                         match nested_meta {
                             NestedMeta::Literal(..) => panic!("unexpected literal attribute"),
@@ -71,11 +71,13 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
                 }
             }
 
-            if process_value {
+            if process_annotated_value {
                 let pii_kind = pii_kind.map(|x| quote!(Some(__processor::#x))).unwrap_or_else(|| quote!(None));
                 let cap = cap.map(|x| quote!(Some(__processor::#x))).unwrap_or_else(|| quote!(None));
                 (quote! {
-                    #bi = __processor::ProcessValue::process_value(#bi, __processor, &__processor::ValueInfo {
+                    #bi = __processor::ProcessAnnotatedValue::process_annotated_value(
+                        #bi, __processor, &__processor::ValueInfo
+                    {
                         pii_kind: #pii_kind,
                         cap: #cap,
                     });
@@ -108,11 +110,12 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
         use processor as __processor;
         use meta as __meta;
 
-        gen impl __processor::ProcessValue for @Self {
-            fn process_value(__annotated: __meta::Annotated<Self>,
-                             __processor: &__processor::Processor,
-                             __info: &__processor::ValueInfo) -> __meta::Annotated<Self>
-            {
+        gen impl __processor::ProcessAnnotatedValue for @Self {
+            fn process_annotated_value(
+                __annotated: __meta::Annotated<Self>,
+                __processor: &__processor::Processor,
+                __info: &__processor::ValueInfo
+            ) -> __meta::Annotated<Self> {
                 match __annotated {
                     #body
                 }

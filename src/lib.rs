@@ -19,8 +19,8 @@ extern crate sentry_stripping_derive;
 pub mod chunk;
 pub mod common;
 pub mod meta;
-pub mod rule;
 pub mod protocol;
+pub mod rule;
 pub mod value;
 
 mod forward;

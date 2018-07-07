@@ -1,5 +1,5 @@
-use std::collections::BTreeMap;
 use meta::Annotated;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub enum Value {

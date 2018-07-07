@@ -87,7 +87,8 @@ impl<'de> de::Visitor<'de> for NoteVisitor {
     }
 
     fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-        let rule = seq.next_element()?
+        let rule = seq
+            .next_element()?
             .ok_or_else(|| de::Error::custom("missing required rule name"))?;
         let description = seq.next_element()?;
 
@@ -183,7 +184,8 @@ impl<'de> de::Visitor<'de> for RemarkVisitor {
     }
 
     fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-        let note = seq.next_element()?
+        let note = seq
+            .next_element()?
             .ok_or_else(|| de::Error::custom("missing required note"))?;
         let range = seq.next_element()?;
 
