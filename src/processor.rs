@@ -341,12 +341,13 @@ fn test_pii_processing() {
     struct MyPiiProcessor;
 
     impl PiiProcessor for MyPiiProcessor {
-        fn pii_process_value(&self, annotated: Annotated<Value>, pii_kind: PiiKind) -> Annotated<Value> {
+        fn pii_process_value(
+            &self,
+            annotated: Annotated<Value>,
+            pii_kind: PiiKind,
+        ) -> Annotated<Value> {
             match (annotated, pii_kind) {
-                (Annotated(Some(_), mut meta), PiiKind::Id) => {
-                    meta.remarks_mut().push(Remark::new(Note::well_known("@id-removed")));
-                    Annotated(None, meta)
-                }
+                (annotated, PiiKind::Id) => annotated.with_removed_value("@id-removed"),
                 (annotated, _) => annotated,
             }
         }
@@ -358,9 +359,15 @@ fn test_pii_processing() {
         message: Annotated::from("Hello World!".to_string()),
     });
 
-    let new_event =
-        ProcessAnnotatedValue::process_annotated_value(event, &MyPiiProcessor, &ValueInfo::default());
+    let new_event = ProcessAnnotatedValue::process_annotated_value(
+        event,
+        &MyPiiProcessor,
+        &ValueInfo::default(),
+    );
     let id = new_event.0.unwrap().id;
     assert!(id.value().is_none());
-    assert_eq!(id.meta().remarks().next().unwrap().note(), &Note::well_known("@id-removed"));
+    assert_eq!(
+        id.meta().remarks().next().unwrap().note(),
+        &Note::well_known("@id-removed")
+    );
 }

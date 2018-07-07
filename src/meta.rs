@@ -421,6 +421,17 @@ impl<T> Annotated<T> {
         self.0 = self.0.map(f);
         self
     }
+
+    /// Removes a value and writes a well known remark.
+    pub fn with_removed_value(mut self, remark: &'static str) -> Self {
+        if self.0.is_some() {
+            self.0 = None;
+            self.1
+                .remarks_mut()
+                .push(Remark::new(Note::well_known(remark)));
+        }
+        self
+    }
 }
 
 impl<T: Default> Default for Annotated<T> {
