@@ -5,7 +5,8 @@ use meta::{Annotated, Meta};
 use value::Value;
 
 /// The type of PII that's contained in the field.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize, Ord, PartialOrd, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub enum PiiKind {
     /// A freeform text potentially containing PII data.
     Freeform,
@@ -169,11 +170,11 @@ pub trait ProcessAnnotatedValue {
 /// Helper trait for pii processing.
 pub trait PiiProcessor {
     /// Processes a string containing freeform data chunked.
-    fn pii_process_freeform_chunks<'a>(
+    fn pii_process_freeform_chunks(
         &self,
-        chunks: Vec<Chunk<'a>>,
+        chunks: Vec<Chunk>,
         meta: Meta,
-    ) -> (Vec<Chunk<'a>>, Meta) {
+    ) -> (Vec<Chunk>, Meta) {
         (chunks, meta)
     }
 
@@ -211,8 +212,7 @@ macro_rules! impl_primitive_pii_process {
                     let annotated = Annotated(Some(Value::$value_ty(value)), meta);
                     match self.pii_process_value(annotated, pii_kind) {
                         Annotated(Some(Value::$value_ty(value)), meta) => Annotated(Some(value), meta),
-                        Annotated(None, meta) => Annotated(None, meta),
-                        Annotated(Some(_), meta) => Annotated(None, meta),
+                        Annotated(_, meta) => Annotated(None, meta),
                     }
                 }
             }
@@ -234,8 +234,7 @@ impl<T: PiiProcessor> Processor for T {
                 let annotated = Annotated(Some(Value::String(value)), meta);
                 match self.pii_process_value(annotated, pii_kind) {
                     Annotated(Some(Value::String(value)), meta) => Annotated(Some(value), meta),
-                    Annotated(None, meta) => Annotated(None, meta),
-                    _ => panic!("annotated changed type"),
+                    Annotated(_, meta) => Annotated(None, meta),
                 }
             }
         }

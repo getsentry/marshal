@@ -28,18 +28,17 @@ pub struct Note {
 
 impl Note {
     /// Creates a new Note.
-    pub fn new<S, T>(rule: S, description: T) -> Note
+    pub fn new<S, T>(rule: S, description: Option<T>) -> Note
     where
         S: Into<Cow<'static, str>>,
         T: Into<Cow<'static, str>>,
     {
         let rule = rule.into();
-        let description = description.into();
-        debug_assert!(!rule.starts_with("@"));
+        let description = description.map(|x| x.into());
 
         Note {
             rule,
-            description: Some(description),
+            description: description,
         }
     }
 
@@ -804,7 +803,7 @@ mod test_remarks {
     #[test]
     fn test_with_description() {
         let json = r#"[["test","my custom description"]]"#;
-        let remark = Remark::new(Note::new("test", "my custom description"));
+        let remark = Remark::new(Note::new("test", Some("my custom description")));
 
         assert_eq!(remark, serde_json::from_str(json).unwrap());
         assert_eq!(json, &serde_json::to_string(&remark).unwrap());
@@ -823,7 +822,7 @@ mod test_remarks {
     fn test_with_additional() {
         let input = r#"[["test","custom",null],[21,42],null]"#;
         let output = r#"[["test","custom"],[21,42]]"#;
-        let remark = Remark::with_range(Note::new("test", "custom"), (21, 42));
+        let remark = Remark::with_range(Note::new("test", Some("custom")), (21, 42));
 
         assert_eq!(remark, serde_json::from_str(input).unwrap());
         assert_eq!(output, &serde_json::to_string(&remark).unwrap());

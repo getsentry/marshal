@@ -10,8 +10,13 @@ extern crate regex;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+extern crate failure;
 extern crate serde_json;
 extern crate uuid;
+#[macro_use]
+extern crate failure_derive;
+#[macro_use]
+extern crate lazy_static;
 
 #[macro_use]
 extern crate sentry_stripping_derive;

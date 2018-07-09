@@ -1,14 +1,31 @@
 //! PII stripping and normalization rule configuration.
 
-use std::collections::BTreeMap;
+use std::cmp;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::iter;
+use std::mem;
 
 use regex::{Regex, RegexBuilder};
 use serde::de::{Deserialize, Deserializer, Error};
 use serde::ser::{Serialize, Serializer};
 
+use chunk::Chunk;
+use meta::{Annotated, Meta, Note};
+use processor::{PiiKind, PiiProcessor};
+
+lazy_static! {
+    static ref NULL_SPLIT_RE: Regex = Regex::new("\x00").unwrap();
+}
+
+#[derive(Fail, Debug)]
+pub enum BadRuleConfig {
+    #[fail(display = "invalid rule reference ({})", _0)]
+    BadReference(String),
+}
+
 /// A regex pattern for text replacement.
-pub struct Pattern(Regex);
+pub struct Pattern(pub Regex);
 
 impl fmt::Debug for Pattern {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -57,7 +74,7 @@ pub enum RuleType {
         /// The regular expression to apply.
         pattern: Pattern,
         /// The match group indices to replace.
-        replace_groups: Option<Vec<u8>>,
+        replace_groups: Option<BTreeSet<u8>>,
     },
     /// Replaces the value for well-known keys in accociative
     RemovePairValue {
@@ -66,7 +83,7 @@ pub enum RuleType {
     },
 }
 
-///
+/// Defines how replacements happen.
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged, rename_all = "snake_case")]
 pub enum Replacement {
@@ -88,6 +105,70 @@ pub enum Replacement {
     },
 }
 
+fn in_range(range: (Option<i32>, Option<i32>), pos: usize, len: usize) -> bool {
+    fn get_range_index(idx: Option<i32>, len: usize, default: usize) -> usize {
+        match idx {
+            None => default,
+            Some(idx) if idx < 0 => len.saturating_sub(idx as usize),
+            Some(idx) => cmp::min(idx as usize, len),
+        }
+    }
+
+    let start = get_range_index(range.0, len, 0);
+    let end = get_range_index(range.0, len, len);
+    pos >= start && pos <= end
+}
+
+impl Replacement {
+    fn create_chunks(&self, text: &str, note: &Note, output: &mut Vec<Chunk>) {
+        match *self {
+            Replacement::Mask {
+                mask_with_char,
+                ref chars_to_ignore,
+                mask_range,
+            } => {
+                let chars_to_ignore: BTreeSet<char> = chars_to_ignore.chars().collect();
+                let mut redaction_buf = vec![];
+                let mut text_buf = vec![];
+
+                macro_rules! flush_buf {
+                    (text_buf) => {
+                        if !text_buf.is_empty() {
+                            output.push(Chunk::Text(mem::replace(&mut text_buf, vec![]).into_iter().collect()));
+                        }
+                    };
+                    (redaction_buf) => {
+                        if !redaction_buf.is_empty() {
+                            output.push(Chunk::Redaction(
+                                mem::replace(&mut redaction_buf, vec![])
+                                    .into_iter()
+                                    .collect(),
+                                note.clone(),
+                            ));
+                        }
+                    }
+                }
+
+                for (idx, c) in text.chars().enumerate() {
+                    if in_range(mask_range, idx, text.len()) && !chars_to_ignore.contains(&c) {
+                        flush_buf!(text_buf);
+                        redaction_buf.push(mask_with_char);
+                    } else {
+                        flush_buf!(redaction_buf);
+                        text_buf.push(c);
+                    }
+                }
+
+                flush_buf!(text_buf);
+                flush_buf!(redaction_buf);
+            }
+            Replacement::NewValue { ref new_value } => {
+                output.push(Chunk::Redaction(new_value.to_string().into(), note.clone()));
+            }
+        }
+    }
+}
+
 /// A single rule configuration.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Rule {
@@ -102,7 +183,126 @@ pub struct Rule {
 pub struct RuleConfig {
     rules: BTreeMap<String, Rule>,
     #[serde(default)]
-    applications: BTreeMap<String, Vec<String>>,
+    applications: BTreeMap<PiiKind, Vec<String>>,
+}
+
+pub struct RuleBasedPiiProcessor<'a> {
+    cfg: &'a RuleConfig,
+    applications: BTreeMap<PiiKind, Vec<(&'a str, &'a Rule)>>,
+}
+
+impl Rule {
+    fn apply_to_chunks(
+        &self,
+        rule_id: &str,
+        mut chunks: Vec<Chunk>,
+        mut meta: Meta,
+    ) -> (Vec<Chunk>, Meta) {
+        let note = Note::new(rule_id.to_string(), self.note.clone());
+        match self.rule {
+            RuleType::Pattern {
+                ref pattern,
+                ref replace_groups,
+            } => {
+                let mut search_string = String::new();
+                let mut replacement_chunks = vec![];
+                for chunk in chunks {
+                    match chunk {
+                        Chunk::Text(ref text) => search_string.push_str(text),
+                        chunk @ Chunk::Redaction(..) => {
+                            replacement_chunks.push(chunk);
+                            search_string.push('\x00');
+                        }
+                    }
+                }
+                replacement_chunks.reverse();
+                let mut rv: Vec<Chunk> = vec![];
+
+                {
+                    fn process_text(text: &str, rv: &mut Vec<Chunk>, replacement_chunks: &mut Vec<Chunk>) {
+                        let mut pos = 0;
+                        for piece in NULL_SPLIT_RE.find_iter(text) {
+                            rv.push(Chunk::Text(text[pos..piece.start()].to_string().into()));
+                            rv.push(replacement_chunks.pop().unwrap());
+                            pos = piece.end();
+                        }
+                        rv.push(Chunk::Text(text[pos..].to_string().into()));
+                    }
+
+                    let mut pos = 0;
+                    for m in pattern.0.captures_iter(&search_string) {
+                        let g0 = m.get(0).unwrap();
+                        process_text(&search_string[pos..g0.start()], &mut rv, &mut replacement_chunks);
+
+                        match *replace_groups {
+                            Some(ref groups) => {
+                                for (idx, g) in m.iter().enumerate() {
+                                    if let Some(g) = g {
+                                        if groups.contains(&((idx + 1) as u8)) {
+                                            self.replace_with.create_chunks(g.as_str(), &note, &mut rv);
+                                            continue;
+                                        } else {
+                                            process_text(g.as_str(), &mut rv, &mut replacement_chunks);
+                                        }
+                                    }
+                                }
+                            }
+                            None => {
+                                self.replace_with.create_chunks(g0.as_str(), &note, &mut rv);
+                            }
+                        }
+
+                        pos = g0.end();
+                    }
+                    process_text(&search_string[pos..], &mut rv, &mut replacement_chunks);
+                }
+
+                return (rv, meta);
+            }
+            _ => unreachable!(),
+        }
+        (chunks, meta)
+    }
+}
+
+impl<'a> RuleBasedPiiProcessor<'a> {
+    pub fn new(cfg: &'a RuleConfig) -> Result<RuleBasedPiiProcessor<'a>, BadRuleConfig> {
+        let mut applications = BTreeMap::new();
+
+        for (&pii_kind, cfg_applications) in &cfg.applications {
+            let mut rules = vec![];
+            for application in cfg_applications {
+                if let Some(rule) = cfg.rules.get(application) {
+                    rules.push((application.as_str(), rule));
+                } else {
+                    return Err(BadRuleConfig::BadReference(application.to_string()));
+                }
+            }
+            applications.insert(pii_kind, rules);
+        }
+
+        Ok(RuleBasedPiiProcessor {
+            cfg: cfg,
+            applications: applications,
+        })
+    }
+}
+
+impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
+    fn pii_process_freeform_chunks(
+        &self,
+        mut chunks: Vec<Chunk>,
+        mut meta: Meta,
+    ) -> (Vec<Chunk>, Meta) {
+        if let Some(rules) = self.applications.get(&PiiKind::Freeform) {
+            for (rule_id, rule) in rules {
+                let (new_chunks, new_meta) = rule.apply_to_chunks(rule_id, chunks, meta);
+                chunks = new_chunks;
+                meta = new_meta;
+            }
+        }
+        (chunks, meta)
+    }
 }
 
 #[test]
@@ -157,9 +357,10 @@ fn test_config() {
             }
         },
         "applications": {
-            "freeform_text": ["path_username", "creditcard_numbers", "email_address", "ipv4"],
-            "structured_data": ["path_username", "creditcard_numbers", "email_address", "ipv4", "password_pairs"]
+            "freeform": ["path_username", "creditcard_numbers", "email_address", "ipv4"],
+            "databag": ["path_username", "creditcard_numbers", "email_address", "ipv4", "password_pairs"]
         }
     }"#).unwrap();
     println!("{:#?}", &cfg);
+    panic!();
 }

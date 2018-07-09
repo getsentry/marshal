@@ -11,6 +11,9 @@ serde_derive = "1.0.69"
 serde_json = "1.0.22"
 uuid = { version = "0.6.5", features = ["v4", "serde"] }
 sentry_stripping_derive = { path = "sentry_stripping_derive" }
+failure = "0.1.1"
+failure_derive = "0.1.1"
+lazy_static = "1.0.1"
 
 [patch.crates-io]
 #serde = { path = "../serde/serde" }

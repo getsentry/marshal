@@ -1,19 +1,17 @@
 //! Utilities for dealing with annotated strings.
 
-use std::borrow::Cow;
-
 use meta::{Meta, Note, Remark};
 
 /// A type for dealing with chunks of annotated text.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Chunk<'a> {
+pub enum Chunk {
     /// Unmodified text chunk.
-    Text(Cow<'a, str>),
+    Text(String),
     /// Redacted text chunk with a note.
-    Redaction(Cow<'a, str>, Note),
+    Redaction(String, Note),
 }
 
-impl<'a> Chunk<'a> {
+impl Chunk {
     /// The text of this chunk.
     pub fn as_str(&self) -> &str {
         match *self {
@@ -29,7 +27,7 @@ impl<'a> Chunk<'a> {
 }
 
 /// Chunks the given text based on remarks.
-pub fn from_str<'a>(text: &'a str, meta: &Meta) -> Vec<Chunk<'a>> {
+pub fn from_str(text: &str, meta: &Meta) -> Vec<Chunk> {
     let mut rv = vec![];
     let mut pos = 0;
 
@@ -41,14 +39,14 @@ pub fn from_str<'a>(text: &'a str, meta: &Meta) -> Vec<Chunk<'a>> {
 
         if start > pos {
             if let Some(piece) = text.get(pos..start) {
-                rv.push(Chunk::Text(Cow::Borrowed(piece)));
+                rv.push(Chunk::Text(piece.to_string()));
             } else {
                 break;
             }
         }
         if let Some(piece) = text.get(start..end) {
             rv.push(Chunk::Redaction(
-                Cow::Borrowed(piece),
+                piece.to_string(),
                 remark.note().clone(),
             ));
         } else {
@@ -59,7 +57,7 @@ pub fn from_str<'a>(text: &'a str, meta: &Meta) -> Vec<Chunk<'a>> {
 
     if pos < text.len() {
         if let Some(piece) = text.get(pos..) {
-            rv.push(Chunk::Text(Cow::Borrowed(piece)));
+            rv.push(Chunk::Text(piece.to_string()));
         }
     }
 
@@ -67,7 +65,7 @@ pub fn from_str<'a>(text: &'a str, meta: &Meta) -> Vec<Chunk<'a>> {
 }
 
 /// Concatenates chunks into a string and places remarks inside the given meta.
-pub fn to_string<'a>(chunks: Vec<Chunk<'a>>, mut meta: Meta) -> (String, Meta) {
+pub fn to_string(chunks: Vec<Chunk>, mut meta: Meta) -> (String, Meta) {
     let mut rv = String::new();
     let mut remarks = vec![];
     let mut pos = 0;
@@ -101,12 +99,12 @@ fn test_chunking() {
     assert_eq!(
         chunks,
         vec![
-            Chunk::Text(Cow::Borrowed("Hello Peter, my email address is ")),
+            Chunk::Text("Hello Peter, my email address is ".into()),
             Chunk::Redaction(
-                Cow::Borrowed("****@*****.com"),
+                "****@*****.com".into(),
                 Note::well_known("@email-address"),
             ),
-            Chunk::Text(Cow::Borrowed(". See you")),
+            Chunk::Text(". See you".into()),
         ]
     );
 
