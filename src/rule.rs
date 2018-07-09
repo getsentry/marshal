@@ -134,7 +134,9 @@ impl Replacement {
                 macro_rules! flush_buf {
                     (text_buf) => {
                         if !text_buf.is_empty() {
-                            output.push(Chunk::Text(mem::replace(&mut text_buf, vec![]).into_iter().collect()));
+                            output.push(Chunk::Text(
+                                mem::replace(&mut text_buf, vec![]).into_iter().collect(),
+                            ));
                         }
                     };
                     (redaction_buf) => {
@@ -146,7 +148,7 @@ impl Replacement {
                                 note.clone(),
                             ));
                         }
-                    }
+                    };
                 }
 
                 for (idx, c) in text.chars().enumerate() {
@@ -219,7 +221,11 @@ impl Rule {
                 let mut rv: Vec<Chunk> = vec![];
 
                 {
-                    fn process_text(text: &str, rv: &mut Vec<Chunk>, replacement_chunks: &mut Vec<Chunk>) {
+                    fn process_text(
+                        text: &str,
+                        rv: &mut Vec<Chunk>,
+                        replacement_chunks: &mut Vec<Chunk>,
+                    ) {
                         let mut pos = 0;
                         for piece in NULL_SPLIT_RE.find_iter(text) {
                             rv.push(Chunk::Text(text[pos..piece.start()].to_string().into()));
@@ -232,17 +238,29 @@ impl Rule {
                     let mut pos = 0;
                     for m in pattern.0.captures_iter(&search_string) {
                         let g0 = m.get(0).unwrap();
-                        process_text(&search_string[pos..g0.start()], &mut rv, &mut replacement_chunks);
+                        process_text(
+                            &search_string[pos..g0.start()],
+                            &mut rv,
+                            &mut replacement_chunks,
+                        );
 
                         match *replace_groups {
                             Some(ref groups) => {
                                 for (idx, g) in m.iter().enumerate() {
                                     if let Some(g) = g {
                                         if groups.contains(&((idx + 1) as u8)) {
-                                            self.replace_with.create_chunks(g.as_str(), &note, &mut rv);
+                                            self.replace_with.create_chunks(
+                                                g.as_str(),
+                                                &note,
+                                                &mut rv,
+                                            );
                                             continue;
                                         } else {
-                                            process_text(g.as_str(), &mut rv, &mut replacement_chunks);
+                                            process_text(
+                                                g.as_str(),
+                                                &mut rv,
+                                                &mut replacement_chunks,
+                                            );
                                         }
                                     }
                                 }

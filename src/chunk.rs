@@ -45,10 +45,7 @@ pub fn from_str(text: &str, meta: &Meta) -> Vec<Chunk> {
             }
         }
         if let Some(piece) = text.get(start..end) {
-            rv.push(Chunk::Redaction(
-                piece.to_string(),
-                remark.note().clone(),
-            ));
+            rv.push(Chunk::Redaction(piece.to_string(), remark.note().clone()));
         } else {
             break;
         }
@@ -100,10 +97,7 @@ fn test_chunking() {
         chunks,
         vec![
             Chunk::Text("Hello Peter, my email address is ".into()),
-            Chunk::Redaction(
-                "****@*****.com".into(),
-                Note::well_known("@email-address"),
-            ),
+            Chunk::Redaction("****@*****.com".into(), Note::well_known("@email-address")),
             Chunk::Text(". See you".into()),
         ]
     );

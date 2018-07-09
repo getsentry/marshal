@@ -170,11 +170,7 @@ pub trait ProcessAnnotatedValue {
 /// Helper trait for pii processing.
 pub trait PiiProcessor {
     /// Processes a string containing freeform data chunked.
-    fn pii_process_freeform_chunks(
-        &self,
-        chunks: Vec<Chunk>,
-        meta: Meta,
-    ) -> (Vec<Chunk>, Meta) {
+    fn pii_process_freeform_chunks(&self, chunks: Vec<Chunk>, meta: Meta) -> (Vec<Chunk>, Meta) {
         (chunks, meta)
     }
 
