@@ -379,6 +379,5 @@ fn test_config() {
             "databag": ["path_username", "creditcard_numbers", "email_address", "ipv4", "password_pairs"]
         }
     }"#).unwrap();
-    println!("{:#?}", &cfg);
-    panic!();
 }
+
