@@ -26,6 +26,7 @@ pub use {
     common::*,
     meta::*,
     protocol::*,
+    processor::*,
     rule::*,
     value::*
 };
