@@ -143,6 +143,7 @@ pub trait Processor {
                 }
                 Annotated(Some(Value::Map(rv)), meta)
             }
+            other @ Annotated(Some(Value::Null), _) => other,
             other @ Annotated(None, _) => other,
         }
     }

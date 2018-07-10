@@ -3,6 +3,7 @@
 pub mod annotated {
     use common::Values;
     use meta::{should_serialize_meta, Annotated};
+    use value::Map;
 
     fn skip_if<T, F>(annotated: &Annotated<T>, predicate: F) -> bool
     where
@@ -18,6 +19,10 @@ pub mod annotated {
 
     pub fn is_empty_values<T>(annotated: &Annotated<Values<T>>) -> bool {
         skip_if(annotated, Values::is_empty)
+    }
+
+    pub fn is_empty_map<V>(annotated: &Annotated<Map<V>>) -> bool {
+        skip_if(annotated, Map::is_empty)
     }
 }
 

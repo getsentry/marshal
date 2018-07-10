@@ -1,5 +1,7 @@
 //! The current latest sentry protocol version.
 
+use std::{fmt, str};
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
@@ -8,10 +10,93 @@ use common::Values;
 use meta::{self, Annotated, MetaMap, MetaTree};
 use utils::buffer::{Content, ContentDeserializer, ContentRefDeserializer};
 use utils::{annotated, serde_chrono};
+use value::{Map, Value};
 
 fn default_breadcrumb_type() -> Annotated<String> {
     "default".to_string().into()
 }
+
+/// An error used when parsing `Level`.
+#[derive(Debug, Fail)]
+#[fail(display = "invalid level")]
+pub struct ParseLevelError;
+
+/// Severity level of an event or breadcrumb.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Level {
+    /// Indicates very spammy debug information.
+    Debug,
+    /// Informational messages.
+    Info,
+    /// A warning.
+    Warning,
+    /// An error.
+    Error,
+    /// Similar to error but indicates a critical event that usually causes a shutdown.
+    Fatal,
+}
+
+impl Default for Level {
+    fn default() -> Level {
+        Level::Info
+    }
+}
+
+impl str::FromStr for Level {
+    type Err = ParseLevelError;
+
+    fn from_str(string: &str) -> Result<Level, Self::Err> {
+        Ok(match string {
+            "debug" => Level::Debug,
+            "info" | "log" => Level::Info,
+            "warning" => Level::Warning,
+            "error" => Level::Error,
+            "fatal" => Level::Fatal,
+            _ => return Err(ParseLevelError),
+        })
+    }
+}
+
+impl fmt::Display for Level {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Level::Debug => write!(f, "debug"),
+            Level::Info => write!(f, "info"),
+            Level::Warning => write!(f, "warning"),
+            Level::Error => write!(f, "error"),
+            Level::Fatal => write!(f, "fatal"),
+        }
+    }
+}
+
+impl Level {
+    /// A quick way to check if the level is `debug`.
+    pub fn is_debug(&self) -> bool {
+        *self == Level::Debug
+    }
+
+    /// A quick way to check if the level is `info`.
+    pub fn is_info(&self) -> bool {
+        *self == Level::Info
+    }
+
+    /// A quick way to check if the level is `warning`.
+    pub fn is_warning(&self) -> bool {
+        *self == Level::Warning
+    }
+
+    /// A quick way to check if the level is `error`.
+    pub fn is_error(&self) -> bool {
+        *self == Level::Error
+    }
+
+    /// A quick way to check if the level is `fatal`.
+    pub fn is_fatal(&self) -> bool {
+        *self == Level::Fatal
+    }
+}
+
+impl_str_serialization!(Level);
 
 /// A breadcrumb.
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -27,6 +112,22 @@ pub struct Breadcrumb {
     /// The optional category of the breadcrumb.
     #[serde(default, skip_serializing_if = "annotated::is_none")]
     pub category: Annotated<Option<String>>,
+
+    /// Severity level of the breadcrumb (required).
+    #[serde(default)]
+    pub level: Annotated<Level>,
+
+    /// Human readable message for the breadcrumb.
+    #[serde(default, skip_serializing_if = "annotated::is_none")]
+    pub message: Annotated<Option<String>>,
+
+    /// Custom user-defined data of this breadcrumb.
+    #[serde(default, skip_serializing_if = "annotated::is_empty_map")]
+    pub data: Annotated<Map<Value>>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    pub other: Map<Value>,
 }
 
 #[cfg(test)]
@@ -39,13 +140,37 @@ mod test_breadcrumb {
         let json = r#"{
   "timestamp": 42,
   "type": "mytype",
-  "category": "mycategory"
+  "category": "mycategory",
+  "level": "fatal",
+  "message": "my message",
+  "data": {
+    "a": "b"
+  },
+  "c": "d"
 }"#;
 
         let breadcrumb = Annotated::from(Breadcrumb {
             timestamp: serde_chrono::timestamp_to_datetime(42.0).into(),
             ty: "mytype".to_string().into(),
             category: Some("mycategory".to_string()).into(),
+            level: Level::Fatal.into(),
+            message: Some("my message".to_string()).into(),
+            data: {
+                let mut map = Map::new();
+                map.insert(
+                    "a".to_string(),
+                    Annotated::from(Value::String("b".to_string())),
+                );
+                Annotated::from(map)
+            },
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "c".to_string(),
+                    Annotated::from(Value::String("d".to_string())),
+                );
+                map
+            },
         });
 
         assert_eq!(breadcrumb, serde_json::from_str(json).unwrap());
@@ -55,12 +180,16 @@ mod test_breadcrumb {
     #[test]
     fn test_default_values() {
         let input = r#"{"timestamp":42}"#;
-        let output = r#"{"timestamp":42,"type":"default"}"#;
+        let output = r#"{"timestamp":42,"type":"default","level":"info"}"#;
 
         let breadcrumb = Annotated::from(Breadcrumb {
             timestamp: serde_chrono::timestamp_to_datetime(42.0).into(),
             ty: default_breadcrumb_type(),
             category: None.into(),
+            level: Level::default().into(),
+            message: None.into(),
+            data: Map::new().into(),
+            other: Map::new(),
         });
 
         assert_eq!(breadcrumb, serde_json::from_str(input).unwrap());
