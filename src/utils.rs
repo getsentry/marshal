@@ -9,7 +9,7 @@ pub mod annotated {
         F: FnOnce(&T) -> bool,
     {
         // Always serialize meta data. The MetaTreeSerializer will automatically remove empty nodes.
-        !should_serialize_meta() && annotated.value().map_or(true, predicate)
+        !should_serialize_meta() && annotated.value().map_or(false, predicate)
     }
 
     pub fn is_none<T>(annotated: &Annotated<Option<T>>) -> bool {

@@ -471,7 +471,6 @@ impl Serializer for MetaSerializer {
         Ok(SerializeStructMeta {
             map: BTreeMap::new(),
             meta: None,
-            // TODO: Constant for this
             annotated: name == ANNOTATED_STRUCT,
         })
     }

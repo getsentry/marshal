@@ -345,20 +345,16 @@ impl<T> Annotated<T> {
         // would indicate that this field was previously validated and the value removed. Otherwise,
         // we would potentially generate error duplicates. We use the internal ContentRepr here to
         // avoid deserializing the content multiple times.
-        let is_unit = match content.repr() {
-            ContentRepr::Unit => true,
-            _ => false,
+        match content.repr() {
+            ContentRepr::Unit if annotated.meta().has_errors() => return Ok(annotated),
+            _ => (),
         };
 
         // Continue deserialization into the target type. If this returns an error, we leave the
         // value as None and add the error to the meta data.
         match C::deserialize(ContentDeserializer::<D::Error>::new(content)) {
             Ok(value) => annotated.set_value(Some(value)),
-            Err(err) => {
-                if !is_unit || !annotated.meta().has_errors() {
-                    annotated.meta_mut().errors_mut().push(err.to_string())
-                }
-            }
+            Err(err) => annotated.meta_mut().errors_mut().push(err.to_string()),
         }
 
         Ok(annotated)

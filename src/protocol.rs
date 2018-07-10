@@ -168,4 +168,28 @@ mod test_event {
         assert_eq!(event, serde_json::from_str(json).unwrap());
         assert_eq!(json, &serde_json::to_string(&event).unwrap());
     }
+
+    #[test]
+    fn test_invalid() {
+        let json = r#"{
+  "event_id": null,
+  "metadata": {
+    "event_id": {
+      "": {
+        "errors": [
+          "some error"
+        ]
+      }
+    }
+  }
+}"#;
+
+        let event = Annotated::from(Event {
+            id: Annotated::from_error("some error"),
+            breadcrumbs: Default::default(),
+        });
+
+        assert_eq!(event, deserialize(json).unwrap());
+        assert_eq!(json, serialize(&event).unwrap());
+    }
 }
