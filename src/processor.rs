@@ -221,15 +221,25 @@ impl<T: PiiProcessor> Processor for T {
         match (annotated, info.pii_kind) {
             (annotated, None) | (annotated @ Annotated(None, _), _) => annotated,
             (Annotated(Some(value), meta), Some(PiiKind::Freeform)) => {
+                let original_length = value.len();
                 let chunks = chunk::from_str(&value, &meta);
                 let (chunks, meta) = PiiProcessor::pii_process_freeform_chunks(self, chunks, meta);
-                let (value, meta) = chunk::to_string(chunks, meta);
+                let (value, mut meta) = chunk::to_string(chunks, meta);
+                if value.len() != original_length && meta.original_length.is_none() {
+                    meta.original_length = Some(original_length as u32);
+                }
                 Annotated(Some(value), meta)
             }
             (Annotated(Some(value), meta), Some(pii_kind)) => {
+                let original_length = value.len();
                 let annotated = Annotated(Some(Value::String(value)), meta);
                 match self.pii_process_value(annotated, pii_kind) {
-                    Annotated(Some(Value::String(value)), meta) => Annotated(Some(value), meta),
+                    Annotated(Some(Value::String(value)), mut meta) => {
+                        if value.len() != original_length && meta.original_length.is_none() {
+                            meta.original_length = Some(original_length as u32);
+                        }
+                        Annotated(Some(value), meta)
+                    }
                     Annotated(_, meta) => Annotated(None, meta),
                 }
             }

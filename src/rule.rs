@@ -11,8 +11,8 @@ use serde::de::{Deserialize, Deserializer, Error};
 use serde::ser::{Serialize, Serializer};
 
 use chunk::Chunk;
-use meta::{Annotated, Meta, Note};
-use processor::{PiiKind, PiiProcessor};
+use meta::{Annotated, Meta, Note, Remark};
+use processor::{PiiKind, PiiProcessor, ProcessAnnotatedValue, ValueInfo};
 
 lazy_static! {
     static ref NULL_SPLIT_RE: Regex = Regex::new("\x00").unwrap();
@@ -109,14 +109,14 @@ fn in_range(range: (Option<i32>, Option<i32>), pos: usize, len: usize) -> bool {
     fn get_range_index(idx: Option<i32>, len: usize, default: usize) -> usize {
         match idx {
             None => default,
-            Some(idx) if idx < 0 => len.saturating_sub(idx as usize),
+            Some(idx) if idx < 0 => len.saturating_sub((idx * -1) as usize),
             Some(idx) => cmp::min(idx as usize, len),
         }
     }
 
     let start = get_range_index(range.0, len, 0);
-    let end = get_range_index(range.0, len, len);
-    pos >= start && pos <= end
+    let end = get_range_index(range.1, len, len);
+    pos >= start && pos < end
 }
 
 impl Replacement {
@@ -128,41 +128,16 @@ impl Replacement {
                 mask_range,
             } => {
                 let chars_to_ignore: BTreeSet<char> = chars_to_ignore.chars().collect();
-                let mut redaction_buf = vec![];
-                let mut text_buf = vec![];
-
-                macro_rules! flush_buf {
-                    (text_buf) => {
-                        if !text_buf.is_empty() {
-                            output.push(Chunk::Text(
-                                mem::replace(&mut text_buf, vec![]).into_iter().collect(),
-                            ));
-                        }
-                    };
-                    (redaction_buf) => {
-                        if !redaction_buf.is_empty() {
-                            output.push(Chunk::Redaction(
-                                mem::replace(&mut redaction_buf, vec![])
-                                    .into_iter()
-                                    .collect(),
-                                note.clone(),
-                            ));
-                        }
-                    };
-                }
+                let mut buf = Vec::with_capacity(text.len());
 
                 for (idx, c) in text.chars().enumerate() {
                     if in_range(mask_range, idx, text.len()) && !chars_to_ignore.contains(&c) {
-                        flush_buf!(text_buf);
-                        redaction_buf.push(mask_with_char);
+                        buf.push(mask_with_char);
                     } else {
-                        flush_buf!(redaction_buf);
-                        text_buf.push(c);
+                        buf.push(c);
                     }
                 }
-
-                flush_buf!(text_buf);
-                flush_buf!(redaction_buf);
+                output.push(Chunk::Redaction(buf.into_iter().collect(), note.clone()));
             }
             Replacement::NewValue { ref new_value } => {
                 output.push(Chunk::Redaction(new_value.to_string().into(), note.clone()));
@@ -194,12 +169,7 @@ pub struct RuleBasedPiiProcessor<'a> {
 }
 
 impl Rule {
-    fn apply_to_chunks(
-        &self,
-        rule_id: &str,
-        mut chunks: Vec<Chunk>,
-        mut meta: Meta,
-    ) -> (Vec<Chunk>, Meta) {
+    fn apply_to_chunks(&self, rule_id: &str, chunks: Vec<Chunk>, meta: Meta) -> (Vec<Chunk>, Meta) {
         let note = Note::new(rule_id.to_string(), self.note.clone());
         match self.rule {
             RuleType::Pattern {
@@ -210,7 +180,7 @@ impl Rule {
                 let mut replacement_chunks = vec![];
                 for chunk in chunks {
                     match chunk {
-                        Chunk::Text(ref text) => search_string.push_str(text),
+                        Chunk::Text(ref text) => search_string.push_str(&text.replace("\x00", "")),
                         chunk @ Chunk::Redaction(..) => {
                             replacement_chunks.push(chunk);
                             search_string.push('\x00');
@@ -220,60 +190,68 @@ impl Rule {
                 replacement_chunks.reverse();
                 let mut rv: Vec<Chunk> = vec![];
 
-                {
-                    fn process_text(
-                        text: &str,
-                        rv: &mut Vec<Chunk>,
-                        replacement_chunks: &mut Vec<Chunk>,
-                    ) {
-                        let mut pos = 0;
-                        for piece in NULL_SPLIT_RE.find_iter(text) {
-                            rv.push(Chunk::Text(text[pos..piece.start()].to_string().into()));
-                            rv.push(replacement_chunks.pop().unwrap());
-                            pos = piece.end();
-                        }
-                        rv.push(Chunk::Text(text[pos..].to_string().into()));
+                fn process_text(
+                    text: &str,
+                    rv: &mut Vec<Chunk>,
+                    replacement_chunks: &mut Vec<Chunk>,
+                ) {
+                    if text.is_empty() {
+                        return;
                     }
-
                     let mut pos = 0;
-                    for m in pattern.0.captures_iter(&search_string) {
-                        let g0 = m.get(0).unwrap();
-                        process_text(
-                            &search_string[pos..g0.start()],
-                            &mut rv,
-                            &mut replacement_chunks,
-                        );
+                    for piece in NULL_SPLIT_RE.find_iter(text) {
+                        rv.push(Chunk::Text(text[pos..piece.start()].to_string().into()));
+                        rv.push(replacement_chunks.pop().unwrap());
+                        pos = piece.end();
+                    }
+                    rv.push(Chunk::Text(text[pos..].to_string().into()));
+                }
 
-                        match *replace_groups {
-                            Some(ref groups) => {
-                                for (idx, g) in m.iter().enumerate() {
-                                    if let Some(g) = g {
-                                        if groups.contains(&((idx + 1) as u8)) {
-                                            self.replace_with.create_chunks(
-                                                g.as_str(),
-                                                &note,
-                                                &mut rv,
-                                            );
-                                            continue;
-                                        } else {
-                                            process_text(
-                                                g.as_str(),
-                                                &mut rv,
-                                                &mut replacement_chunks,
-                                            );
-                                        }
+                let mut pos = 0;
+                for m in pattern.0.captures_iter(&search_string) {
+                    let g0 = m.get(0).unwrap();
+
+                    match *replace_groups {
+                        Some(ref groups) => {
+                            for (idx, g) in m.iter().enumerate() {
+                                if idx == 0 {
+                                    continue;
+                                }
+
+                                if let Some(g) = g {
+                                    if groups.contains(&(idx as u8)) {
+                                        process_text(
+                                            &search_string[pos..g.start()],
+                                            &mut rv,
+                                            &mut replacement_chunks,
+                                        );
+                                        self.replace_with.create_chunks(g.as_str(), &note, &mut rv);
+                                        pos = g.end();
                                     }
                                 }
                             }
-                            None => {
-                                self.replace_with.create_chunks(g0.as_str(), &note, &mut rv);
-                            }
+                            process_text(&search_string[pos..], &mut rv, &mut replacement_chunks);
                         }
-
-                        pos = g0.end();
+                        None => {
+                            process_text(
+                                &search_string[pos..g0.start()],
+                                &mut rv,
+                                &mut replacement_chunks,
+                            );
+                            self.replace_with.create_chunks(g0.as_str(), &note, &mut rv);
+                            pos = g0.end();
+                        }
                     }
-                    process_text(&search_string[pos..], &mut rv, &mut replacement_chunks);
+
+                    process_text(
+                        &search_string[pos..g0.end()],
+                        &mut rv,
+                        &mut replacement_chunks,
+                    );
+                    pos = g0.end();
                 }
+
+                process_text(&search_string[pos..], &mut rv, &mut replacement_chunks);
 
                 return (rv, meta);
             }
@@ -303,6 +281,17 @@ impl<'a> RuleBasedPiiProcessor<'a> {
             cfg: cfg,
             applications: applications,
         })
+    }
+
+    pub fn process_root_value<T: ProcessAnnotatedValue>(
+        &self,
+        value: Annotated<T>,
+    ) -> Annotated<T> {
+        ProcessAnnotatedValue::process_annotated_value(
+            Annotated::from(value),
+            self,
+            &ValueInfo::default(),
+        )
     }
 }
 
@@ -381,3 +370,92 @@ fn test_config() {
     }"#).unwrap();
 }
 
+#[test]
+fn test_basic_stripping() {
+    use serde_json;
+    let cfg: RuleConfig = serde_json::from_str(
+        r#"{
+        "rules": {
+            "path_username": {
+                "type": "pattern",
+                "pattern": "(?i)(?:\b[a-zA-Z]:)?(?:[/\\\\](?:users|home)[/\\\\])([^/\\\\\\s]+)",
+                "replace_groups": [1],
+                "replace_with": {
+                    "new_value": "[username]"
+                },
+                "note": "username in path"
+            },
+            "creditcard_number": {
+                "type": "pattern",
+                "pattern": "\\d{4}[- ]?\\d{4,6}[- ]?\\d{4,5}(?:[- ]?\\d{4})",
+                "replace_with": {
+                    "mask_with_char": "*",
+                    "chars_to_ignore": "- ",
+                    "mask_range": [0, -4]
+                },
+                "note": "creditcard number"
+            },
+            "email_address": {
+                "type": "pattern",
+                "pattern": "[a-z0-9!#$%&'*+/=?^_`{|}~.-]+@[a-z0-9-]+(\\.[a-z0-9-]+)*",
+                "replace_with": {
+                    "mask_with_char": "*",
+                    "chars_to_ignore": "@."
+                },
+                "note": "potential email address"
+            }
+        },
+        "applications": {
+            "freeform": ["path_username", "creditcard_number", "email_address"]
+        }
+    }"#,
+    ).unwrap();
+
+    #[derive(ProcessAnnotatedValue, Debug)]
+    struct Event {
+        #[process_annotated_value(pii_kind = "freeform")]
+        message: Annotated<String>,
+    }
+
+    let event = Annotated::from(Event {
+        message: Annotated::from(
+            "Hello peter@gmail.com.  You signed up with card 1234-1234-1234-1234. \
+             Your home folder is C:\\Users\\peter. Look at our compliance"
+                .to_string(),
+        ),
+    });
+
+    let processor = RuleBasedPiiProcessor::new(&cfg).unwrap();
+    let new_event = processor.process_root_value(event).0.unwrap();
+
+    println!("{:#?}", &new_event);
+
+    let message = new_event.message.value().unwrap();
+    assert_eq!(
+        message,
+        "Hello *****@*****.***.  You signed up with card ****-****-****-1234. \
+         Your home folder is C:\\Users\\[username] Look at our compliance \
+         Look at our compliance"
+    );
+    assert_eq!(
+        new_event.message.meta(),
+        &Meta {
+            remarks: vec![
+                Remark::with_range(
+                    Note::new("email_address", Some("potential email address")),
+                    (6, 21),
+                ),
+                Remark::with_range(
+                    Note::new("creditcard_number", Some("creditcard number")),
+                    (81, 100),
+                ),
+                Remark::with_range(
+                    Note::new("path_username", Some("username in path")),
+                    (393, 403),
+                ),
+            ],
+            errors: vec![],
+            original_length: Some(127),
+        }
+    );
+}
