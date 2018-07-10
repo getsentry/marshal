@@ -9,9 +9,9 @@ use serde::de::{Deserialize, Deserializer, Error};
 use serde::ser::{Serialize, Serializer};
 
 use chunk::Chunk;
-use value::Value;
 use meta::{Annotated, Meta, Note, Remark};
 use processor::{PiiKind, PiiProcessor, ProcessAnnotatedValue, ValueInfo};
+use value::Value;
 
 lazy_static! {
     static ref NULL_SPLIT_RE: Regex = Regex::new("\x00").unwrap();
@@ -241,7 +241,7 @@ impl Rule {
                 process_text(&search_string[pos..], &mut rv, &mut replacement_chunks);
 
                 return (rv, meta);
-            },
+            }
             RuleType::RemovePairValue { .. } => {
                 // this rule can't do anything on freeform text
                 (chunks, meta)
@@ -249,11 +249,24 @@ impl Rule {
         }
     }
 
-    fn apply_to_value(&self, rule_id: &str, value: Annotated<Value>) -> Annotated<Value> {
-        panic!("not implemented");
+    fn apply_to_value(
+        &self,
+        rule_id: &str,
+        value: Annotated<Value>,
+        kind: PiiKind,
+    ) -> Annotated<Value> {
+        let _rule_id = rule_id;
+        let _kind = kind;
+        value
     }
 
-    fn apply_to_key_value_pair(&self, rule_id: &str, key: &str, value: Annotated<Value>) -> Annotated<Value> {
+    fn apply_to_key_value_pair(
+        &self,
+        rule_id: &str,
+        key: &str,
+        value: Annotated<Value>,
+        kind: PiiKind,
+    ) -> Annotated<Value> {
         let note = Note::new(rule_id.to_string(), self.note.clone());
         match self.rule {
             RuleType::RemovePairValue { ref key_pattern } => {
@@ -263,7 +276,7 @@ impl Rule {
                     value
                 }
             }
-            _ => self.apply_to_value(rule_id, value),
+            _ => self.apply_to_value(rule_id, value, kind),
         }
     }
 }
@@ -333,7 +346,7 @@ impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
     ) -> Annotated<Value> {
         if let Some(rules) = self.applications.get(&kind) {
             for (rule_id, rule) in rules {
-                value = rule.apply_to_key_value_pair(rule_id, key, value);
+                value = rule.apply_to_key_value_pair(rule_id, key, value, kind);
             }
         }
         value
@@ -342,7 +355,7 @@ impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
     fn pii_process_value(&self, mut value: Annotated<Value>, kind: PiiKind) -> Annotated<Value> {
         if let Some(rules) = self.applications.get(&kind) {
             for (rule_id, rule) in rules {
-                value = rule.apply_to_value(rule_id, value);
+                value = rule.apply_to_value(rule_id, value, kind);
             }
         }
         value
@@ -409,8 +422,8 @@ fn test_config() {
 
 #[test]
 fn test_basic_stripping() {
-    use serde_json;
     use meta::Remark;
+    use serde_json;
 
     let cfg: RuleConfig = serde_json::from_str(
         r#"{

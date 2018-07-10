@@ -359,7 +359,9 @@ fn test_pii_processing() {
         ) -> Annotated<Value> {
             use meta::Remark;
             match (annotated, pii_kind) {
-                (annotated, PiiKind::Id) => annotated.with_removed_value(Remark::well_known("@id-removed")),
+                (annotated, PiiKind::Id) => {
+                    annotated.with_removed_value(Remark::well_known("@id-removed"))
+                }
                 (annotated, _) => annotated,
             }
         }

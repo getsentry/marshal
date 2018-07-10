@@ -416,9 +416,7 @@ impl<T> Annotated<T> {
     pub fn with_removed_value(mut self, remark: Remark) -> Self {
         if self.0.is_some() {
             self.0 = None;
-            self.1
-                .remarks_mut()
-                .push(remark)
+            self.1.remarks_mut().push(remark)
         }
         self
     }

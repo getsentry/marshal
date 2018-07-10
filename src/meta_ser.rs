@@ -68,7 +68,7 @@ impl MetaTree {
         }
     }
 
-    /// Inserts a new child into the 
+    /// Inserts a new child into the
     pub fn insert(&mut self, key: String, value: MetaTree) {
         self.children.insert(key, value);
     }
