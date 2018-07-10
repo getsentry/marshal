@@ -60,6 +60,7 @@ pub struct MetaTree {
 }
 
 impl MetaTree {
+    /// Creates a new meta tree.
     pub fn new() -> Self {
         MetaTree {
             meta: None,
@@ -67,6 +68,7 @@ impl MetaTree {
         }
     }
 
+    /// Inserts a new child into the 
     pub fn insert(&mut self, key: String, value: MetaTree) {
         self.children.insert(key, value);
     }

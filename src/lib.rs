@@ -21,16 +21,22 @@ extern crate lazy_static;
 #[macro_use]
 extern crate sentry_stripping_derive;
 
-pub mod chunk;
-pub mod common;
-pub mod meta;
-pub mod protocol;
-pub mod rule;
-pub mod value;
+pub use {
+    chunk::*,
+    common::*,
+    meta::*,
+    protocol::*,
+    rule::*,
+    value::*
+};
 
+mod chunk;
+mod common;
+mod meta;
+mod protocol;
+mod rule;
+mod value;
 mod meta_ser;
 mod tracked;
 mod utils;
-
-// at the end for now to aid cargo expand testing
-pub mod processor;
+mod processor;

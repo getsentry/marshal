@@ -5,7 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
 use common::Values;
-use meta::{self, Annotated, Meta, MetaMap, MetaTree};
+use meta::{self, Annotated, MetaMap, MetaTree};
 use utils::buffer::{Content, ContentDeserializer, ContentRefDeserializer};
 use utils::{annotated, serde_chrono};
 
@@ -117,6 +117,7 @@ pub fn serialize_event<S: Serializer>(
 #[cfg(test)]
 mod test_event {
     use super::*;
+    use meta::Meta;
     use serde_json;
 
     fn serialize(event: &Annotated<Event>) -> Result<String, serde_json::Error> {

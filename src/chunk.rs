@@ -27,7 +27,7 @@ impl Chunk {
 }
 
 /// Chunks the given text based on remarks.
-pub fn from_str(text: &str, meta: &Meta) -> Vec<Chunk> {
+pub fn chunks_from_str(text: &str, meta: &Meta) -> Vec<Chunk> {
     let mut rv = vec![];
     let mut pos = 0;
 
@@ -62,7 +62,7 @@ pub fn from_str(text: &str, meta: &Meta) -> Vec<Chunk> {
 }
 
 /// Concatenates chunks into a string and places remarks inside the given meta.
-pub fn to_string(chunks: Vec<Chunk>, mut meta: Meta) -> (String, Meta) {
+pub fn chunks_to_string(chunks: Vec<Chunk>, mut meta: Meta) -> (String, Meta) {
     let mut rv = String::new();
     let mut remarks = vec![];
     let mut pos = 0;
@@ -82,7 +82,7 @@ pub fn to_string(chunks: Vec<Chunk>, mut meta: Meta) -> (String, Meta) {
 
 #[test]
 fn test_chunking() {
-    let chunks = from_str(
+    let chunks = chunks_from_str(
         "Hello Peter, my email address is ****@*****.com. See you",
         &Meta {
             remarks: vec![Remark::with_range(

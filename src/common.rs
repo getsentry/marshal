@@ -5,7 +5,7 @@ use std::ops;
 
 use serde::de::{Deserialize, Deserializer};
 
-pub use serde_json::value::{from_value, to_value, Index, Map, Number, Value};
+use serde_json::value::{Map, Value};
 
 /// A wrapper type for collections with attached meta data.
 ///

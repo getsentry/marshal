@@ -1,3 +1,4 @@
+//! Implements a processing system for the protocol.
 use std::collections::BTreeMap;
 
 use chunk::{self, Chunk};
@@ -183,6 +184,7 @@ pub trait PiiProcessor {
         value: Annotated<Value>,
         kind: PiiKind,
     ) -> Annotated<Value> {
+        let _key = key;
         PiiProcessor::pii_process_value(self, value, kind)
     }
 
@@ -222,9 +224,9 @@ impl<T: PiiProcessor> Processor for T {
             (annotated, None) | (annotated @ Annotated(None, _), _) => annotated,
             (Annotated(Some(value), meta), Some(PiiKind::Freeform)) => {
                 let original_length = value.len();
-                let chunks = chunk::from_str(&value, &meta);
+                let chunks = chunk::chunks_from_str(&value, &meta);
                 let (chunks, meta) = PiiProcessor::pii_process_freeform_chunks(self, chunks, meta);
-                let (value, mut meta) = chunk::to_string(chunks, meta);
+                let (value, mut meta) = chunk::chunks_to_string(chunks, meta);
                 if value.len() != original_length && meta.original_length.is_none() {
                     meta.original_length = Some(original_length as u32);
                 }
@@ -332,7 +334,7 @@ fn test_basic_processing() {
 
 #[test]
 fn test_pii_processing() {
-    use meta::{Note, Remark};
+    use meta::Note;
 
     #[derive(ProcessAnnotatedValue)]
     struct Event {

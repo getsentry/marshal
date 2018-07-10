@@ -16,7 +16,7 @@ use tracked::{Path, TrackedDeserializer};
 use utils::buffer::{Content, ContentDeserializer, ContentRepr};
 use utils::serde::{CustomDeserialize, CustomSerialize, DefaultDeserialize, DefaultSerialize};
 
-pub use meta_ser::{MetaError, MetaTree};
+pub(crate) use meta_ser::{MetaError, MetaTree};
 
 /// Internal synchronization for meta data serialization.
 thread_local!(static SERIALIZE_META: AtomicBool = AtomicBool::new(false));

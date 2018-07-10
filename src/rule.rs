@@ -3,23 +3,23 @@
 use std::cmp;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-use std::iter;
-use std::mem;
 
 use regex::{Regex, RegexBuilder};
 use serde::de::{Deserialize, Deserializer, Error};
 use serde::ser::{Serialize, Serializer};
 
 use chunk::Chunk;
-use meta::{Annotated, Meta, Note, Remark};
+use meta::{Annotated, Meta, Note};
 use processor::{PiiKind, PiiProcessor, ProcessAnnotatedValue, ValueInfo};
 
 lazy_static! {
     static ref NULL_SPLIT_RE: Regex = Regex::new("\x00").unwrap();
 }
 
+/// Indicates that the rule config was invalid after parsing.
 #[derive(Fail, Debug)]
 pub enum BadRuleConfig {
+    /// An invalid reference to a rule was found in the config.
     #[fail(display = "invalid rule reference ({})", _0)]
     BadReference(String),
 }
@@ -163,6 +163,7 @@ pub struct RuleConfig {
     applications: BTreeMap<PiiKind, Vec<String>>,
 }
 
+/// A PII processor that uses JSON rules.
 pub struct RuleBasedPiiProcessor<'a> {
     cfg: &'a RuleConfig,
     applications: BTreeMap<PiiKind, Vec<(&'a str, &'a Rule)>>,
@@ -255,13 +256,14 @@ impl Rule {
 
                 return (rv, meta);
             }
+            // TODO: implement me
             _ => unreachable!(),
         }
-        (chunks, meta)
     }
 }
 
 impl<'a> RuleBasedPiiProcessor<'a> {
+    /// Creates a new rule based PII processor from a config.
     pub fn new(cfg: &'a RuleConfig) -> Result<RuleBasedPiiProcessor<'a>, BadRuleConfig> {
         let mut applications = BTreeMap::new();
 
@@ -283,6 +285,12 @@ impl<'a> RuleBasedPiiProcessor<'a> {
         })
     }
 
+    /// Returns a reference to the config that created the processor.
+    pub fn config(&self) -> &RuleConfig {
+        self.cfg
+    }
+
+    /// Processes a root value (annotated event for instance)
     pub fn process_root_value<T: ProcessAnnotatedValue>(
         &self,
         value: Annotated<T>,
@@ -315,7 +323,7 @@ impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
 #[test]
 fn test_config() {
     use serde_json;
-    let cfg: RuleConfig = serde_json::from_str(r#"{
+    let _cfg: RuleConfig = serde_json::from_str(r#"{
         "rules": {
             "path_username": {
                 "type": "pattern",
@@ -373,6 +381,8 @@ fn test_config() {
 #[test]
 fn test_basic_stripping() {
     use serde_json;
+    use meta::Remark;
+
     let cfg: RuleConfig = serde_json::from_str(
         r#"{
         "rules": {
