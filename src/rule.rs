@@ -54,21 +54,6 @@ impl<'de> Deserialize<'de> for Pattern {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RuleType {
-    /// Truncates a string's tail.
-    TruncateString {
-        /// The maximum length of the string.
-        max_length: u32,
-    },
-    /// Truncates a path in the middle.
-    TruncatePath {
-        /// Maximum length of the path.
-        max_length: u32,
-    },
-    /// Truncates deep objects.
-    DepthLimit {
-        /// Maximum depth starting at the rule entry point.
-        max_depth: u32,
-    },
     /// Applies a regular expression.
     Pattern {
         /// The regular expression to apply.
@@ -255,9 +240,11 @@ impl Rule {
                 process_text(&search_string[pos..], &mut rv, &mut replacement_chunks);
 
                 return (rv, meta);
+            },
+            RuleType::RemovePairValue { .. } => {
+                // this rule can't do anything on freeform text
+                (chunks, meta)
             }
-            // TODO: implement me
-            _ => unreachable!(),
         }
     }
 }

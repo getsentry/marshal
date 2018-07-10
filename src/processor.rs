@@ -45,11 +45,14 @@ pub enum Cap {
 /// Information about how to process certain annotated values.
 #[derive(Clone, Debug, Default)]
 pub struct ValueInfo {
+    /// The type of PII info
     pub pii_kind: Option<PiiKind>,
+    /// The size cap of the field
     pub cap: Option<Cap>,
 }
 
 impl ValueInfo {
+    /// Derives a value info from the current one for unknown child elements.
     pub fn derive(&self) -> ValueInfo {
         ValueInfo {
             pii_kind: match self.pii_kind {
@@ -159,6 +162,7 @@ pub trait Processor {
 
 /// A trait implemented for annotated types that support processing.
 pub trait ProcessAnnotatedValue {
+    /// Processes an annotated value.
     fn process_annotated_value(
         annotated: Annotated<Self>,
         processor: &Processor,
