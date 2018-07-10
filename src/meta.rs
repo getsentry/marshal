@@ -9,12 +9,14 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::de::{self, Deserialize, Deserializer, IgnoredAny};
-use serde::private::de::{Content, ContentDeserializer, ContentRepr};
-use serde::ser::{Serialize, SerializeMap, SerializeSeq, Serializer};
+use serde::ser::{Serialize, SerializeSeq, Serializer};
 
-use forward::ForwardMapSerializer;
+use meta_ser::{serialize_annotated_meta, MetaSerializer};
 use tracked::{Path, TrackedDeserializer};
+use utils::buffer::{Content, ContentDeserializer, ContentRepr};
 use utils::serde::{CustomDeserialize, CustomSerialize, DefaultDeserialize, DefaultSerialize};
+
+pub use meta_ser::{MetaError, MetaTree};
 
 /// Internal synchronization for meta data serialization.
 thread_local!(static SERIALIZE_META: AtomicBool = AtomicBool::new(false));
@@ -363,23 +365,13 @@ impl<T> Annotated<T> {
     }
 
     /// Custom serialize implementation that optionally emits meta data.
-    pub fn serialize_with<S, C>(&self, serializer: S, _custom: C) -> Result<S::Ok, S::Error>
+    pub fn serialize_with<S, C>(&self, serializer: S, serialize: C) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
         C: CustomSerialize<T>,
     {
-        if SERIALIZE_META.with(|b| b.load(Ordering::Relaxed)) {
-            let mut map = serializer.serialize_map(None)?;
-
-            if !self.1.is_empty() {
-                map.serialize_entry("", &self.1)?;
-            }
-
-            if let Some(ref value) = self.0 {
-                C::serialize(value, ForwardMapSerializer(&mut map))?;
-            }
-
-            map.end()
+        if should_serialize_meta() {
+            serialize_annotated_meta(self, serializer, serialize)
         } else {
             match self.0 {
                 Some(ref value) => C::serialize(value, serializer),
@@ -554,29 +546,20 @@ where
     Annotated::<T>::deserialize(tracked)
 }
 
-/// Serializes meta data of an annotated value into a nested map structure.
-pub fn serialize_meta_with<T, S, F>(
-    value: &Annotated<T>,
-    serializer: S,
-    serialize: F,
-) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-    F: FnOnce(&Annotated<T>, S) -> Result<S::Ok, S::Error>,
-{
-    SERIALIZE_META.with(|b| b.store(true, Ordering::Relaxed));
-    let result = serialize(value, serializer);
-    SERIALIZE_META.with(|b| b.store(false, Ordering::Relaxed));
-    result
+/// Indicates whether Annotated's meta data or values should be serialized.
+pub(crate) fn should_serialize_meta() -> bool {
+    SERIALIZE_META.with(|b| b.load(Ordering::Relaxed))
 }
 
 /// Serializes meta data of an annotated value into a nested map structure.
-pub fn serialize_meta<T, S>(value: &Annotated<T>, serializer: S) -> Result<S::Ok, S::Error>
+pub fn serialize_meta<T>(value: &Annotated<T>) -> Result<MetaTree, MetaError>
 where
     Annotated<T>: Serialize,
-    S: Serializer,
 {
-    serialize_meta_with(value, serializer, Annotated::<T>::serialize)
+    SERIALIZE_META.with(|b| b.store(true, Ordering::Relaxed));
+    let tree = value.serialize(MetaSerializer)?;
+    SERIALIZE_META.with(|b| b.store(false, Ordering::Relaxed));
+    Ok(tree.unwrap_or_default())
 }
 
 #[cfg(test)]
@@ -824,5 +807,76 @@ mod test_remarks {
 
         assert_eq!(remark, serde_json::from_str(input).unwrap());
         assert_eq!(output, &serde_json::to_string(&remark).unwrap());
+    }
+}
+
+#[cfg(test)]
+mod test_serialize_meta {
+    use super::*;
+    use serde_json;
+
+    #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+    struct Test {
+        answer: Annotated<i32>,
+    }
+
+    fn serialize<T: Serialize>(value: &Annotated<T>) -> Result<String, serde_json::Error> {
+        use serde::ser::Error;
+        let tree = serialize_meta(value).map_err(serde_json::Error::custom)?;
+
+        let mut serializer = serde_json::Serializer::new(Vec::new());
+        tree.serialize(&mut serializer)?;
+
+        Ok(String::from_utf8(serializer.into_inner()).unwrap())
+    }
+
+    #[test]
+    fn test_empty() {
+        let value = Annotated::<i32>::empty();
+        assert_eq!(serialize(&value).unwrap(), "{}")
+    }
+
+    #[test]
+    fn test_empty_nested() {
+        let value = Annotated::from(Test {
+            answer: Annotated::empty(),
+        });
+
+        assert_eq!(serialize(&value).unwrap(), "{}")
+    }
+
+    #[test]
+    fn test_basic() {
+        let value = Annotated::new(42, Meta::from_error("some error"));
+        assert_eq!(
+            serialize(&value).unwrap(),
+            r#"{"":{"errors":["some error"]}}"#
+        );
+    }
+
+    #[test]
+    fn test_nested() {
+        let value = Annotated::new(
+            Test {
+                answer: Annotated::new(42, Meta::from_error("inner error")),
+            },
+            Meta::from_error("outer error"),
+        );
+        assert_eq!(
+            serialize(&value).unwrap(),
+            r#"{"":{"errors":["outer error"]},"answer":{"":{"errors":["inner error"]}}}"#
+        );
+    }
+
+    #[test]
+    fn test_array() {
+        let value = Annotated::from(vec![
+            Annotated::new(1, Meta::from_error("a")),
+            Annotated::new(2, Meta::from_error("b")),
+        ]);
+        assert_eq!(
+            serialize(&value).unwrap(),
+            r#"{"0":{"":{"errors":["a"]}},"1":{"":{"errors":["b"]}}}"#
+        );
     }
 }

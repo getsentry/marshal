@@ -2,17 +2,30 @@
 
 pub mod annotated {
     use common::Values;
-    use meta::Annotated;
+    use meta::{should_serialize_meta, Annotated};
+
+    fn skip_if<T, F>(annotated: &Annotated<T>, predicate: F) -> bool
+    where
+        F: FnOnce(&T) -> bool,
+    {
+        // Always serialize meta data. The MetaTreeSerializer will automatically remove empty nodes.
+        !should_serialize_meta() && annotated.value().map_or(true, predicate)
+    }
 
     pub fn is_none<T>(annotated: &Annotated<Option<T>>) -> bool {
-        // TODO: Consider meta serialization
-        annotated.value().map_or(true, Option::is_none)
+        skip_if(annotated, Option::is_none)
     }
 
     pub fn is_empty_values<T>(annotated: &Annotated<Values<T>>) -> bool {
-        // TODO: Consider meta serialization
-        annotated.value().map_or(true, Values::is_empty)
+        skip_if(annotated, Values::is_empty)
     }
+}
+
+/// Serde buffers.
+pub mod buffer {
+    pub use serde::private::de::{
+        Content, ContentDeserializer, ContentRefDeserializer, ContentRepr,
+    };
 }
 
 /// Defines the `CustomDeserialize` trait.

@@ -1,10 +1,12 @@
 //! The current latest sentry protocol version.
 
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
 use common::Values;
-use meta::Annotated;
+use meta::{self, Annotated, Meta, MetaMap, MetaTree};
+use utils::buffer::{Content, ContentDeserializer, ContentRefDeserializer};
 use utils::{annotated, serde_chrono};
 
 fn default_breadcrumb_type() -> Annotated<String> {
@@ -78,25 +80,81 @@ pub struct Event {
     pub breadcrumbs: Annotated<Values<Annotated<Breadcrumb>>>,
 }
 
+#[derive(Debug, Deserialize)]
+struct EventMetaDeserializeHelper {
+    metadata: Option<MetaMap>,
+}
+
+/// Deserializes an annotated event with meta data from the given deserializer.
+pub fn deserialize_event<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Annotated<Event>, D::Error> {
+    let content = Content::deserialize(deserializer)?;
+    let helper = EventMetaDeserializeHelper::deserialize(ContentRefDeserializer::new(&content))?;
+    let meta_map = helper.metadata.unwrap_or_default();
+    meta::deserialize(ContentDeserializer::new(content), meta_map)
+}
+
+#[derive(Debug, Serialize)]
+struct EventMetaSerializeHelper<'a> {
+    #[serde(flatten)]
+    event: Option<&'a Event>,
+    metadata: MetaTree,
+}
+
+/// Serializes an event and its meta data into the given serializer.
+pub fn serialize_event<S: Serializer>(
+    event: &Annotated<Event>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    use serde::ser::Error;
+    EventMetaSerializeHelper {
+        event: event.value(),
+        metadata: meta::serialize_meta(event).map_err(S::Error::custom)?,
+    }.serialize(serializer)
+}
+
 #[cfg(test)]
 mod test_event {
     use super::*;
     use serde_json;
 
+    fn serialize(event: &Annotated<Event>) -> Result<String, serde_json::Error> {
+        let mut serializer = serde_json::Serializer::pretty(Vec::new());
+        serialize_event(event, &mut serializer)?;
+        Ok(String::from_utf8(serializer.into_inner()).unwrap())
+    }
+
+    fn deserialize(string: &str) -> Result<Annotated<Event>, serde_json::Error> {
+        deserialize_event(&mut serde_json::Deserializer::from_str(string))
+    }
+
     #[test]
     fn test_roundtrip() {
         // NOTE: Interfaces will be tested separately.
         let json = r#"{
-  "event_id": "52df9022-8352-46ee-b317-dbd739ccd059"
+  "event_id": "52df9022-8352-46ee-b317-dbd739ccd059",
+  "metadata": {
+    "event_id": {
+      "": {
+        "errors": [
+          "some error"
+        ]
+      }
+    }
+  }
 }"#;
 
         let event = Annotated::from(Event {
-            id: Some("52df9022-8352-46ee-b317-dbd739ccd059".parse().unwrap()).into(),
+            id: Annotated::new(
+                Some("52df9022-8352-46ee-b317-dbd739ccd059".parse().unwrap()),
+                Meta::from_error("some error"),
+            ),
             breadcrumbs: Default::default(),
         });
 
-        assert_eq!(event, serde_json::from_str(json).unwrap());
-        assert_eq!(json, &serde_json::to_string_pretty(&event).unwrap());
+        assert_eq!(event, deserialize(json).unwrap());
+        assert_eq!(json, serialize(&event).unwrap());
     }
 
     #[test]
