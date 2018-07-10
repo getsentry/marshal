@@ -103,7 +103,7 @@ fn test_chunking() {
     );
 
     assert_eq!(
-        to_string(chunks, Default::default()),
+        chunks_to_string(chunks, Default::default()),
         (
             "Hello Peter, my email address is ****@*****.com. See you".into(),
             Meta {
