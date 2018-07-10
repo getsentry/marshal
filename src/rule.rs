@@ -9,7 +9,8 @@ use serde::de::{Deserialize, Deserializer, Error};
 use serde::ser::{Serialize, Serializer};
 
 use chunk::Chunk;
-use meta::{Annotated, Meta, Note};
+use value::Value;
+use meta::{Annotated, Meta, Note, Remark};
 use processor::{PiiKind, PiiProcessor, ProcessAnnotatedValue, ValueInfo};
 
 lazy_static! {
@@ -247,6 +248,24 @@ impl Rule {
             }
         }
     }
+
+    fn apply_to_value(&self, rule_id: &str, value: Annotated<Value>) -> Annotated<Value> {
+        panic!("not implemented");
+    }
+
+    fn apply_to_key_value_pair(&self, rule_id: &str, key: &str, value: Annotated<Value>) -> Annotated<Value> {
+        let note = Note::new(rule_id.to_string(), self.note.clone());
+        match self.rule {
+            RuleType::RemovePairValue { ref key_pattern } => {
+                if key_pattern.0.is_match(key) {
+                    value.with_removed_value(Remark::new(note))
+                } else {
+                    value
+                }
+            }
+            _ => self.apply_to_value(rule_id, value),
+        }
+    }
 }
 
 impl<'a> RuleBasedPiiProcessor<'a> {
@@ -304,6 +323,20 @@ impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
             }
         }
         (chunks, meta)
+    }
+
+    fn pii_process_key_value_pair(
+        &self,
+        key: &str,
+        mut value: Annotated<Value>,
+        kind: PiiKind,
+    ) -> Annotated<Value> {
+        if let Some(rules) = self.applications.get(&kind) {
+            for (rule_id, rule) in rules {
+                value = rule.apply_to_key_value_pair(rule_id, key, value);
+            }
+        }
+        value
     }
 }
 

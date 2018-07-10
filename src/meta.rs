@@ -135,6 +135,11 @@ impl Remark {
         Remark { note, range: None }
     }
 
+    /// Creates a well known remark.
+    pub fn well_known(key: &'static str) -> Self {
+        Remark::new(Note::well_known(key))
+    }
+
     /// Creates a new text remark with range indices.
     pub fn with_range(note: Note, range: Range) -> Self {
         Remark {
@@ -408,12 +413,12 @@ impl<T> Annotated<T> {
     }
 
     /// Removes a value and writes a well known remark.
-    pub fn with_removed_value(mut self, remark: &'static str) -> Self {
+    pub fn with_removed_value(mut self, remark: Remark) -> Self {
         if self.0.is_some() {
             self.0 = None;
             self.1
                 .remarks_mut()
-                .push(Remark::new(Note::well_known(remark)));
+                .push(remark)
         }
         self
     }
