@@ -338,6 +338,15 @@ impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
         }
         value
     }
+
+    fn pii_process_value(&self, mut value: Annotated<Value>, kind: PiiKind) -> Annotated<Value> {
+        if let Some(rules) = self.applications.get(&kind) {
+            for (rule_id, rule) in rules {
+                value = rule.apply_to_value(rule_id, value);
+            }
+        }
+        value
+    }
 }
 
 #[test]
