@@ -4,9 +4,11 @@ use std::cmp;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use hmac::{Hmac, Mac};
 use regex::{Regex, RegexBuilder};
 use serde::de::{Deserialize, Deserializer, Error};
 use serde::ser::{Serialize, Serializer};
+use sha2::{Sha256, Sha512};
 
 use chunk::{self, Chunk};
 use common::Value;
@@ -71,6 +73,34 @@ pub(crate) enum RuleType {
     },
 }
 
+/// Defines the hash algorithm to use for hashing
+#[derive(Serialize, Deserialize, Debug)]
+pub enum HashAlgorithm {
+    /// HMAC-SHA256
+    #[serde(rename = "HMAC-SHA256")]
+    HmacSha256,
+    /// HMAC-SHA512
+    #[serde(rename = "HMAC-SHA512")]
+    HmacSha512,
+}
+
+impl HashAlgorithm {
+    fn hash_value(&self, text: &str, key: &str) -> String {
+        match *self {
+            HashAlgorithm::HmacSha256 => {
+                let mut mac = Hmac::<Sha256>::new_varkey(key.as_bytes()).unwrap();
+                mac.input(text.as_bytes());
+                format!("{:X}", mac.result().code())
+            }
+            HashAlgorithm::HmacSha512 => {
+                let mut mac = Hmac::<Sha512>::new_varkey(key.as_bytes()).unwrap();
+                mac.input(text.as_bytes());
+                format!("{:X}", mac.result().code())
+            }
+        }
+    }
+}
+
 /// Defines how replacements happen.
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged, rename_all = "snake_case")]
@@ -85,6 +115,13 @@ pub(crate) enum Replacement {
         /// Index range to mask in. Negative indices count from the string's end.
         #[serde(default)]
         mask_range: (Option<i32>, Option<i32>),
+    },
+    /// Replaces the value with a hash
+    Hash {
+        /// The hash algorithm
+        hash: HashAlgorithm,
+        /// The secret key (in hexadecimal format)
+        key: String,
     },
     /// Replaces the matched group with a new value.
     NewValue {
@@ -127,6 +164,9 @@ impl Replacement {
                 }
                 output.push(Chunk::Redaction(buf.into_iter().collect(), note));
             }
+            Replacement::Hash { ref hash, ref key } => {
+                output.push(Chunk::Redaction(hash.hash_value(text, key.as_str()), note));
+            }
             Replacement::NewValue { ref new_value } => {
                 output.push(Chunk::Redaction(new_value.to_string().into(), note));
             }
@@ -146,6 +186,18 @@ impl Replacement {
                     let mut output = vec![];
                     self.insert_replacement_chunks(&value_as_string, note, &mut output);
                     let (value, mut meta) = chunk::chunks_to_string(output, meta);
+                    if value.len() != original_length && meta.original_length.is_none() {
+                        meta.original_length = Some(original_length as u32);
+                    }
+                    Annotated(Some(Value::String(value)), meta)
+                }
+                annotated @ Annotated(None, _) => annotated.with_removed_value(Remark::new(note)),
+            },
+            Replacement::Hash { ref hash, ref key } => match annotated {
+                Annotated(Some(value), mut meta) => {
+                    let value_as_string = value.to_string();
+                    let original_length = value_as_string.len();
+                    let value = hash.hash_value(&value_as_string, key.as_str());
                     if value.len() != original_length && meta.original_length.is_none() {
                         meta.original_length = Some(original_length as u32);
                     }
@@ -286,7 +338,6 @@ impl Rule {
                                     }
                                 }
                             }
-                            process_text(&search_string[pos..], &mut rv, &mut replacement_chunks);
                         }
                         None => {
                             process_text(
@@ -535,10 +586,19 @@ fn test_basic_stripping() {
             "remove_ip": {
                 "type": "remove",
                 "note": "IP address removed"
+            },
+            "hash_ip": {
+                "type": "pattern",
+                "pattern": "\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}",
+                "replace_with": {
+                    "hash": "HMAC-SHA256",
+                    "key": "DEADBEEF1234"
+                },
+                "note": "IP address hashed"
             }
         },
         "applications": {
-            "freeform": ["path_username", "creditcard_number", "email_address"],
+            "freeform": ["path_username", "creditcard_number", "email_address", "hash_ip"],
             "ip": ["remove_ip"],
             "databag": ["remove_foo"]
         }
@@ -557,7 +617,7 @@ fn test_basic_stripping() {
 
     let event = Annotated::<Event>::from_str(r#"
         {
-            "message": "Hello peter@gmail.com.  You signed up with card 1234-1234-1234-1234. Your home folder is C:\\Users\\peter. Look at our compliance",
+            "message": "Hello peter@gmail.com.  You signed up with card 1234-1234-1234-1234. Your home folder is C:\\Users\\peter. Look at our compliance from 127.0.0.1",
             "extra": {
                 "foo": 42,
                 "bar": true
@@ -571,11 +631,12 @@ fn test_basic_stripping() {
     let new_event = processed_event.clone().0.unwrap();
 
     let message = new_event.message.value().unwrap();
+    println!("{:#?}", &new_event);
     assert_eq!(
         message,
         "Hello *****@*****.***.  You signed up with card ****-****-****-1234. \
          Your home folder is C:\\Users\\[username] Look at our compliance \
-         Look at our compliance"
+         from 5A2DF387CD660E9F3E0AB20F9E7805450D56C5DACE9B959FC620C336E2B5D09A"
     );
     assert_eq!(
         new_event.message.meta(),
@@ -587,15 +648,16 @@ fn test_basic_stripping() {
                 ),
                 Remark::with_range(
                     Note::new("creditcard_number", Some("creditcard number")),
-                    (81, 100),
+                    (48, 67),
                 ),
                 Remark::with_range(
                     Note::new("path_username", Some("username in path")),
-                    (393, 403),
+                    (98, 108),
                 ),
+                Remark::with_range(Note::new("hash_ip", Some("IP address hashed")), (137, 201)),
             ],
             errors: vec![],
-            original_length: Some(127),
+            original_length: Some(142),
             path: None,
         }
     );
@@ -628,5 +690,5 @@ fn test_basic_stripping() {
     );
 
     let value = processed_event.to_string().unwrap();
-    assert_eq!(value, "{\"message\":\"Hello *****@*****.***.  You signed up with card ****-****-****-1234. Your home folder is C:\\\\Users\\\\[username] Look at our compliance Look at our compliance\",\"extra\":{\"bar\":true,\"foo\":null},\"ip\":null,\"metadata\":{\"extra\":{\"foo\":{\"\":{\"remarks\":[[[\"remove_foo\"]]]}}},\"ip\":{\"\":{\"remarks\":[[[\"remove_ip\",\"IP address removed\"]]]}},\"message\":{\"\":{\"original_length\":127,\"remarks\":[[[\"email_address\",\"potential email address\"],[6,21]],[[\"creditcard_number\",\"creditcard number\"],[81,100]],[[\"path_username\",\"username in path\"],[393,403]]]}}}}");
+    assert_eq!(value, "{\"message\":\"Hello *****@*****.***.  You signed up with card ****-****-****-1234. Your home folder is C:\\\\Users\\\\[username] Look at our compliance from 5A2DF387CD660E9F3E0AB20F9E7805450D56C5DACE9B959FC620C336E2B5D09A\",\"extra\":{\"bar\":true,\"foo\":null},\"ip\":null,\"metadata\":{\"extra\":{\"foo\":{\"\":{\"remarks\":[[[\"remove_foo\"]]]}}},\"ip\":{\"\":{\"remarks\":[[[\"remove_ip\",\"IP address removed\"]]]}},\"message\":{\"\":{\"original_length\":142,\"remarks\":[[[\"email_address\",\"potential email address\"],[6,21]],[[\"creditcard_number\",\"creditcard number\"],[48,67]],[[\"path_username\",\"username in path\"],[98,108]],[[\"hash_ip\",\"IP address hashed\"],[137,201]]]}}}}");
 }

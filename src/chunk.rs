@@ -73,7 +73,7 @@ pub fn chunks_to_string(chunks: Vec<Chunk>, mut meta: Meta) -> (String, Meta) {
         if let Chunk::Redaction(_, note) = chunk {
             remarks.push(Remark::with_range(note, (pos, new_pos)));
         }
-        pos += new_pos
+        pos = new_pos;
     }
 
     *meta.remarks_mut() = remarks;
