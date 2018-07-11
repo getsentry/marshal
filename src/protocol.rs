@@ -211,15 +211,16 @@ mod test_breadcrumb {
     }
 }
 
-fn default_event_level() -> Annotated<Level> {
-    Level::Error.into()
-}
-
 /// Represents a full event for Sentry.
 #[derive(Debug, Default, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Event {
     /// Unique identifier of this event.
-    #[serde(default, rename = "event_id", skip_serializing_if = "annotated::is_none")]
+    #[serde(
+        default,
+        rename = "event_id",
+        skip_serializing_if = "annotated::is_none",
+        serialize_with = "serialize_event_id"
+    )]
     pub id: Annotated<Option<Uuid>>,
 
     /// Severity level of the event (defaults to "error").
@@ -235,6 +236,33 @@ pub struct Event {
     #[serde(default, skip_serializing_if = "annotated::is_empty_values")]
     #[process_annotated_value]
     pub breadcrumbs: Annotated<Values<Breadcrumb>>,
+}
+
+use utils::serde::CustomSerialize;
+
+fn serialize_event_id<S: Serializer>(
+    annotated: &Annotated<Option<Uuid>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    struct EventIdSerialize;
+
+    impl CustomSerialize<Option<Uuid>> for EventIdSerialize {
+        fn serialize<S>(value: &Option<Uuid>, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            match value {
+                Some(uuid) => serializer.serialize_some(&uuid.simple().to_string()),
+                None => serializer.serialize_none(),
+            }
+        }
+    }
+
+    annotated.serialize_with(serializer, EventIdSerialize)
+}
+
+fn default_event_level() -> Annotated<Level> {
+    Level::Error.into()
 }
 
 mod fingerprint {
@@ -380,7 +408,7 @@ mod test_event {
     fn test_roundtrip() {
         // NOTE: Interfaces will be tested separately.
         let json = r#"{
-  "event_id": "52df9022-8352-46ee-b317-dbd739ccd059",
+  "event_id": "52df9022835246eeb317dbd739ccd059",
   "level": "debug",
   "fingerprint": [
     "myprint"
@@ -414,7 +442,7 @@ mod test_event {
     fn test_default_values() {
         let input = r#"{"event_id":"52df9022-8352-46ee-b317-dbd739ccd059"}"#;
         let output = r#"{
-  "event_id": "52df9022-8352-46ee-b317-dbd739ccd059",
+  "event_id": "52df9022835246eeb317dbd739ccd059",
   "level": "error",
   "fingerprint": [
     "{{ default }}"
