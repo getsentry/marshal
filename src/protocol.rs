@@ -99,7 +99,15 @@ impl Level {
 impl_str_serialization!(Level);
 
 #[cfg(test)]
-mod test_level {}
+mod test_level {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_log() {
+        assert_eq!(Level::Info, serde_json::from_str("\"log\"").unwrap());
+    }
+}
 
 /// A breadcrumb.
 #[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
@@ -203,17 +211,88 @@ mod test_breadcrumb {
     }
 }
 
+fn default_event_level() -> Annotated<Level> {
+    Level::Error.into()
+}
+
 /// Represents a full event for Sentry.
 #[derive(Debug, Default, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Event {
-    /// The unique identifier of this event.
+    /// Unique identifier of this event.
     #[serde(default, rename = "event_id", skip_serializing_if = "annotated::is_none")]
     pub id: Annotated<Option<Uuid>>,
+
+    /// Severity level of the event (defaults to "error").
+    #[serde(default = "default_event_level")]
+    pub level: Annotated<Level>,
+
+    /// Manual fingerprint override.
+    // Note this is a `Vec` and not `Array` intentionally
+    #[serde(default = "fingerprint::default", deserialize_with = "fingerprint::deserialize")]
+    pub fingerprint: Annotated<Vec<String>>,
 
     /// List of breadcrumbs recorded before this event.
     #[serde(default, skip_serializing_if = "annotated::is_empty_values")]
     #[process_annotated_value]
     pub breadcrumbs: Annotated<Values<Breadcrumb>>,
+}
+
+mod fingerprint {
+    use super::*;
+    use utils::serde::CustomDeserialize;
+
+    #[derive(Debug, Deserialize)]
+    #[serde(untagged)]
+    enum Fingerprint {
+        Bool(bool),
+        Signed(i64),
+        Unsigned(u64),
+        Float(f64),
+        String(String),
+    }
+
+    impl Into<Option<String>> for Fingerprint {
+        fn into(self) -> Option<String> {
+            match self {
+                Fingerprint::Bool(b) => Some(if b { "True" } else { "False" }.to_string()),
+                Fingerprint::Signed(s) => Some(s.to_string()),
+                Fingerprint::Unsigned(u) => Some(u.to_string()),
+                Fingerprint::Float(f) => if f.abs() < (1i64 << 53) as f64 {
+                    Some(f.trunc().to_string())
+                } else {
+                    None
+                },
+                Fingerprint::String(s) => Some(s),
+            }
+        }
+    }
+
+    struct FingerprintDeserialize;
+
+    impl<'de> CustomDeserialize<'de, Vec<String>> for FingerprintDeserialize {
+        fn deserialize<D>(deserializer: D) -> Result<Vec<String>, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            // TODO: Normalize to default fingerprint. The old solution used to deserialize into a
+            // buffer to rule out syntax errors and then unwrapped to DEFAULT_FINGERPRINT.
+            Ok(Vec::<Fingerprint>::deserialize(deserializer)?
+                .into_iter()
+                .filter_map(Fingerprint::into)
+                .collect())
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Annotated<Vec<String>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Annotated::deserialize_with(deserializer, FingerprintDeserialize)
+    }
+
+    pub fn default() -> Annotated<Vec<String>> {
+        vec!["{{ default }}".to_string()].into()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -268,13 +347,9 @@ pub(crate) fn serialize_with_meta<S: Serializer, T: Serialize>(
 pub(crate) fn to_string<T: Serialize>(
     annotated: &Annotated<T>,
 ) -> Result<String, serde_json::Error> {
-    let mut writer = Vec::with_capacity(128);
-    {
-        let mut ser = serde_json::Serializer::new(&mut writer);
-        serialize_with_meta(annotated, &mut ser)?;
-    }
-
-    Ok(unsafe { String::from_utf8_unchecked(writer) })
+    let mut ser = serde_json::Serializer::new(Vec::with_capacity(128));
+    serialize_with_meta(annotated, &mut ser)?;
+    Ok(unsafe { String::from_utf8_unchecked(ser.into_inner()) })
 }
 
 /// Serializes an event and its meta data into the given serializer.
@@ -306,6 +381,10 @@ mod test_event {
         // NOTE: Interfaces will be tested separately.
         let json = r#"{
   "event_id": "52df9022-8352-46ee-b317-dbd739ccd059",
+  "level": "debug",
+  "fingerprint": [
+    "myprint"
+  ],
   "metadata": {
     "event_id": {
       "": {
@@ -322,6 +401,8 @@ mod test_event {
                 Some("52df9022-8352-46ee-b317-dbd739ccd059".parse().unwrap()),
                 Meta::from_error("some error"),
             ),
+            level: Level::Debug.into(),
+            fingerprint: Annotated::from(vec!["myprint".to_string()]),
             breadcrumbs: Default::default(),
         });
 
@@ -331,37 +412,22 @@ mod test_event {
 
     #[test]
     fn test_default_values() {
-        let json = r#"{"event_id":"52df9022-8352-46ee-b317-dbd739ccd059"}"#;
+        let input = r#"{"event_id":"52df9022-8352-46ee-b317-dbd739ccd059"}"#;
+        let output = r#"{
+  "event_id": "52df9022-8352-46ee-b317-dbd739ccd059",
+  "level": "error",
+  "fingerprint": [
+    "{{ default }}"
+  ]
+}"#;
         let event = Annotated::from(Event {
             id: Some("52df9022-8352-46ee-b317-dbd739ccd059".parse().unwrap()).into(),
+            level: Level::Error.into(),
+            fingerprint: fingerprint::default(),
             breadcrumbs: Default::default(),
         });
 
-        assert_eq!(event, serde_json::from_str(json).unwrap());
-        assert_eq!(json, &serde_json::to_string(&event).unwrap());
-    }
-
-    #[test]
-    fn test_invalid() {
-        let json = r#"{
-  "event_id": null,
-  "metadata": {
-    "event_id": {
-      "": {
-        "errors": [
-          "some error"
-        ]
-      }
-    }
-  }
-}"#;
-
-        let event = Annotated::from(Event {
-            id: Annotated::from_error("some error"),
-            breadcrumbs: Default::default(),
-        });
-
-        assert_eq!(event, deserialize(json).unwrap());
-        assert_eq!(json, serialize(&event).unwrap());
+        assert_eq!(event, serde_json::from_str(input).unwrap());
+        assert_eq!(output, &serde_json::to_string_pretty(&event).unwrap());
     }
 }
