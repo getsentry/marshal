@@ -10,8 +10,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::de::{self, Deserialize, Deserializer, IgnoredAny};
 use serde::ser::{Serialize, SerializeSeq, Serializer};
+use serde_json;
 
 use meta_ser::{serialize_annotated_meta, MetaSerializer};
+use protocol;
 use tracked::{Path, TrackedDeserializer};
 use utils::buffer::{Content, ContentDeserializer, ContentRepr};
 use utils::serde::{CustomDeserialize, CustomSerialize, DefaultDeserialize, DefaultSerialize};
@@ -331,6 +333,30 @@ impl Default for Meta {
 #[derive(Debug, PartialEq, Clone)]
 pub struct Annotated<T>(pub Option<T>, pub Meta);
 
+impl<'de, T: Deserialize<'de>> Annotated<T> {
+    /// Deserializes an annotated from a JSON string.
+    pub fn from_str(s: &'de str) -> Result<Annotated<T>, serde_json::Error> {
+        protocol::from_str(s)
+    }
+
+    /// Deserializes an annotated from a deserializer
+    pub fn deserialize_with_meta<D: Deserializer<'de>>(deserializer: D) -> Result<Annotated<T>, D::Error> {
+        protocol::deserialize_with_meta(deserializer)
+    }
+}
+
+impl<T: Serialize> Annotated<T> {
+    /// Serializes an annotated value into a serializer.
+    pub fn serialize_with_meta<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        protocol::serialize_with_meta(self, serializer)
+    }
+
+    /// Serializes an annotated value into a JSON string.
+    pub fn to_string(&self) -> Result<String, serde_json::Error> {
+        protocol::to_string(self)
+    }
+}
+
 impl<T> Annotated<T> {
     /// Creates an empty annotated shell without value or meta data.
     pub fn empty() -> Self {
@@ -560,7 +586,7 @@ impl<'de> Deserialize<'de> for MetaMap {
 }
 
 /// Deserializes an annotated value with given meta data.
-pub fn deserialize<'de, D, T>(deserializer: D, meta_map: MetaMap) -> Result<Annotated<T>, D::Error>
+pub fn deserialize_meta<'de, D, T>(deserializer: D, meta_map: MetaMap) -> Result<Annotated<T>, D::Error>
 where
     D: Deserializer<'de>,
     T: Deserialize<'de>,
@@ -606,7 +632,7 @@ mod test_annotated_with_meta {
         meta_map.insert(".".to_string(), Meta::from_error("some prior error"));
 
         let value = Annotated::new(42, Meta::from_error("some prior error"));
-        assert_eq!(value, deserialize(deserializer, meta_map).unwrap());
+        assert_eq!(value, deserialize_meta(deserializer, meta_map).unwrap());
     }
 
     #[test]
@@ -619,7 +645,7 @@ mod test_annotated_with_meta {
             answer: Annotated::new(42, Meta::from_error("some prior error")),
             other: 21,
         });
-        assert_eq!(value, deserialize(deserializer, meta_map).unwrap());
+        assert_eq!(value, deserialize_meta(deserializer, meta_map).unwrap());
     }
 
     #[test]
@@ -633,7 +659,7 @@ mod test_annotated_with_meta {
             Annotated::new(1, Meta::from_error("a")),
             Annotated::new(2, Meta::from_error("b")),
         ]);
-        assert_eq!(value, deserialize(deserializer, meta_map).unwrap());
+        assert_eq!(value, deserialize_meta(deserializer, meta_map).unwrap());
     }
 
     #[test]
@@ -644,7 +670,7 @@ mod test_annotated_with_meta {
 
         // It should accept the "null" (unit) value and use the given error message
         let value = Annotated::<i32>::from_error("some prior error");
-        assert_eq!(value, deserialize(deserializer, meta_map).unwrap());
+        assert_eq!(value, deserialize_meta(deserializer, meta_map).unwrap());
     }
 
     #[test]
@@ -658,7 +684,7 @@ mod test_annotated_with_meta {
             answer: Annotated::from_error("some prior error"),
             other: 21,
         });
-        assert_eq!(value, deserialize(deserializer, meta_map).unwrap());
+        assert_eq!(value, deserialize_meta(deserializer, meta_map).unwrap());
     }
 
     #[test]
@@ -667,7 +693,7 @@ mod test_annotated_with_meta {
 
         // It should reject the "null" value and add an error
         let value = Annotated::<i32>::from_error("invalid type: null, expected i32");
-        assert_eq!(value, deserialize(deserializer, MetaMap::new()).unwrap());
+        assert_eq!(value, deserialize_meta(deserializer, MetaMap::new()).unwrap());
     }
 
     #[test]
@@ -679,7 +705,7 @@ mod test_annotated_with_meta {
             answer: Annotated::from_error("invalid type: null, expected i32"),
             other: 21,
         });
-        assert_eq!(value, deserialize(deserializer, MetaMap::new()).unwrap());
+        assert_eq!(value, deserialize_meta(deserializer, MetaMap::new()).unwrap());
     }
 }
 

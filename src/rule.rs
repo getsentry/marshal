@@ -400,7 +400,6 @@ fn test_config() {
 #[test]
 fn test_basic_stripping() {
     use meta::Remark;
-    use protocol::{deserialize_str, serialize_to_string};
     use serde_json;
     use value::Map;
 
@@ -458,7 +457,7 @@ fn test_basic_stripping() {
         extra: Annotated<Map<Value>>,
     }
 
-    let event: Annotated<Event> = deserialize_str(r#"
+    let event = Annotated::<Event>::from_str(r#"
         {
             "message": "Hello peter@gmail.com.  You signed up with card 1234-1234-1234-1234. Your home folder is C:\\Users\\peter. Look at our compliance",
             "extra": {
@@ -514,6 +513,6 @@ fn test_basic_stripping() {
         }
     );
 
-    let value = serialize_to_string(&processed_event).unwrap();
+    let value = processed_event.to_string().unwrap();
     assert_eq!(value, r#"{"message":"Hello *****@*****.***.  You signed up with card ****-****-****-1234. Your home folder is C:\\Users\\[username] Look at our compliance Look at our compliance","extra":{"bar":true,"foo":null},"metadata":{"extra":{"foo":{"":{"remarks":[[["remove_foo"]]]}}},"message":{"":{"original_length":127,"remarks":[[["email_address","potential email address"],[6,21]],[["creditcard_number","creditcard number"],[81,100]],[["path_username","username in path"],[393,403]]]}}}}"#);
 }

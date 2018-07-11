@@ -219,24 +219,24 @@ struct EventMetaDeserializeHelper {
 pub fn deserialize_event<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Annotated<Event>, D::Error> {
-    deserialize(deserializer)
+    deserialize_with_meta(deserializer)
 }
 
 /// Deserializes an annotated object with embedded meta data from the given deserializer.
-pub fn deserialize<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
+pub(crate) fn deserialize_with_meta<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
     deserializer: D,
 ) -> Result<Annotated<T>, D::Error> {
     let content = Content::deserialize(deserializer)?;
     let helper = EventMetaDeserializeHelper::deserialize(ContentRefDeserializer::new(&content))?;
     let meta_map = helper.metadata.unwrap_or_default();
-    meta::deserialize(ContentDeserializer::new(content), meta_map)
+    meta::deserialize_meta(ContentDeserializer::new(content), meta_map)
 }
 
 /// Deserializes an annotated object with embedded meta data from the given deserializer.
-pub fn deserialize_str<'de, T: Deserialize<'de>>(
+pub(crate) fn from_str<'de, T: Deserialize<'de>>(
     s: &'de str,
 ) -> Result<Annotated<T>, serde_json::Error> {
-    deserialize(&mut serde_json::Deserializer::from_str(s))
+    deserialize_with_meta(&mut serde_json::Deserializer::from_str(s))
 }
 
 #[derive(Debug, Serialize)]
@@ -247,7 +247,7 @@ struct EventMetaSerializeHelper<'a, T: Serialize + 'a> {
 }
 
 /// Serializes a annotated value and its meta data into the given serializer.
-pub fn serialize<S: Serializer, T: Serialize>(
+pub(crate) fn serialize_with_meta<S: Serializer, T: Serialize>(
     annotated: &Annotated<T>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
@@ -258,14 +258,14 @@ pub fn serialize<S: Serializer, T: Serialize>(
     }.serialize(serializer)
 }
 
-/// Like `serialize` but produces a JSON string.
-pub fn serialize_to_string<T: Serialize>(
+/// Like `serialize_with_meta` but produces a JSON string.
+pub(crate) fn to_string<T: Serialize>(
     annotated: &Annotated<T>,
 ) -> Result<String, serde_json::Error> {
     let mut writer = Vec::with_capacity(128);
     {
         let mut ser = serde_json::Serializer::new(&mut writer);
-        serialize(annotated, &mut ser)?;
+        serialize_with_meta(annotated, &mut ser)?;
     }
 
     Ok(unsafe { String::from_utf8_unchecked(writer) })
@@ -276,7 +276,7 @@ pub fn serialize_event<S: Serializer>(
     event: &Annotated<Event>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
-    serialize(event, serializer)
+    serialize_with_meta(event, serializer)
 }
 
 #[cfg(test)]
