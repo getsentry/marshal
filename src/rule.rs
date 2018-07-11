@@ -8,7 +8,7 @@ use regex::{Regex, RegexBuilder};
 use serde::de::{Deserialize, Deserializer, Error};
 use serde::ser::{Serialize, Serializer};
 
-use chunk::Chunk;
+use chunk::{self, Chunk};
 use common::Value;
 use meta::{Annotated, Meta, Note, Remark};
 use processor::{PiiKind, PiiProcessor, ProcessAnnotatedValue, ValueInfo};
@@ -87,7 +87,7 @@ pub enum Replacement {
     /// Replaces the matched group with a new value.
     NewValue {
         /// The replacement string.
-        new_value: String,
+        new_value: Value,
     },
 }
 
@@ -106,7 +106,7 @@ fn in_range(range: (Option<i32>, Option<i32>), pos: usize, len: usize) -> bool {
 }
 
 impl Replacement {
-    fn create_chunks(&self, text: &str, note: &Note, output: &mut Vec<Chunk>) {
+    fn insert_replacement_chunks(&self, text: &str, note: Note, output: &mut Vec<Chunk>) {
         match *self {
             Replacement::Mask {
                 mask_with_char,
@@ -123,10 +123,38 @@ impl Replacement {
                         buf.push(c);
                     }
                 }
-                output.push(Chunk::Redaction(buf.into_iter().collect(), note.clone()));
+                output.push(Chunk::Redaction(buf.into_iter().collect(), note));
             }
             Replacement::NewValue { ref new_value } => {
-                output.push(Chunk::Redaction(new_value.to_string().into(), note.clone()));
+                output.push(Chunk::Redaction(new_value.to_string().into(), note));
+            }
+        }
+    }
+
+    fn set_replacement_value(
+        &self,
+        mut annotated: Annotated<Value>,
+        note: Note,
+    ) -> Annotated<Value> {
+        match *self {
+            Replacement::Mask { .. } => match annotated {
+                Annotated(Some(value), meta) => {
+                    let value_as_string = value.to_string();
+                    let original_length = value_as_string.len();
+                    let mut output = vec![];
+                    self.insert_replacement_chunks(&value_as_string, note, &mut output);
+                    let (value, mut meta) = chunk::chunks_to_string(output, meta);
+                    if value.len() != original_length && meta.original_length.is_none() {
+                        meta.original_length = Some(original_length as u32);
+                    }
+                    Annotated(Some(Value::String(value)), meta)
+                }
+                annotated @ Annotated(None, _) => annotated.with_removed_value(Remark::new(note)),
+            },
+            Replacement::NewValue { ref new_value } => {
+                annotated.set_value(Some(new_value.clone()));
+                annotated.meta_mut().remarks_mut().push(Remark::new(note));
+                annotated
             }
         }
     }
@@ -137,7 +165,7 @@ impl Replacement {
 pub struct Rule {
     #[serde(flatten)]
     rule: RuleType,
-    replace_with: Replacement,
+    replace_with: Option<Replacement>,
     note: Option<String>,
 }
 
@@ -156,6 +184,22 @@ pub struct RuleBasedPiiProcessor<'a> {
 }
 
 impl Rule {
+    fn insert_replacement_chunks(&self, text: &str, note: Note, output: &mut Vec<Chunk>) {
+        if let Some(ref replace_with) = self.replace_with {
+            replace_with.insert_replacement_chunks(text, note, output);
+        } else {
+            output.push(Chunk::Redaction("".to_string(), note));
+        }
+    }
+
+    fn replace_value(&self, annotated: Annotated<Value>, note: Note) -> Annotated<Value> {
+        if let Some(ref replace_with) = self.replace_with {
+            replace_with.set_replacement_value(annotated, note)
+        } else {
+            annotated.with_removed_value(Remark::new(note))
+        }
+    }
+
     fn apply_to_chunks(&self, rule_id: &str, chunks: Vec<Chunk>, meta: Meta) -> (Vec<Chunk>, Meta) {
         match self.rule {
             RuleType::Pattern {
@@ -212,7 +256,11 @@ impl Rule {
                                             &mut rv,
                                             &mut replacement_chunks,
                                         );
-                                        self.replace_with.create_chunks(g.as_str(), &note, &mut rv);
+                                        self.insert_replacement_chunks(
+                                            g.as_str(),
+                                            note.clone(),
+                                            &mut rv,
+                                        );
                                         pos = g.end();
                                     }
                                 }
@@ -225,7 +273,7 @@ impl Rule {
                                 &mut rv,
                                 &mut replacement_chunks,
                             );
-                            self.replace_with.create_chunks(g0.as_str(), &note, &mut rv);
+                            self.insert_replacement_chunks(g0.as_str(), note.clone(), &mut rv);
                             pos = g0.end();
                         }
                     }
@@ -242,8 +290,16 @@ impl Rule {
 
                 return (rv, meta);
             }
-            RuleType::RemovePairValue { .. } => {
-                // TODO: handle pair removal
+            RuleType::RemovePairValue { ref key_pattern } => {
+                if let Some(ref path) = meta.path() {
+                    if key_pattern.0.is_match(&path.to_string()) {
+                        let note = Note::new(rule_id.to_string(), self.note.clone());
+                        let (value, mut meta) = chunk::chunks_to_string(chunks, meta);
+                        let mut rv = vec![];
+                        self.insert_replacement_chunks(&value, note, &mut rv);
+                        return (rv, meta);
+                    }
+                }
                 (chunks, meta)
             }
         }
@@ -254,19 +310,19 @@ impl Rule {
         rule_id: &str,
         value: Annotated<Value>,
         kind: PiiKind,
-    ) -> Annotated<Value> {
+    ) -> Result<Annotated<Value>, Annotated<Value>> {
         let _kind = kind;
         match self.rule {
-            // pattern matches are not possible on non strings
-            RuleType::Pattern { .. } => value,
+            // pattern matches are not implemented for non strings
+            RuleType::Pattern { .. } => Err(value),
             RuleType::RemovePairValue { ref key_pattern } => {
                 if let Some(ref path) = value.meta().path() {
                     if key_pattern.0.is_match(&path.to_string()) {
                         let note = Note::new(rule_id.to_string(), self.note.clone());
-                        return value.with_removed_value(Remark::new(note));
+                        return Ok(self.replace_value(value, note));
                     }
                 }
-                value
+                Err(value)
             }
         }
     }
@@ -332,7 +388,10 @@ impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
     fn pii_process_value(&self, mut value: Annotated<Value>, kind: PiiKind) -> Annotated<Value> {
         if let Some(rules) = self.applications.get(&kind) {
             for (rule_id, rule) in rules {
-                value = rule.apply_to_value(rule_id, value, kind);
+                value = match rule.apply_to_value(rule_id, value, kind) {
+                    Ok(value) => return value,
+                    Err(value) => value,
+                };
             }
         }
         value

@@ -67,6 +67,50 @@ impl<'a> From<&'a str> for Value {
 
 struct ValueVisitor;
 
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Value::Null => write!(f, "null"),
+            Value::Bool(val) => write!(f, "{}", val),
+            Value::U32(val) => write!(f, "{}", val),
+            Value::I32(val) => write!(f, "{}", val),
+            Value::U64(val) => write!(f, "{}", val),
+            Value::I64(val) => write!(f, "{}", val),
+            Value::F32(val) => write!(f, "{}", val),
+            Value::F64(val) => write!(f, "{}", val),
+            Value::String(ref val) => write!(f, "{}", val),
+            Value::Array(ref val) => {
+                write!(f, "[")?;
+                for (idx, item) in val.iter().enumerate() {
+                    if idx > 0 {
+                        write!(f, ", ")?;
+                    }
+                    if let Some(ref value) = item.value() {
+                        write!(f, "{}", value)?;
+                    } else {
+                        write!(f, "null")?;
+                    }
+                }
+                write!(f, "]")
+            }
+            Value::Map(ref val) => {
+                write!(f, "{{")?;
+                for (idx, (key, value)) in val.iter().enumerate() {
+                    if idx > 0 {
+                        write!(f, ", ")?;
+                    }
+                    if let Some(ref value) = value.value() {
+                        write!(f, "{}: {}", key, value)?;
+                    } else {
+                        write!(f, "{}: null", key)?;
+                    }
+                }
+                write!(f, "}}")
+            }
+        }
+    }
+}
+
 impl<'de> de::Visitor<'de> for ValueVisitor {
     type Value = Value;
 

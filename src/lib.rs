@@ -18,6 +18,7 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate uuid;
 
+#[allow(unused_imports)]
 #[macro_use]
 extern crate sentry_stripping_derive;
 

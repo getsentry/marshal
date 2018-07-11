@@ -203,6 +203,8 @@ impl<T: PiiProcessor> Processor for T {
         match (annotated, info.pii_kind) {
             (annotated, None) | (annotated @ Annotated(None, _), _) => annotated,
             (Annotated(Some(value), meta), Some(PiiKind::Freeform)) => {
+                // TODO: consider dispatching to pii_process_value if pii_process_freeform_chunks
+                // does not implement an operation
                 let original_length = value.len();
                 let chunks = chunk::chunks_from_str(&value, &meta);
                 let (chunks, meta) = PiiProcessor::pii_process_freeform_chunks(self, chunks, meta);
