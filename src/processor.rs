@@ -2,7 +2,7 @@
 use std::collections::BTreeMap;
 
 use chunk::{self, Chunk};
-use common::{Array, Map, Value};
+use common::{Array, Map, Value, Values};
 use meta::{Annotated, Meta};
 
 /// The type of PII that's contained in the field.
