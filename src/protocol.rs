@@ -7,11 +7,10 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json;
 use uuid::Uuid;
 
-use common::Values;
+use common::{Map, Value, Values};
 use meta::{self, Annotated, MetaMap, MetaTree};
 use utils::buffer::{Content, ContentDeserializer, ContentRefDeserializer};
 use utils::{annotated, serde_chrono};
-use value::{Map, Value};
 
 fn default_breadcrumb_type() -> Annotated<String> {
     "default".to_string().into()

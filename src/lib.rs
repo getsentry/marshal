@@ -21,7 +21,7 @@ extern crate uuid;
 #[macro_use]
 extern crate sentry_stripping_derive;
 
-pub use {chunk::*, common::*, meta::*, processor::*, protocol::*, rule::*, value::*};
+pub use {chunk::*, common::*, meta::*, processor::*, protocol::*, rule::*};
 
 #[macro_use]
 mod macros;
@@ -35,4 +35,3 @@ mod protocol;
 mod rule;
 mod tracked;
 mod utils;
-mod value;

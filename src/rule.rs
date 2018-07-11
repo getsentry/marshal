@@ -9,9 +9,9 @@ use serde::de::{Deserialize, Deserializer, Error};
 use serde::ser::{Serialize, Serializer};
 
 use chunk::Chunk;
+use common::Value;
 use meta::{Annotated, Meta, Note, Remark};
 use processor::{PiiKind, PiiProcessor, ProcessAnnotatedValue, ValueInfo};
-use value::Value;
 
 lazy_static! {
     static ref NULL_SPLIT_RE: Regex = Regex::new("\x00").unwrap();
@@ -399,9 +399,9 @@ fn test_config() {
 
 #[test]
 fn test_basic_stripping() {
+    use common::Map;
     use meta::Remark;
     use serde_json;
-    use value::Map;
 
     let cfg: RuleConfig = serde_json::from_str(
         r#"{

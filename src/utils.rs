@@ -1,9 +1,8 @@
 //! Various utilities, like serialization and deserialization helpers.
 
 pub mod annotated {
-    use common::Values;
+    use common::{Map, Values};
     use meta::{should_serialize_meta, Annotated};
-    use value::Map;
 
     fn skip_if<T, F>(annotated: &Annotated<T>, predicate: F) -> bool
     where

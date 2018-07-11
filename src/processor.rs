@@ -2,8 +2,8 @@
 use std::collections::BTreeMap;
 
 use chunk::{self, Chunk};
+use common::{Array, Map, Value};
 use meta::{Annotated, Meta};
-use value::{Array, Map, Value};
 
 /// The type of PII that's contained in the field.
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, Ord, PartialOrd, Eq, PartialEq)]
