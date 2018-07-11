@@ -475,6 +475,7 @@ fn test_basic_stripping() {
             ],
             errors: vec![],
             original_length: Some(127),
+            path: None,
         }
     );
 }

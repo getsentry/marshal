@@ -1,5 +1,5 @@
 use serde::de::{self, DeserializeSeed, Deserializer, Error, State, Visitor};
-use std::fmt::{self, Display};
+use std::fmt;
 use std::rc::Rc;
 
 fn state_with_parent_path<F: FnOnce(Rc<Path>) -> Rc<Path>>(state: &State, f: F) -> State {
@@ -13,6 +13,7 @@ fn state_with_parent_path<F: FnOnce(Rc<Path>) -> Rc<Path>>(state: &State, f: F) 
 }
 
 /// Path to the current value in the input, like `dependencies.serde.typo1`.
+#[derive(PartialEq, Eq, Clone, PartialOrd, Ord)]
 pub enum Path {
     Root,
     Seq { parent: Rc<Path>, index: usize },
@@ -22,30 +23,36 @@ pub enum Path {
     NewtypeVariant { parent: Rc<Path> },
 }
 
-impl Display for Path {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+impl fmt::Display for Path {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         struct Parent<'a>(&'a Rc<Path>);
 
-        impl<'a> Display for Parent<'a> {
-            fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        impl<'a> fmt::Display for Parent<'a> {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 match **self.0 {
                     Path::Root => Ok(()),
-                    ref path => write!(formatter, "{}.", path),
+                    ref path => write!(f, "{}.", path),
                 }
             }
         }
 
         match *self {
-            Path::Root => formatter.write_str("."),
-            Path::Seq { ref parent, index } => write!(formatter, "{}{}", Parent(parent), index),
+            Path::Root => f.write_str("."),
+            Path::Seq { ref parent, index } => write!(f, "{}{}", Parent(parent), index),
             Path::Map {
                 ref parent,
                 ref key,
-            } => write!(formatter, "{}{}", Parent(parent), key),
+            } => write!(f, "{}{}", Parent(parent), key),
             Path::Some { ref parent }
             | Path::NewtypeStruct { ref parent }
-            | Path::NewtypeVariant { ref parent } => write!(formatter, "{}?", Parent(parent)),
+            | Path::NewtypeVariant { ref parent } => write!(f, "{}?", Parent(parent)),
         }
+    }
+}
+
+impl fmt::Debug for Path {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Path({})", self)
     }
 }
 

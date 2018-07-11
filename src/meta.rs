@@ -221,7 +221,7 @@ impl Serialize for Remark {
 }
 
 /// Meta information for a data field in the event payload.
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Meta {
     /// Remarks detailling modifications of this field.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -234,6 +234,18 @@ pub struct Meta {
     /// The original length of modified text fields or collections.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub original_length: Option<u32>,
+
+    /// Path at which the annotated value was deserialized.
+    #[serde(skip)]
+    pub path: Option<Rc<Path>>,
+}
+
+impl PartialEq for Meta {
+    fn eq(&self, other: &Self) -> bool {
+        self.remarks == other.remarks
+            && self.errors == other.errors
+            && self.original_length == other.original_length
+    }
 }
 
 impl Meta {
@@ -243,6 +255,7 @@ impl Meta {
             remarks: Vec::new(),
             errors: vec![message.into()],
             original_length: None,
+            path: None,
         }
     }
 
@@ -295,6 +308,16 @@ impl Meta {
     pub fn is_empty(&self) -> bool {
         self.original_length.is_none() && self.remarks.is_empty() && self.errors.is_empty()
     }
+
+    /// The path at which the annotated value was deserialized.
+    pub(crate) fn path(&self) -> Option<Rc<Path>> {
+        self.path.clone()
+    }
+
+    /// Sets the path at which the annotated value was deserialized.
+    fn set_path(&mut self, path: Option<Rc<Path>>) {
+        self.path = path
+    }
 }
 
 impl Default for Meta {
@@ -303,6 +326,7 @@ impl Default for Meta {
             remarks: Vec::new(),
             errors: Vec::new(),
             original_length: None,
+            path: None,
         }
     }
 }
@@ -344,6 +368,7 @@ impl<T> Annotated<T> {
                 }
             }
 
+            annotated.meta_mut().set_path(path.cloned());
             annotated
         };
 
@@ -726,6 +751,46 @@ mod test_annotated_without_meta {
     #[test]
     fn test_syntax_error_nested() {
         assert!(serde_json::from_str::<Test>(r#"{"answer": nul}"#).is_err());
+    }
+}
+
+#[cfg(test)]
+mod test_meta_paths {
+    use super::*;
+    use serde_json;
+
+    #[derive(Debug, Deserialize)]
+    struct Test {
+        answer: Annotated<i32>,
+    }
+
+    fn deserialize<'de, T: Deserialize<'de>>(string: &'de str) -> Result<T, serde_json::Error> {
+        T::deserialize(TrackedDeserializer::new(
+            &mut serde_json::Deserializer::from_str(string),
+            Default::default(),
+        ))
+    }
+
+    #[test]
+    fn test_basic() {
+        let value: Annotated<i32> = deserialize("42").unwrap();
+        assert_eq!(".", value.meta().path().unwrap().to_string());
+    }
+
+    #[test]
+    fn test_nested() {
+        let value: Annotated<Test> = deserialize(r#"{"answer": 42}"#).unwrap();
+        assert_eq!(
+            "answer",
+            value
+                .value()
+                .unwrap()
+                .answer
+                .meta()
+                .path()
+                .unwrap()
+                .to_string()
+        );
     }
 }
 
