@@ -62,7 +62,9 @@ pub enum RuleType {
         /// The match group indices to replace.
         replace_groups: Option<BTreeSet<u8>>,
     },
-    /// Replaces the value for well-known keys in accociative
+    /// Unconditionally removes the value
+    Remove,
+    /// When a regex matches a key, a value is removed
     RemovePairValue {
         /// A pattern to match for keys.
         key_pattern: Pattern,
@@ -200,7 +202,12 @@ impl Rule {
         }
     }
 
-    fn apply_to_chunks(&self, rule_id: &str, chunks: Vec<Chunk>, meta: Meta) -> (Vec<Chunk>, Meta) {
+    fn apply_to_chunks(
+        &self,
+        rule_id: &str,
+        chunks: Vec<Chunk>,
+        meta: Meta,
+    ) -> Result<(Vec<Chunk>, Meta), (Vec<Chunk>, Meta)> {
         match self.rule {
             RuleType::Pattern {
                 ref pattern,
@@ -288,20 +295,10 @@ impl Rule {
 
                 process_text(&search_string[pos..], &mut rv, &mut replacement_chunks);
 
-                return (rv, meta);
+                Ok((rv, meta))
             }
-            RuleType::RemovePairValue { ref key_pattern } => {
-                if let Some(ref path) = meta.path() {
-                    if key_pattern.0.is_match(&path.to_string()) {
-                        let note = Note::new(rule_id.to_string(), self.note.clone());
-                        let (value, mut meta) = chunk::chunks_to_string(chunks, meta);
-                        let mut rv = vec![];
-                        self.insert_replacement_chunks(&value, note, &mut rv);
-                        return (rv, meta);
-                    }
-                }
-                (chunks, meta)
-            }
+            // no special handling for strings, falls back to apply_to_value
+            RuleType::Remove | RuleType::RemovePairValue { .. } => Err((chunks, meta)),
         }
     }
 
@@ -315,6 +312,10 @@ impl Rule {
         match self.rule {
             // pattern matches are not implemented for non strings
             RuleType::Pattern { .. } => Err(value),
+            RuleType::Remove => {
+                let note = Note::new(rule_id.to_string(), self.note.clone());
+                return Ok(self.replace_value(value, note));
+            }
             RuleType::RemovePairValue { ref key_pattern } => {
                 if let Some(ref path) = value.meta().path() {
                     if key_pattern.0.is_match(&path.to_string()) {
@@ -370,19 +371,32 @@ impl<'a> RuleBasedPiiProcessor<'a> {
 }
 
 impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
-    fn pii_process_freeform_chunks(
+    fn pii_process_chunks(
         &self,
-        mut chunks: Vec<Chunk>,
-        mut meta: Meta,
-    ) -> (Vec<Chunk>, Meta) {
-        if let Some(rules) = self.applications.get(&PiiKind::Freeform) {
+        chunks: Vec<Chunk>,
+        meta: Meta,
+        pii_kind: PiiKind,
+    ) -> Result<(Vec<Chunk>, Meta), (Vec<Chunk>, Meta)> {
+        let mut replaced = false;
+        let mut rv = (chunks, meta);
+
+        if let Some(rules) = self.applications.get(&pii_kind) {
             for (rule_id, rule) in rules {
-                let (new_chunks, new_meta) = rule.apply_to_chunks(rule_id, chunks, meta);
-                chunks = new_chunks;
-                meta = new_meta;
+                rv = match rule.apply_to_chunks(rule_id, rv.0, rv.1) {
+                    Ok(val) => {
+                        replaced = true;
+                        val
+                    }
+                    Err(val) => val,
+                };
             }
         }
-        (chunks, meta)
+
+        if replaced {
+            Ok(rv)
+        } else {
+            Err(rv)
+        }
     }
 
     fn pii_process_value(&self, mut value: Annotated<Value>, kind: PiiKind) -> Annotated<Value> {
@@ -499,10 +513,15 @@ fn test_basic_stripping() {
                 "replace_with": {
                     "new_value": "whatever"
                 }
+            },
+            "remove_ip": {
+                "type": "remove",
+                "note": "IP address removed"
             }
         },
         "applications": {
             "freeform": ["path_username", "creditcard_number", "email_address"],
+            "ip": ["remove_ip"],
             "databag": ["remove_foo"]
         }
     }"#,
@@ -514,6 +533,8 @@ fn test_basic_stripping() {
         message: Annotated<String>,
         #[process_annotated_value(pii_kind = "databag")]
         extra: Annotated<Map<Value>>,
+        #[process_annotated_value(pii_kind = "ip")]
+        ip: Annotated<String>,
     }
 
     let event = Annotated::<Event>::from_str(r#"
@@ -522,7 +543,8 @@ fn test_basic_stripping() {
             "extra": {
                 "foo": 42,
                 "bar": true
-            }
+            },
+            "ip": "192.168.1.1"
         }
     "#).unwrap();
 
@@ -572,6 +594,21 @@ fn test_basic_stripping() {
         }
     );
 
+    let ip = &new_event.ip;
+    assert!(ip.value().is_none());
+    assert_eq!(
+        ip.meta(),
+        &Meta {
+            remarks: vec![Remark::new(Note::new(
+                "remove_ip",
+                Some("IP address removed"),
+            ))],
+            errors: vec![],
+            original_length: None,
+            path: None,
+        }
+    );
+
     let value = processed_event.to_string().unwrap();
-    assert_eq!(value, r#"{"message":"Hello *****@*****.***.  You signed up with card ****-****-****-1234. Your home folder is C:\\Users\\[username] Look at our compliance Look at our compliance","extra":{"bar":true,"foo":null},"metadata":{"extra":{"foo":{"":{"remarks":[[["remove_foo"]]]}}},"message":{"":{"original_length":127,"remarks":[[["email_address","potential email address"],[6,21]],[["creditcard_number","creditcard number"],[81,100]],[["path_username","username in path"],[393,403]]]}}}}"#);
+    assert_eq!(value, "{\"message\":\"Hello *****@*****.***.  You signed up with card ****-****-****-1234. Your home folder is C:\\\\Users\\\\[username] Look at our compliance Look at our compliance\",\"extra\":{\"bar\":true,\"foo\":null},\"ip\":null,\"metadata\":{\"extra\":{\"foo\":{\"\":{\"remarks\":[[[\"remove_foo\"]]]}}},\"ip\":{\"\":{\"remarks\":[[[\"remove_ip\",\"IP address removed\"]]]}},\"message\":{\"\":{\"original_length\":127,\"remarks\":[[[\"email_address\",\"potential email address\"],[6,21]],[[\"creditcard_number\",\"creditcard number\"],[81,100]],[[\"path_username\",\"username in path\"],[393,403]]]}}}}");
 }

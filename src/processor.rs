@@ -164,8 +164,14 @@ pub trait ProcessAnnotatedValue {
 /// Helper trait for pii processing.
 pub trait PiiProcessor {
     /// Processes a string containing freeform data chunked.
-    fn pii_process_freeform_chunks(&self, chunks: Vec<Chunk>, meta: Meta) -> (Vec<Chunk>, Meta) {
-        (chunks, meta)
+    fn pii_process_chunks(
+        &self,
+        chunks: Vec<Chunk>,
+        meta: Meta,
+        pii_kind: PiiKind,
+    ) -> Result<(Vec<Chunk>, Meta), (Vec<Chunk>, Meta)> {
+        let _pii_kind = pii_kind;
+        Err((chunks, meta))
     }
 
     /// Processes a single value.
@@ -202,29 +208,30 @@ impl<T: PiiProcessor> Processor for T {
     fn process_string(&self, annotated: Annotated<String>, info: &ValueInfo) -> Annotated<String> {
         match (annotated, info.pii_kind) {
             (annotated, None) | (annotated @ Annotated(None, _), _) => annotated,
-            (Annotated(Some(value), meta), Some(PiiKind::Freeform)) => {
-                // TODO: consider dispatching to pii_process_value if pii_process_freeform_chunks
-                // does not implement an operation
-                let original_length = value.len();
-                let chunks = chunk::chunks_from_str(&value, &meta);
-                let (chunks, meta) = PiiProcessor::pii_process_freeform_chunks(self, chunks, meta);
-                let (value, mut meta) = chunk::chunks_to_string(chunks, meta);
-                if value.len() != original_length && meta.original_length.is_none() {
-                    meta.original_length = Some(original_length as u32);
-                }
-                Annotated(Some(value), meta)
-            }
             (Annotated(Some(value), meta), Some(pii_kind)) => {
                 let original_length = value.len();
-                let annotated = Annotated(Some(Value::String(value)), meta);
-                match self.pii_process_value(annotated, pii_kind) {
-                    Annotated(Some(Value::String(value)), mut meta) => {
+                let chunks = chunk::chunks_from_str(&value, &meta);
+                match PiiProcessor::pii_process_chunks(self, chunks, meta, pii_kind) {
+                    Ok((chunks, meta)) => {
+                        let (value, mut meta) = chunk::chunks_to_string(chunks, meta);
                         if value.len() != original_length && meta.original_length.is_none() {
                             meta.original_length = Some(original_length as u32);
                         }
                         Annotated(Some(value), meta)
                     }
-                    Annotated(_, meta) => Annotated(None, meta),
+                    Err((_, meta)) => {
+                        let annotated = Annotated(Some(Value::String(value)), meta);
+                        match self.pii_process_value(annotated, pii_kind) {
+                            Annotated(Some(Value::String(value)), mut meta) => {
+                                if value.len() != original_length && meta.original_length.is_none()
+                                {
+                                    meta.original_length = Some(original_length as u32);
+                                }
+                                Annotated(Some(value), meta)
+                            }
+                            Annotated(_, meta) => Annotated(None, meta),
+                        }
+                    }
                 }
             }
         }
