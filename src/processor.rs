@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 
 use chunk::{self, Chunk};
 use meta::{Annotated, Meta};
-use value::Value;
+use value::{Array, Map, Value};
 
 /// The type of PII that's contained in the field.
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, Ord, PartialOrd, Eq, PartialEq)]
@@ -286,7 +286,7 @@ impl_primitive_process!(f64, process_f64);
 impl_primitive_process!(String, process_string);
 impl_primitive_process!(Value, process_value);
 
-impl<T: ProcessAnnotatedValue> ProcessAnnotatedValue for Vec<Annotated<T>> {
+impl<T: ProcessAnnotatedValue> ProcessAnnotatedValue for Array<T> {
     fn process_annotated_value(
         annotated: Annotated<Self>,
         processor: &Processor,
@@ -297,6 +297,30 @@ impl<T: ProcessAnnotatedValue> ProcessAnnotatedValue for Vec<Annotated<T>> {
                 .into_iter()
                 .map(|item| {
                     ProcessAnnotatedValue::process_annotated_value(item, processor, &info.derive())
+                })
+                .collect()
+        })
+    }
+}
+
+impl<T: ProcessAnnotatedValue> ProcessAnnotatedValue for Map<T> {
+    fn process_annotated_value(
+        annotated: Annotated<Self>,
+        processor: &Processor,
+        info: &ValueInfo,
+    ) -> Annotated<Self> {
+        annotated.map(|value| {
+            value
+                .into_iter()
+                .map(|(key, value)| {
+                    (
+                        key,
+                        ProcessAnnotatedValue::process_annotated_value(
+                            value,
+                            processor,
+                            &info.derive(),
+                        ),
+                    )
                 })
                 .collect()
         })
