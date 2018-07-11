@@ -163,7 +163,11 @@ pub trait ProcessAnnotatedValue {
 
 /// Helper trait for pii processing.
 pub trait PiiProcessor {
-    /// Processes a string containing freeform data chunked.
+    /// This is invoked with chunked data for strings.
+    ///
+    /// If the PII processor returns `Ok` then a modification is recorded.  If an
+    /// `Err` is returned then the regular `pii_process_value` is invoked as a
+    /// fallback.
     fn pii_process_chunks(
         &self,
         chunks: Vec<Chunk>,
@@ -176,7 +180,9 @@ pub trait PiiProcessor {
 
     /// Processes a single value.
     ///
-    /// The type of the value contained must not be changed.
+    /// The type of the value contained should not be changed as the processor is
+    /// unlikely to know if a value of a different type is accepted.  If a value
+    /// of an invalid type is emitted it's changed to null.
     fn pii_process_value(&self, value: Annotated<Value>, kind: PiiKind) -> Annotated<Value> {
         let _kind = kind;
         value
