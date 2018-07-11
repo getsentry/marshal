@@ -54,7 +54,7 @@ impl<'de> Deserialize<'de> for Pattern {
 /// Supported stripping rules.
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum RuleType {
+pub(crate) enum RuleType {
     /// Applies a regular expression.
     Pattern {
         /// The regular expression to apply.
@@ -74,7 +74,7 @@ pub enum RuleType {
 /// Defines how replacements happen.
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged, rename_all = "snake_case")]
-pub enum Replacement {
+pub(crate) enum Replacement {
     /// Overwrites the matched groups with a mask.
     Mask {
         /// The character to mask with.
@@ -164,7 +164,7 @@ impl Replacement {
 
 /// A single rule configuration.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Rule {
+pub(crate) struct Rule {
     #[serde(flatten)]
     rule: RuleType,
     replace_with: Option<Replacement>,

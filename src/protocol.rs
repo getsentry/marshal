@@ -7,10 +7,12 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json;
 use uuid::Uuid;
 
-use common::{Map, Value, Values};
 use meta::{self, Annotated, MetaMap, MetaTree};
 use utils::buffer::{Content, ContentDeserializer, ContentRefDeserializer};
 use utils::{annotated, serde_chrono};
+
+// we re-export common as part of the protocol
+pub use common::{Map, Value, Values};
 
 fn default_breadcrumb_type() -> Annotated<String> {
     "default".to_string().into()
