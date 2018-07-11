@@ -286,6 +286,11 @@ impl Meta {
         !self.errors.is_empty()
     }
 
+    /// Indicates that a null value is permitted for this field.
+    pub fn null_is_valid(&self) -> bool {
+        self.has_errors() || self.has_remarks()
+    }
+
     /// Indicates whether this field has meta data attached.
     pub fn is_empty(&self) -> bool {
         self.original_length.is_none() && self.remarks.is_empty() && self.errors.is_empty()
@@ -346,12 +351,13 @@ impl<T> Annotated<T> {
         // private Content type instead of serde-value so we retain deserializer state.
         let content = Content::deserialize(deserializer)?;
 
-        // Do not add an error to "meta" if the content is empty and there is already an error. This
-        // would indicate that this field was previously validated and the value removed. Otherwise,
-        // we would potentially generate error duplicates. We use the internal ContentRepr here to
-        // avoid deserializing the content multiple times.
+        // Do not add an error to "meta" if the content is empty and there is already an error
+        // or remakr. This would indicate that this field was previously validated and the value
+        // removed by an error or processing. Otherwise, we would potentially generate error
+        // duplicates. We use the internal ContentRepr here to avoid deserializing the content
+        // multiple times.
         match content.repr() {
-            ContentRepr::Unit if annotated.meta().has_errors() => return Ok(annotated),
+            ContentRepr::Unit if annotated.meta().null_is_valid() => return Ok(annotated),
             _ => (),
         };
 
