@@ -9,7 +9,7 @@ use serde::de::{Deserialize, Deserializer, Error};
 use serde::ser::{Serialize, Serializer};
 
 use chunk::Chunk;
-use meta::{Annotated, Meta, Note};
+use meta::{Annotated, Meta, Note, Remark};
 use processor::{PiiKind, PiiProcessor, ProcessAnnotatedValue, ValueInfo};
 use value::Value;
 
@@ -157,12 +157,12 @@ pub struct RuleBasedPiiProcessor<'a> {
 
 impl Rule {
     fn apply_to_chunks(&self, rule_id: &str, chunks: Vec<Chunk>, meta: Meta) -> (Vec<Chunk>, Meta) {
-        let note = Note::new(rule_id.to_string(), self.note.clone());
         match self.rule {
             RuleType::Pattern {
                 ref pattern,
                 ref replace_groups,
             } => {
+                let note = Note::new(rule_id.to_string(), self.note.clone());
                 let mut search_string = String::new();
                 let mut replacement_chunks = vec![];
                 for chunk in chunks {
@@ -255,10 +255,20 @@ impl Rule {
         value: Annotated<Value>,
         kind: PiiKind,
     ) -> Annotated<Value> {
-        let _rule_id = rule_id;
         let _kind = kind;
-        // TODO: handle pair removal
-        value
+        match self.rule {
+            // pattern matches are not possible on non strings
+            RuleType::Pattern { .. } => value,
+            RuleType::RemovePairValue { ref key_pattern } => {
+                if let Some(ref path) = value.meta().path() {
+                    if key_pattern.0.is_match(&path.to_string()) {
+                        let note = Note::new(rule_id.to_string(), self.note.clone());
+                        return value.with_removed_value(Remark::new(note));
+                    }
+                }
+                value
+            }
+        }
     }
 }
 
@@ -390,7 +400,9 @@ fn test_config() {
 #[test]
 fn test_basic_stripping() {
     use meta::Remark;
+    use protocol::deserialize_str;
     use serde_json;
+    use value::Map;
 
     let cfg: RuleConfig = serde_json::from_str(
         r#"{
@@ -422,32 +434,42 @@ fn test_basic_stripping() {
                     "chars_to_ignore": "@."
                 },
                 "note": "potential email address"
+            },
+            "remove_foo": {
+                "type": "remove_pair_value",
+                "key_pattern": "foo",
+                "replace_with": {
+                    "new_value": "whatever"
+                }
             }
         },
         "applications": {
-            "freeform": ["path_username", "creditcard_number", "email_address"]
+            "freeform": ["path_username", "creditcard_number", "email_address"],
+            "databag": ["remove_foo"]
         }
     }"#,
     ).unwrap();
 
-    #[derive(ProcessAnnotatedValue, Debug)]
+    #[derive(ProcessAnnotatedValue, Debug, Deserialize)]
     struct Event {
         #[process_annotated_value(pii_kind = "freeform")]
         message: Annotated<String>,
+        #[process_annotated_value(pii_kind = "databag")]
+        extra: Annotated<Map<Value>>,
     }
 
-    let event = Annotated::from(Event {
-        message: Annotated::from(
-            "Hello peter@gmail.com.  You signed up with card 1234-1234-1234-1234. \
-             Your home folder is C:\\Users\\peter. Look at our compliance"
-                .to_string(),
-        ),
-    });
+    let event: Annotated<Event> = deserialize_str(r#"
+        {
+            "message": "Hello peter@gmail.com.  You signed up with card 1234-1234-1234-1234. Your home folder is C:\\Users\\peter. Look at our compliance",
+            "extra": {
+                "foo": 42,
+                "bar": true
+            }
+        }
+    "#).unwrap();
 
     let processor = RuleBasedPiiProcessor::new(&cfg).unwrap();
     let new_event = processor.process_root_value(event).0.unwrap();
-
-    println!("{:#?}", &new_event);
 
     let message = new_event.message.value().unwrap();
     assert_eq!(
@@ -475,6 +497,18 @@ fn test_basic_stripping() {
             ],
             errors: vec![],
             original_length: Some(127),
+            path: None,
+        }
+    );
+
+    let foo = new_event.extra.value().unwrap().get("foo").unwrap();
+    assert!(foo.value().is_none());
+    assert_eq!(
+        foo.meta(),
+        &Meta {
+            remarks: vec![Remark::new(Note::well_known("remove_foo"))],
+            errors: vec![],
+            original_length: None,
             path: None,
         }
     );

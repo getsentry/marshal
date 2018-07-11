@@ -4,6 +4,7 @@ use std::{fmt, str};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json;
 use uuid::Uuid;
 
 use common::Values;
@@ -218,10 +219,24 @@ struct EventMetaDeserializeHelper {
 pub fn deserialize_event<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Annotated<Event>, D::Error> {
+    deserialize(deserializer)
+}
+
+/// Deserializes an annotated object with embedded meta data from the given deserializer.
+pub fn deserialize<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
+    deserializer: D,
+) -> Result<Annotated<T>, D::Error> {
     let content = Content::deserialize(deserializer)?;
     let helper = EventMetaDeserializeHelper::deserialize(ContentRefDeserializer::new(&content))?;
     let meta_map = helper.metadata.unwrap_or_default();
     meta::deserialize(ContentDeserializer::new(content), meta_map)
+}
+
+/// Deserializes an annotated object with embedded meta data from the given deserializer.
+pub fn deserialize_str<'de, T: Deserialize<'de>>(
+    s: &'de str,
+) -> Result<Annotated<T>, serde_json::Error> {
+    deserialize(&mut serde_json::Deserializer::from_str(s))
 }
 
 #[derive(Debug, Serialize)]

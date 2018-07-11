@@ -45,11 +45,7 @@ impl Note {
     }
 
     /// Creates a new well-known note without description.
-    ///
-    /// By convention, the rule name must start with "@".
     pub fn well_known(rule: &'static str) -> Note {
-        debug_assert!(rule.starts_with("@"));
-
         Note {
             rule: Cow::Borrowed(rule),
             description: None,
@@ -310,7 +306,7 @@ impl Meta {
     }
 
     /// The path at which the annotated value was deserialized.
-    pub(crate) fn path(&self) -> Option<Rc<Path>> {
+    pub fn path(&self) -> Option<Rc<Path>> {
         self.path.clone()
     }
 
