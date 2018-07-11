@@ -9,7 +9,7 @@ use serde::de::{Deserialize, Deserializer, Error};
 use serde::ser::{Serialize, Serializer};
 
 use chunk::Chunk;
-use meta::{Annotated, Meta, Note, Remark};
+use meta::{Annotated, Meta, Note};
 use processor::{PiiKind, PiiProcessor, ProcessAnnotatedValue, ValueInfo};
 use value::Value;
 
@@ -243,7 +243,7 @@ impl Rule {
                 return (rv, meta);
             }
             RuleType::RemovePairValue { .. } => {
-                // this rule can't do anything on freeform text
+                // TODO: handle pair removal
                 (chunks, meta)
             }
         }
@@ -257,27 +257,8 @@ impl Rule {
     ) -> Annotated<Value> {
         let _rule_id = rule_id;
         let _kind = kind;
+        // TODO: handle pair removal
         value
-    }
-
-    fn apply_to_key_value_pair(
-        &self,
-        rule_id: &str,
-        key: &str,
-        value: Annotated<Value>,
-        kind: PiiKind,
-    ) -> Annotated<Value> {
-        let note = Note::new(rule_id.to_string(), self.note.clone());
-        match self.rule {
-            RuleType::RemovePairValue { ref key_pattern } => {
-                if key_pattern.0.is_match(key) {
-                    value.with_removed_value(Remark::new(note))
-                } else {
-                    value
-                }
-            }
-            _ => self.apply_to_value(rule_id, value, kind),
-        }
     }
 }
 
@@ -336,20 +317,6 @@ impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
             }
         }
         (chunks, meta)
-    }
-
-    fn pii_process_key_value_pair(
-        &self,
-        key: &str,
-        mut value: Annotated<Value>,
-        kind: PiiKind,
-    ) -> Annotated<Value> {
-        if let Some(rules) = self.applications.get(&kind) {
-            for (rule_id, rule) in rules {
-                value = rule.apply_to_key_value_pair(rule_id, key, value, kind);
-            }
-        }
-        value
     }
 
     fn pii_process_value(&self, mut value: Annotated<Value>, kind: PiiKind) -> Annotated<Value> {

@@ -138,7 +138,7 @@ pub trait Processor {
             Annotated(Some(Value::Map(val)), meta) => {
                 let mut rv = BTreeMap::new();
                 for (key, value) in val.into_iter() {
-                    let value = self.process_key_value_pair(&key, value, &info.derive());
+                    let value = self.process_value(value, &info.derive());
                     rv.insert(key, value);
                 }
                 Annotated(Some(Value::Map(rv)), meta)
@@ -146,18 +146,6 @@ pub trait Processor {
             other @ Annotated(Some(Value::Null), _) => other,
             other @ Annotated(None, _) => other,
         }
-    }
-
-    /// Processes an annotated key/value pair.
-    fn process_key_value_pair(
-        &self,
-        key: &str,
-        annotated: Annotated<Value>,
-        info: &ValueInfo,
-    ) -> Annotated<Value> {
-        let _key = key;
-        let _info = info;
-        annotated
     }
 }
 
@@ -178,19 +166,6 @@ pub trait PiiProcessor {
     /// Processes a string containing freeform data chunked.
     fn pii_process_freeform_chunks(&self, chunks: Vec<Chunk>, meta: Meta) -> (Vec<Chunk>, Meta) {
         (chunks, meta)
-    }
-
-    /// Processes a key/value pair of private meta information.
-    ///
-    /// The type of the value contained must not be changed.
-    fn pii_process_key_value_pair(
-        &self,
-        key: &str,
-        value: Annotated<Value>,
-        kind: PiiKind,
-    ) -> Annotated<Value> {
-        let _key = key;
-        PiiProcessor::pii_process_value(self, value, kind)
     }
 
     /// Processes a single value.
