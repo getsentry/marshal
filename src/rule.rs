@@ -186,6 +186,11 @@ pub struct RuleBasedPiiProcessor<'a> {
 }
 
 impl Rule {
+    /// Inserts replacement chunks into the given chunk buffer.
+    ///
+    /// If the rule is configured with `replace_with` then replacement chunks are
+    /// added to the buffer based on that information.  If `replace_with` is not
+    /// defined an empty redaction chunk is added with the supplied note.
     fn insert_replacement_chunks(&self, text: &str, note: Note, output: &mut Vec<Chunk>) {
         if let Some(ref replace_with) = self.replace_with {
             replace_with.insert_replacement_chunks(text, note, output);
@@ -194,6 +199,11 @@ impl Rule {
         }
     }
 
+    /// Produces a new annotated value with replacement data.
+    ///
+    /// This fully replaces the value in the annotated value with the replacement value
+    /// from the config.  If no replacement value is defined (which is likely) then
+    /// then no value is set (null).  In either case the given note is recorded.
     fn replace_value(&self, annotated: Annotated<Value>, note: Note) -> Annotated<Value> {
         if let Some(ref replace_with) = self.replace_with {
             replace_with.set_replacement_value(annotated, note)
@@ -202,7 +212,11 @@ impl Rule {
         }
     }
 
-    fn apply_to_chunks(
+    /// Processes the given chunks according to the rule.
+    ///
+    /// This works the same as `pii_process_chunks` in behavior.  This means that if an
+    /// error is returned the caller falls back to regular value processing.
+    fn process_chunks(
         &self,
         rule_id: &str,
         chunks: Vec<Chunk>,
@@ -297,12 +311,16 @@ impl Rule {
 
                 Ok((rv, meta))
             }
-            // no special handling for strings, falls back to apply_to_value
+            // no special handling for strings, falls back to `process_value`
             RuleType::Remove | RuleType::RemovePairValue { .. } => Err((chunks, meta)),
         }
     }
 
-    fn apply_to_value(
+    /// Applies the rule to the given value.
+    ///
+    /// In case `Err` is returned the caller is expected to try the next rule.  If
+    /// `Ok` is returned then no further modifications are applied.
+    fn process_value(
         &self,
         rule_id: &str,
         value: Annotated<Value>,
@@ -382,7 +400,7 @@ impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
 
         if let Some(rules) = self.applications.get(&pii_kind) {
             for (rule_id, rule) in rules {
-                rv = match rule.apply_to_chunks(rule_id, rv.0, rv.1) {
+                rv = match rule.process_chunks(rule_id, rv.0, rv.1) {
                     Ok(val) => {
                         replaced = true;
                         val
@@ -402,7 +420,7 @@ impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
     fn pii_process_value(&self, mut value: Annotated<Value>, kind: PiiKind) -> Annotated<Value> {
         if let Some(rules) = self.applications.get(&kind) {
             for (rule_id, rule) in rules {
-                value = match rule.apply_to_value(rule_id, value, kind) {
+                value = match rule.process_value(rule_id, value, kind) {
                     Ok(value) => return value,
                     Err(value) => value,
                 };
