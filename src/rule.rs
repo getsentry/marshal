@@ -400,7 +400,7 @@ fn test_config() {
 #[test]
 fn test_basic_stripping() {
     use meta::Remark;
-    use protocol::deserialize_str;
+    use protocol::{deserialize_str, serialize_to_string};
     use serde_json;
     use value::Map;
 
@@ -450,7 +450,7 @@ fn test_basic_stripping() {
     }"#,
     ).unwrap();
 
-    #[derive(ProcessAnnotatedValue, Debug, Deserialize)]
+    #[derive(ProcessAnnotatedValue, Debug, Deserialize, Serialize, Clone)]
     struct Event {
         #[process_annotated_value(pii_kind = "freeform")]
         message: Annotated<String>,
@@ -469,7 +469,8 @@ fn test_basic_stripping() {
     "#).unwrap();
 
     let processor = RuleBasedPiiProcessor::new(&cfg).unwrap();
-    let new_event = processor.process_root_value(event).0.unwrap();
+    let processed_event = processor.process_root_value(event);
+    let new_event = processed_event.clone().0.unwrap();
 
     let message = new_event.message.value().unwrap();
     assert_eq!(
@@ -512,4 +513,7 @@ fn test_basic_stripping() {
             path: None,
         }
     );
+
+    let value = serialize_to_string(&processed_event).unwrap();
+    assert_eq!(value, r#"{"message":"Hello *****@*****.***.  You signed up with card ****-****-****-1234. Your home folder is C:\\Users\\[username] Look at our compliance Look at our compliance","extra":{"bar":true,"foo":null},"metadata":{"extra":{"foo":{"":{"remarks":[[["remove_foo"]]]}}},"message":{"":{"original_length":127,"remarks":[[["email_address","potential email address"],[6,21]],[["creditcard_number","creditcard number"],[81,100]],[["path_username","username in path"],[393,403]]]}}}}"#);
 }

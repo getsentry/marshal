@@ -240,10 +240,35 @@ pub fn deserialize_str<'de, T: Deserialize<'de>>(
 }
 
 #[derive(Debug, Serialize)]
-struct EventMetaSerializeHelper<'a> {
+struct EventMetaSerializeHelper<'a, T: Serialize + 'a> {
     #[serde(flatten)]
-    event: Option<&'a Event>,
+    event: Option<&'a T>,
     metadata: MetaTree,
+}
+
+/// Serializes a annotated value and its meta data into the given serializer.
+pub fn serialize<S: Serializer, T: Serialize>(
+    annotated: &Annotated<T>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    use serde::ser::Error;
+    EventMetaSerializeHelper {
+        event: annotated.value(),
+        metadata: meta::serialize_meta(annotated).map_err(S::Error::custom)?,
+    }.serialize(serializer)
+}
+
+/// Like `serialize` but produces a JSON string.
+pub fn serialize_to_string<T: Serialize>(
+    annotated: &Annotated<T>,
+) -> Result<String, serde_json::Error> {
+    let mut writer = Vec::with_capacity(128);
+    {
+        let mut ser = serde_json::Serializer::new(&mut writer);
+        serialize(annotated, &mut ser)?;
+    }
+
+    Ok(unsafe { String::from_utf8_unchecked(writer) })
 }
 
 /// Serializes an event and its meta data into the given serializer.
@@ -251,11 +276,7 @@ pub fn serialize_event<S: Serializer>(
     event: &Annotated<Event>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
-    use serde::ser::Error;
-    EventMetaSerializeHelper {
-        event: event.value(),
-        metadata: meta::serialize_meta(event).map_err(S::Error::custom)?,
-    }.serialize(serializer)
+    serialize(event, serializer)
 }
 
 #[cfg(test)]
