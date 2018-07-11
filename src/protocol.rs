@@ -98,8 +98,11 @@ impl Level {
 
 impl_str_serialization!(Level);
 
+#[cfg(test)]
+mod test_level {}
+
 /// A breadcrumb.
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Breadcrumb {
     /// The timestamp of the breadcrumb (required).
     #[serde(with = "serde_chrono")]
@@ -119,15 +122,18 @@ pub struct Breadcrumb {
 
     /// Human readable message for the breadcrumb.
     #[serde(default, skip_serializing_if = "annotated::is_none")]
+    #[process_annotated_value(pii_kind = "freeform", cap = "message")]
     pub message: Annotated<Option<String>>,
 
     /// Custom user-defined data of this breadcrumb.
     #[serde(default, skip_serializing_if = "annotated::is_empty_map")]
+    #[process_annotated_value(pii_kind = "databag")]
     pub data: Annotated<Map<Value>>,
 
     /// Additional arbitrary fields for forwards compatibility.
     #[serde(flatten)]
-    pub other: Map<Value>,
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
 }
 
 #[cfg(test)]
@@ -169,7 +175,7 @@ mod test_breadcrumb {
                     "c".to_string(),
                     Annotated::from(Value::String("d".to_string())),
                 );
-                map
+                Annotated::from(map)
             },
         });
 
@@ -189,7 +195,7 @@ mod test_breadcrumb {
             level: Level::default().into(),
             message: None.into(),
             data: Map::new().into(),
-            other: Map::new(),
+            other: Map::new().into(),
         });
 
         assert_eq!(breadcrumb, serde_json::from_str(input).unwrap());
@@ -198,7 +204,7 @@ mod test_breadcrumb {
 }
 
 /// Represents a full event for Sentry.
-#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Default, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Event {
     /// The unique identifier of this event.
     #[serde(default, rename = "event_id", skip_serializing_if = "annotated::is_none")]
@@ -206,7 +212,8 @@ pub struct Event {
 
     /// List of breadcrumbs recorded before this event.
     #[serde(default, skip_serializing_if = "annotated::is_empty_values")]
-    pub breadcrumbs: Annotated<Values<Annotated<Breadcrumb>>>,
+    #[process_annotated_value]
+    pub breadcrumbs: Annotated<Values<Breadcrumb>>,
 }
 
 #[derive(Debug, Deserialize)]

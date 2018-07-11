@@ -261,6 +261,40 @@ impl_primitive_process!(f64, process_f64);
 impl_primitive_process!(String, process_string);
 impl_primitive_process!(Value, process_value);
 
+impl<T: ProcessAnnotatedValue> ProcessAnnotatedValue for Option<T> {
+    fn process_annotated_value(
+        annotated: Annotated<Self>,
+        processor: &Processor,
+        info: &ValueInfo,
+    ) -> Annotated<Self> {
+        match annotated {
+            Annotated(Some(value), meta) => ProcessAnnotatedValue::process_annotated_value(
+                Annotated::new(value, meta),
+                processor,
+                info,
+            ),
+            other @ Annotated(None, _) => other,
+        }
+    }
+}
+
+impl<T: ProcessAnnotatedValue> ProcessAnnotatedValue for Values<T> {
+    fn process_annotated_value(
+        annotated: Annotated<Self>,
+        processor: &Processor,
+        info: &ValueInfo,
+    ) -> Annotated<Self> {
+        annotated.map(|Values { values, other }| Values {
+            values: ProcessAnnotatedValue::process_annotated_value(
+                values,
+                processor,
+                &info.derive(),
+            ),
+            other: ProcessAnnotatedValue::process_annotated_value(other, processor, &info.derive()),
+        })
+    }
+}
+
 impl<T: ProcessAnnotatedValue> ProcessAnnotatedValue for Array<T> {
     fn process_annotated_value(
         annotated: Annotated<Self>,
