@@ -69,6 +69,14 @@ pub(crate) enum RuleType {
     },
     /// Matches an email
     Email,
+    /// Matches an IPv4 address
+    Ipv4,
+    /// Matches an IPv6 address
+    Ipv6,
+    /// Matches any IP address
+    Ip,
+    /// Matches a creditcard number
+    Creditcard,
     /// Unconditionally removes the value
     Remove,
     /// When a regex matches a key, a value is removed
@@ -249,17 +257,24 @@ impl Redaction {
 
 /// A single rule configuration.
 #[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct Rule {
+pub(crate) struct RuleSpec {
     #[serde(flatten)]
-    rule: RuleType,
+    ty: RuleType,
     redaction: Option<Redaction>,
     note: Option<String>,
+}
+
+/// A rule is a rule config plus id.
+#[derive(Debug)]
+pub(crate) struct Rule<'a> {
+    id: &'a str,
+    spec: &'a RuleSpec,
 }
 
 /// A set of named rule configurations.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RuleConfig {
-    rules: BTreeMap<String, Rule>,
+    rules: BTreeMap<String, RuleSpec>,
     #[serde(default)]
     applications: BTreeMap<PiiKind, Vec<String>>,
 }
@@ -267,101 +282,23 @@ pub struct RuleConfig {
 /// A PII processor that uses JSON rules.
 pub struct RuleBasedPiiProcessor<'a> {
     cfg: &'a RuleConfig,
-    applications: BTreeMap<PiiKind, Vec<(&'a str, &'a Rule)>>,
+    applications: BTreeMap<PiiKind, Vec<Rule<'a>>>,
 }
 
-fn apply_regex(
-    rule: &Rule,
-    rule_id: &str,
-    chunks: Vec<Chunk>,
-    meta: Meta,
-    regex: &Regex,
-    replace_groups: Option<&BTreeSet<u8>>,
-) -> (Vec<Chunk>, Meta) {
-    let note = Note::new(rule_id.to_string(), rule.note.clone());
-    let mut search_string = String::new();
-    let mut replacement_chunks = vec![];
-    for chunk in chunks {
-        match chunk {
-            Chunk::Text(ref text) => search_string.push_str(&text.replace("\x00", "")),
-            chunk @ Chunk::Redaction(..) => {
-                replacement_chunks.push(chunk);
-                search_string.push('\x00');
-            }
-        }
-    }
-    replacement_chunks.reverse();
-    let mut rv: Vec<Chunk> = vec![];
-
-    fn process_text(text: &str, rv: &mut Vec<Chunk>, replacement_chunks: &mut Vec<Chunk>) {
-        if text.is_empty() {
-            return;
-        }
-        let mut pos = 0;
-        for piece in NULL_SPLIT_RE.find_iter(text) {
-            rv.push(Chunk::Text(text[pos..piece.start()].to_string().into()));
-            rv.push(replacement_chunks.pop().unwrap());
-            pos = piece.end();
-        }
-        rv.push(Chunk::Text(text[pos..].to_string().into()));
+impl<'a> Rule<'a> {
+    /// Creates a new note.
+    pub fn create_note(&self) -> Note {
+        Note::new(self.id.to_string(), self.spec.note.clone())
     }
 
-    let mut pos = 0;
-    for m in regex.captures_iter(&search_string) {
-        let g0 = m.get(0).unwrap();
-
-        match replace_groups {
-            Some(groups) => {
-                for (idx, g) in m.iter().enumerate() {
-                    if idx == 0 {
-                        continue;
-                    }
-
-                    if let Some(g) = g {
-                        if groups.contains(&(idx as u8)) {
-                            process_text(
-                                &search_string[pos..g.start()],
-                                &mut rv,
-                                &mut replacement_chunks,
-                            );
-                            rule.insert_replacement_chunks(g.as_str(), note.clone(), &mut rv);
-                            pos = g.end();
-                        }
-                    }
-                }
-            }
-            None => {
-                process_text(
-                    &search_string[pos..g0.start()],
-                    &mut rv,
-                    &mut replacement_chunks,
-                );
-                rule.insert_replacement_chunks(g0.as_str(), note.clone(), &mut rv);
-                pos = g0.end();
-            }
-        }
-
-        process_text(
-            &search_string[pos..g0.end()],
-            &mut rv,
-            &mut replacement_chunks,
-        );
-        pos = g0.end();
-    }
-
-    process_text(&search_string[pos..], &mut rv, &mut replacement_chunks);
-
-    (rv, meta)
-}
-
-impl Rule {
     /// Inserts replacement chunks into the given chunk buffer.
     ///
     /// If the rule is configured with `redaction` then replacement chunks are
     /// added to the buffer based on that information.  If `redaction` is not
     /// defined an empty redaction chunk is added with the supplied note.
-    fn insert_replacement_chunks(&self, text: &str, note: Note, output: &mut Vec<Chunk>) {
-        if let Some(ref redaction) = self.redaction {
+    fn insert_replacement_chunks(&self, text: &str, output: &mut Vec<Chunk>) {
+        let note = self.create_note();
+        if let Some(ref redaction) = self.spec.redaction {
             redaction.insert_replacement_chunks(text, note, output);
         } else {
             output.push(Chunk::Redaction("".to_string(), note));
@@ -373,8 +310,9 @@ impl Rule {
     /// This fully replaces the value in the annotated value with the replacement value
     /// from the config.  If no replacement value is defined (which is likely) then
     /// then no value is set (null).  In either case the given note is recorded.
-    fn replace_value(&self, annotated: Annotated<Value>, note: Note) -> Annotated<Value> {
-        if let Some(ref redaction) = self.redaction {
+    fn replace_value(&self, annotated: Annotated<Value>) -> Annotated<Value> {
+        let note = self.create_note();
+        if let Some(ref redaction) = self.spec.redaction {
             redaction.set_replacement_value(annotated, note)
         } else {
             annotated.with_removed_value(Remark::new(note))
@@ -387,31 +325,119 @@ impl Rule {
     /// error is returned the caller falls back to regular value processing.
     fn process_chunks(
         &self,
-        rule_id: &str,
         chunks: Vec<Chunk>,
         meta: Meta,
     ) -> Result<(Vec<Chunk>, Meta), (Vec<Chunk>, Meta)> {
-        macro_rules! apply_regex {
-            ($regex:expr, $replace_groups:expr) => {
-                Ok(apply_regex(
-                    self,
-                    rule_id,
-                    chunks,
-                    meta,
-                    &*$regex,
-                    $replace_groups,
-                ))
-            };
-        }
-        match self.rule {
+        match self.spec.ty {
             RuleType::Pattern {
                 ref pattern,
                 ref replace_groups,
-            } => apply_regex!(&pattern.0, replace_groups.as_ref()),
-            RuleType::Email => apply_regex!(detectors::EMAIL_REGEX, None),
+            } => Ok(self.apply_regex_to_chunks(chunks, meta, &pattern.0, replace_groups.as_ref())),
+            RuleType::Email => {
+                Ok(self.apply_regex_to_chunks(chunks, meta, &*detectors::EMAIL_REGEX, None))
+            }
+            RuleType::Ipv4 => {
+                Ok(self.apply_regex_to_chunks(chunks, meta, &*detectors::IPV4_REGEX, None))
+            }
+            RuleType::Ipv6 => {
+                Ok(self.apply_regex_to_chunks(chunks, meta, &*detectors::IPV6_REGEX, None))
+            }
+            RuleType::Ip => {
+                let (chunks, meta) =
+                    self.apply_regex_to_chunks(chunks, meta, &*detectors::IPV4_REGEX, None);
+                let (chunks, meta) =
+                    self.apply_regex_to_chunks(chunks, meta, &*detectors::IPV6_REGEX, None);
+                Ok((chunks, meta))
+            }
+            RuleType::Creditcard => {
+                Ok(self.apply_regex_to_chunks(chunks, meta, &*detectors::CREDITCARD_REGEX, None))
+            }
             // no special handling for strings, falls back to `process_value`
             RuleType::Remove | RuleType::RemovePair { .. } => Err((chunks, meta)),
         }
+    }
+
+    /// Applies a regex to chunks and meta.
+    fn apply_regex_to_chunks(
+        &self,
+        chunks: Vec<Chunk>,
+        meta: Meta,
+        regex: &Regex,
+        replace_groups: Option<&BTreeSet<u8>>,
+    ) -> (Vec<Chunk>, Meta) {
+        let mut search_string = String::new();
+        let mut replacement_chunks = vec![];
+        for chunk in chunks {
+            match chunk {
+                Chunk::Text(ref text) => search_string.push_str(&text.replace("\x00", "")),
+                chunk @ Chunk::Redaction(..) => {
+                    replacement_chunks.push(chunk);
+                    search_string.push('\x00');
+                }
+            }
+        }
+        replacement_chunks.reverse();
+        let mut rv: Vec<Chunk> = vec![];
+
+        fn process_text(text: &str, rv: &mut Vec<Chunk>, replacement_chunks: &mut Vec<Chunk>) {
+            if text.is_empty() {
+                return;
+            }
+            let mut pos = 0;
+            for piece in NULL_SPLIT_RE.find_iter(text) {
+                rv.push(Chunk::Text(text[pos..piece.start()].to_string().into()));
+                rv.push(replacement_chunks.pop().unwrap());
+                pos = piece.end();
+            }
+            rv.push(Chunk::Text(text[pos..].to_string().into()));
+        }
+
+        let mut pos = 0;
+        for m in regex.captures_iter(&search_string) {
+            let g0 = m.get(0).unwrap();
+
+            match replace_groups {
+                Some(groups) => {
+                    for (idx, g) in m.iter().enumerate() {
+                        if idx == 0 {
+                            continue;
+                        }
+
+                        if let Some(g) = g {
+                            if groups.contains(&(idx as u8)) {
+                                process_text(
+                                    &search_string[pos..g.start()],
+                                    &mut rv,
+                                    &mut replacement_chunks,
+                                );
+                                self.insert_replacement_chunks(g.as_str(), &mut rv);
+                                pos = g.end();
+                            }
+                        }
+                    }
+                }
+                None => {
+                    process_text(
+                        &search_string[pos..g0.start()],
+                        &mut rv,
+                        &mut replacement_chunks,
+                    );
+                    self.insert_replacement_chunks(g0.as_str(), &mut rv);
+                    pos = g0.end();
+                }
+            }
+
+            process_text(
+                &search_string[pos..g0.end()],
+                &mut rv,
+                &mut replacement_chunks,
+            );
+            pos = g0.end();
+        }
+
+        process_text(&search_string[pos..], &mut rv, &mut replacement_chunks);
+
+        (rv, meta)
     }
 
     /// Applies the rule to the given value.
@@ -420,23 +446,25 @@ impl Rule {
     /// `Ok` is returned then no further modifications are applied.
     fn process_value(
         &self,
-        rule_id: &str,
         value: Annotated<Value>,
         kind: PiiKind,
     ) -> Result<Annotated<Value>, Annotated<Value>> {
         let _kind = kind;
-        match self.rule {
+        match self.spec.ty {
             // pattern matches are not implemented for non strings
-            RuleType::Pattern { .. } | RuleType::Email => Err(value),
+            RuleType::Pattern { .. }
+            | RuleType::Email
+            | RuleType::Ipv4
+            | RuleType::Ipv6
+            | RuleType::Ip
+            | RuleType::Creditcard => Err(value),
             RuleType::Remove => {
-                let note = Note::new(rule_id.to_string(), self.note.clone());
-                return Ok(self.replace_value(value, note));
+                return Ok(self.replace_value(value));
             }
             RuleType::RemovePair { ref key_pattern } => {
                 if let Some(ref path) = value.meta().path() {
                     if key_pattern.0.is_match(&path.to_string()) {
-                        let note = Note::new(rule_id.to_string(), self.note.clone());
-                        return Ok(self.replace_value(value, note));
+                        return Ok(self.replace_value(value));
                     }
                 }
                 Err(value)
@@ -453,8 +481,11 @@ impl<'a> RuleBasedPiiProcessor<'a> {
         for (&pii_kind, cfg_applications) in &cfg.applications {
             let mut rules = vec![];
             for application in cfg_applications {
-                if let Some(rule) = cfg.rules.get(application) {
-                    rules.push((application.as_str(), rule));
+                if let Some(rule_spec) = cfg.rules.get(application) {
+                    rules.push(Rule {
+                        id: application.as_str(),
+                        spec: rule_spec,
+                    });
                 } else {
                     return Err(BadRuleConfig::BadReference(application.to_string()));
                 }
@@ -497,8 +528,8 @@ impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
         let mut rv = (chunks, meta);
 
         if let Some(rules) = self.applications.get(&pii_kind) {
-            for (rule_id, rule) in rules {
-                rv = match rule.process_chunks(rule_id, rv.0, rv.1) {
+            for rule in rules {
+                rv = match rule.process_chunks(rv.0, rv.1) {
                     Ok(val) => {
                         replaced = true;
                         val
@@ -517,8 +548,8 @@ impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
 
     fn pii_process_value(&self, mut value: Annotated<Value>, kind: PiiKind) -> Annotated<Value> {
         if let Some(rules) = self.applications.get(&kind) {
-            for (rule_id, rule) in rules {
-                value = match rule.process_value(rule_id, value, kind) {
+            for rule in rules {
+                value = match rule.process_value(value, kind) {
                     Ok(value) => return value,
                     Err(value) => value,
                 };
