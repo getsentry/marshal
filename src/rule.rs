@@ -8,10 +8,12 @@ use hmac::{Hmac, Mac};
 use regex::{Regex, RegexBuilder};
 use serde::de::{Deserialize, Deserializer, Error};
 use serde::ser::{Serialize, Serializer};
+use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 
 use chunk::{self, Chunk};
 use common::Value;
+use detectors;
 use meta::{Annotated, Meta, Note, Remark};
 use processor::{PiiKind, PiiProcessor, ProcessAnnotatedValue, ValueInfo};
 
@@ -55,19 +57,23 @@ impl<'de> Deserialize<'de> for Pattern {
 
 /// Supported stripping rules.
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub(crate) enum RuleType {
     /// Applies a regular expression.
+    #[serde(rename_all = "camelCase")]
     Pattern {
         /// The regular expression to apply.
         pattern: Pattern,
         /// The match group indices to replace.
         replace_groups: Option<BTreeSet<u8>>,
     },
+    /// Matches an email
+    Email,
     /// Unconditionally removes the value
     Remove,
     /// When a regex matches a key, a value is removed
-    RemovePairValue {
+    #[serde(rename_all = "camelCase")]
+    RemovePair {
         /// A pattern to match for keys.
         key_pattern: Pattern,
     },
@@ -76,6 +82,9 @@ pub(crate) enum RuleType {
 /// Defines the hash algorithm to use for hashing
 #[derive(Serialize, Deserialize, Debug)]
 pub enum HashAlgorithm {
+    /// HMAC-SHA1
+    #[serde(rename = "HMAC-SHA1")]
+    HmacSha1,
     /// HMAC-SHA256
     #[serde(rename = "HMAC-SHA256")]
     HmacSha256,
@@ -84,49 +93,64 @@ pub enum HashAlgorithm {
     HmacSha512,
 }
 
+impl Default for HashAlgorithm {
+    fn default() -> HashAlgorithm {
+        HashAlgorithm::HmacSha256
+    }
+}
+
 impl HashAlgorithm {
     fn hash_value(&self, text: &str, key: &str) -> String {
+        macro_rules! hmac {
+            ($ty:ident) => {{
+                let mut mac = Hmac::<$ty>::new_varkey(key.as_bytes()).unwrap();
+                mac.input(text.as_bytes());
+                format!("{:X}", mac.result().code())
+            }};
+        }
         match *self {
-            HashAlgorithm::HmacSha256 => {
-                let mut mac = Hmac::<Sha256>::new_varkey(key.as_bytes()).unwrap();
-                mac.input(text.as_bytes());
-                format!("{:X}", mac.result().code())
-            }
-            HashAlgorithm::HmacSha512 => {
-                let mut mac = Hmac::<Sha512>::new_varkey(key.as_bytes()).unwrap();
-                mac.input(text.as_bytes());
-                format!("{:X}", mac.result().code())
-            }
+            HashAlgorithm::HmacSha1 => hmac!(Sha1),
+            HashAlgorithm::HmacSha256 => hmac!(Sha256),
+            HashAlgorithm::HmacSha512 => hmac!(Sha512),
         }
     }
 }
 
+fn default_mask_char() -> char {
+    '*'
+}
+
 /// Defines how replacements happen.
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(untagged, rename_all = "snake_case")]
-pub(crate) enum Replacement {
-    /// Overwrites the matched groups with a mask.
+#[serde(tag = "method", rename_all = "camelCase")]
+pub(crate) enum Redaction {
+    /// Replaces the matched group with a new value.
+    #[serde(rename_all = "camelCase")]
+    Replace {
+        /// The replacement string.
+        new_value: Value,
+    },
+    /// Overwrites the matched value by masking.
+    #[serde(rename_all = "camelCase")]
     Mask {
         /// The character to mask with.
-        mask_with_char: char,
+        #[serde(default = "default_mask_char")]
+        mask_char: char,
         /// Characters to skip during masking to preserve structure.
         #[serde(default)]
         chars_to_ignore: String,
         /// Index range to mask in. Negative indices count from the string's end.
         #[serde(default)]
-        mask_range: (Option<i32>, Option<i32>),
+        range: (Option<i32>, Option<i32>),
     },
     /// Replaces the value with a hash
+    #[serde(rename_all = "camelCase")]
     Hash {
         /// The hash algorithm
-        hash: HashAlgorithm,
-        /// The secret key (in hexadecimal format)
+        #[serde(default)]
+        algorithm: HashAlgorithm,
+        /// The secret key
         key: String,
-    },
-    /// Replaces the matched group with a new value.
-    NewValue {
-        /// The replacement string.
-        new_value: Value,
     },
 }
 
@@ -144,30 +168,36 @@ fn in_range(range: (Option<i32>, Option<i32>), pos: usize, len: usize) -> bool {
     pos >= start && pos < end
 }
 
-impl Replacement {
+impl Redaction {
     fn insert_replacement_chunks(&self, text: &str, note: Note, output: &mut Vec<Chunk>) {
         match *self {
-            Replacement::Mask {
-                mask_with_char,
+            Redaction::Mask {
+                mask_char,
                 ref chars_to_ignore,
-                mask_range,
+                range,
             } => {
                 let chars_to_ignore: BTreeSet<char> = chars_to_ignore.chars().collect();
                 let mut buf = Vec::with_capacity(text.len());
 
                 for (idx, c) in text.chars().enumerate() {
-                    if in_range(mask_range, idx, text.len()) && !chars_to_ignore.contains(&c) {
-                        buf.push(mask_with_char);
+                    if in_range(range, idx, text.len()) && !chars_to_ignore.contains(&c) {
+                        buf.push(mask_char);
                     } else {
                         buf.push(c);
                     }
                 }
                 output.push(Chunk::Redaction(buf.into_iter().collect(), note));
             }
-            Replacement::Hash { ref hash, ref key } => {
-                output.push(Chunk::Redaction(hash.hash_value(text, key.as_str()), note));
+            Redaction::Hash {
+                ref algorithm,
+                ref key,
+            } => {
+                output.push(Chunk::Redaction(
+                    algorithm.hash_value(text, key.as_str()),
+                    note,
+                ));
             }
-            Replacement::NewValue { ref new_value } => {
+            Redaction::Replace { ref new_value } => {
                 output.push(Chunk::Redaction(new_value.to_string().into(), note));
             }
         }
@@ -179,7 +209,7 @@ impl Replacement {
         note: Note,
     ) -> Annotated<Value> {
         match *self {
-            Replacement::Mask { .. } => match annotated {
+            Redaction::Mask { .. } => match annotated {
                 Annotated(Some(value), meta) => {
                     let value_as_string = value.to_string();
                     let original_length = value_as_string.len();
@@ -193,11 +223,14 @@ impl Replacement {
                 }
                 annotated @ Annotated(None, _) => annotated.with_removed_value(Remark::new(note)),
             },
-            Replacement::Hash { ref hash, ref key } => match annotated {
+            Redaction::Hash {
+                ref algorithm,
+                ref key,
+            } => match annotated {
                 Annotated(Some(value), mut meta) => {
                     let value_as_string = value.to_string();
                     let original_length = value_as_string.len();
-                    let value = hash.hash_value(&value_as_string, key.as_str());
+                    let value = algorithm.hash_value(&value_as_string, key.as_str());
                     if value.len() != original_length && meta.original_length.is_none() {
                         meta.original_length = Some(original_length as u32);
                     }
@@ -205,7 +238,7 @@ impl Replacement {
                 }
                 annotated @ Annotated(None, _) => annotated.with_removed_value(Remark::new(note)),
             },
-            Replacement::NewValue { ref new_value } => {
+            Redaction::Replace { ref new_value } => {
                 annotated.set_value(Some(new_value.clone()));
                 annotated.meta_mut().remarks_mut().push(Remark::new(note));
                 annotated
@@ -219,7 +252,7 @@ impl Replacement {
 pub(crate) struct Rule {
     #[serde(flatten)]
     rule: RuleType,
-    replace_with: Option<Replacement>,
+    redaction: Option<Redaction>,
     note: Option<String>,
 }
 
@@ -237,15 +270,99 @@ pub struct RuleBasedPiiProcessor<'a> {
     applications: BTreeMap<PiiKind, Vec<(&'a str, &'a Rule)>>,
 }
 
+fn apply_regex(
+    rule: &Rule,
+    rule_id: &str,
+    chunks: Vec<Chunk>,
+    meta: Meta,
+    regex: &Regex,
+    replace_groups: Option<&BTreeSet<u8>>,
+) -> (Vec<Chunk>, Meta) {
+    let note = Note::new(rule_id.to_string(), rule.note.clone());
+    let mut search_string = String::new();
+    let mut replacement_chunks = vec![];
+    for chunk in chunks {
+        match chunk {
+            Chunk::Text(ref text) => search_string.push_str(&text.replace("\x00", "")),
+            chunk @ Chunk::Redaction(..) => {
+                replacement_chunks.push(chunk);
+                search_string.push('\x00');
+            }
+        }
+    }
+    replacement_chunks.reverse();
+    let mut rv: Vec<Chunk> = vec![];
+
+    fn process_text(text: &str, rv: &mut Vec<Chunk>, replacement_chunks: &mut Vec<Chunk>) {
+        if text.is_empty() {
+            return;
+        }
+        let mut pos = 0;
+        for piece in NULL_SPLIT_RE.find_iter(text) {
+            rv.push(Chunk::Text(text[pos..piece.start()].to_string().into()));
+            rv.push(replacement_chunks.pop().unwrap());
+            pos = piece.end();
+        }
+        rv.push(Chunk::Text(text[pos..].to_string().into()));
+    }
+
+    let mut pos = 0;
+    for m in regex.captures_iter(&search_string) {
+        let g0 = m.get(0).unwrap();
+
+        match replace_groups {
+            Some(groups) => {
+                for (idx, g) in m.iter().enumerate() {
+                    if idx == 0 {
+                        continue;
+                    }
+
+                    if let Some(g) = g {
+                        if groups.contains(&(idx as u8)) {
+                            process_text(
+                                &search_string[pos..g.start()],
+                                &mut rv,
+                                &mut replacement_chunks,
+                            );
+                            rule.insert_replacement_chunks(g.as_str(), note.clone(), &mut rv);
+                            pos = g.end();
+                        }
+                    }
+                }
+            }
+            None => {
+                process_text(
+                    &search_string[pos..g0.start()],
+                    &mut rv,
+                    &mut replacement_chunks,
+                );
+                rule.insert_replacement_chunks(g0.as_str(), note.clone(), &mut rv);
+                pos = g0.end();
+            }
+        }
+
+        process_text(
+            &search_string[pos..g0.end()],
+            &mut rv,
+            &mut replacement_chunks,
+        );
+        pos = g0.end();
+    }
+
+    process_text(&search_string[pos..], &mut rv, &mut replacement_chunks);
+
+    (rv, meta)
+}
+
 impl Rule {
     /// Inserts replacement chunks into the given chunk buffer.
     ///
-    /// If the rule is configured with `replace_with` then replacement chunks are
-    /// added to the buffer based on that information.  If `replace_with` is not
+    /// If the rule is configured with `redaction` then replacement chunks are
+    /// added to the buffer based on that information.  If `redaction` is not
     /// defined an empty redaction chunk is added with the supplied note.
     fn insert_replacement_chunks(&self, text: &str, note: Note, output: &mut Vec<Chunk>) {
-        if let Some(ref replace_with) = self.replace_with {
-            replace_with.insert_replacement_chunks(text, note, output);
+        if let Some(ref redaction) = self.redaction {
+            redaction.insert_replacement_chunks(text, note, output);
         } else {
             output.push(Chunk::Redaction("".to_string(), note));
         }
@@ -257,8 +374,8 @@ impl Rule {
     /// from the config.  If no replacement value is defined (which is likely) then
     /// then no value is set (null).  In either case the given note is recorded.
     fn replace_value(&self, annotated: Annotated<Value>, note: Note) -> Annotated<Value> {
-        if let Some(ref replace_with) = self.replace_with {
-            replace_with.set_replacement_value(annotated, note)
+        if let Some(ref redaction) = self.redaction {
+            redaction.set_replacement_value(annotated, note)
         } else {
             annotated.with_removed_value(Remark::new(note))
         }
@@ -274,96 +391,26 @@ impl Rule {
         chunks: Vec<Chunk>,
         meta: Meta,
     ) -> Result<(Vec<Chunk>, Meta), (Vec<Chunk>, Meta)> {
+        macro_rules! apply_regex {
+            ($regex:expr, $replace_groups:expr) => {
+                Ok(apply_regex(
+                    self,
+                    rule_id,
+                    chunks,
+                    meta,
+                    &*$regex,
+                    $replace_groups,
+                ))
+            };
+        }
         match self.rule {
             RuleType::Pattern {
                 ref pattern,
                 ref replace_groups,
-            } => {
-                let note = Note::new(rule_id.to_string(), self.note.clone());
-                let mut search_string = String::new();
-                let mut replacement_chunks = vec![];
-                for chunk in chunks {
-                    match chunk {
-                        Chunk::Text(ref text) => search_string.push_str(&text.replace("\x00", "")),
-                        chunk @ Chunk::Redaction(..) => {
-                            replacement_chunks.push(chunk);
-                            search_string.push('\x00');
-                        }
-                    }
-                }
-                replacement_chunks.reverse();
-                let mut rv: Vec<Chunk> = vec![];
-
-                fn process_text(
-                    text: &str,
-                    rv: &mut Vec<Chunk>,
-                    replacement_chunks: &mut Vec<Chunk>,
-                ) {
-                    if text.is_empty() {
-                        return;
-                    }
-                    let mut pos = 0;
-                    for piece in NULL_SPLIT_RE.find_iter(text) {
-                        rv.push(Chunk::Text(text[pos..piece.start()].to_string().into()));
-                        rv.push(replacement_chunks.pop().unwrap());
-                        pos = piece.end();
-                    }
-                    rv.push(Chunk::Text(text[pos..].to_string().into()));
-                }
-
-                let mut pos = 0;
-                for m in pattern.0.captures_iter(&search_string) {
-                    let g0 = m.get(0).unwrap();
-
-                    match *replace_groups {
-                        Some(ref groups) => {
-                            for (idx, g) in m.iter().enumerate() {
-                                if idx == 0 {
-                                    continue;
-                                }
-
-                                if let Some(g) = g {
-                                    if groups.contains(&(idx as u8)) {
-                                        process_text(
-                                            &search_string[pos..g.start()],
-                                            &mut rv,
-                                            &mut replacement_chunks,
-                                        );
-                                        self.insert_replacement_chunks(
-                                            g.as_str(),
-                                            note.clone(),
-                                            &mut rv,
-                                        );
-                                        pos = g.end();
-                                    }
-                                }
-                            }
-                        }
-                        None => {
-                            process_text(
-                                &search_string[pos..g0.start()],
-                                &mut rv,
-                                &mut replacement_chunks,
-                            );
-                            self.insert_replacement_chunks(g0.as_str(), note.clone(), &mut rv);
-                            pos = g0.end();
-                        }
-                    }
-
-                    process_text(
-                        &search_string[pos..g0.end()],
-                        &mut rv,
-                        &mut replacement_chunks,
-                    );
-                    pos = g0.end();
-                }
-
-                process_text(&search_string[pos..], &mut rv, &mut replacement_chunks);
-
-                Ok((rv, meta))
-            }
+            } => apply_regex!(&pattern.0, replace_groups.as_ref()),
+            RuleType::Email => apply_regex!(detectors::EMAIL_REGEX, None),
             // no special handling for strings, falls back to `process_value`
-            RuleType::Remove | RuleType::RemovePairValue { .. } => Err((chunks, meta)),
+            RuleType::Remove | RuleType::RemovePair { .. } => Err((chunks, meta)),
         }
     }
 
@@ -380,12 +427,12 @@ impl Rule {
         let _kind = kind;
         match self.rule {
             // pattern matches are not implemented for non strings
-            RuleType::Pattern { .. } => Err(value),
+            RuleType::Pattern { .. } | RuleType::Email => Err(value),
             RuleType::Remove => {
                 let note = Note::new(rule_id.to_string(), self.note.clone());
                 return Ok(self.replace_value(value, note));
             }
-            RuleType::RemovePairValue { ref key_pattern } => {
+            RuleType::RemovePair { ref key_pattern } => {
                 if let Some(ref path) = value.meta().path() {
                     if key_pattern.0.is_match(&path.to_string()) {
                         let note = Note::new(rule_id.to_string(), self.note.clone());
@@ -482,64 +529,6 @@ impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
 }
 
 #[test]
-fn test_config() {
-    use serde_json;
-    let _cfg: RuleConfig = serde_json::from_str(r#"{
-        "rules": {
-            "path_username": {
-                "type": "pattern",
-                "pattern": "(?:\b[a-zA-Z]:)?(?:[/\\\\](users|home)[/\\\\])([^/\\\\]+)",
-                "replace_groups": [1],
-                "replace_with": {
-                    "new_value": "[username]"
-                },
-                "note": "username in path"
-            },
-            "creditcard_numbers": {
-                "type": "pattern",
-                "pattern": "\\d{4}[- ]?\\d{4,6}[- ]?\\d{4,5}(?:[- ]?\\d{4})",
-                "replace_with": {
-                    "mask_with_char": "*",
-                    "chars_to_ignore": "- ",
-                    "mask_range": [6, -4]
-                },
-                "note": "creditcard number"
-            },
-            "email_address": {
-                "type": "pattern",
-                "pattern": "[a-z0-9!#$%&'*+/=?^_`{|}~.-]+@[a-z0-9-]+(\\.[a-z0-9-]+)*",
-                "replace_with": {
-                    "mask_with_char": "*",
-                    "chars_to_ignore": "@."
-                },
-                "note": "potential email address"
-            },
-            "ipv4": {
-                "type": "pattern",
-                "pattern": "\\b((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\b",
-                "replace_with": {
-                    "mask_with_char": "*",
-                    "chars_to_ignore": "."
-                },
-                "note": "ip address"
-            },
-            "password_pairs": {
-                "type": "remove_pair_value",
-                "key_pattern": "password|pw|pword|pwd",
-                "replace_with": {
-                    "new_value": "[password]"
-                },
-                "note": "password"
-            }
-        },
-        "applications": {
-            "freeform": ["path_username", "creditcard_numbers", "email_address", "ipv4"],
-            "databag": ["path_username", "creditcard_numbers", "email_address", "ipv4", "password_pairs"]
-        }
-    }"#).unwrap();
-}
-
-#[test]
 fn test_basic_stripping() {
     use common::Map;
     use meta::Remark;
@@ -551,36 +540,40 @@ fn test_basic_stripping() {
             "path_username": {
                 "type": "pattern",
                 "pattern": "(?i)(?:\b[a-zA-Z]:)?(?:[/\\\\](?:users|home)[/\\\\])([^/\\\\\\s]+)",
-                "replace_groups": [1],
-                "replace_with": {
-                    "new_value": "[username]"
+                "replaceGroups": [1],
+                "redaction": {
+                    "method": "replace",
+                    "newValue": "[username]"
                 },
                 "note": "username in path"
             },
             "creditcard_number": {
                 "type": "pattern",
                 "pattern": "\\d{4}[- ]?\\d{4,6}[- ]?\\d{4,5}(?:[- ]?\\d{4})",
-                "replace_with": {
-                    "mask_with_char": "*",
-                    "chars_to_ignore": "- ",
-                    "mask_range": [0, -4]
+                "redaction": {
+                    "method": "mask",
+                    "maskChar": "*",
+                    "charsToIgnore": "- ",
+                    "range": [0, -4]
                 },
                 "note": "creditcard number"
             },
             "email_address": {
                 "type": "pattern",
                 "pattern": "[a-z0-9!#$%&'*+/=?^_`{|}~.-]+@[a-z0-9-]+(\\.[a-z0-9-]+)*",
-                "replace_with": {
-                    "mask_with_char": "*",
-                    "chars_to_ignore": "@."
+                "redaction": {
+                    "method": "mask",
+                    "maskChar": "*",
+                    "charsToIgnore": "@."
                 },
                 "note": "potential email address"
             },
             "remove_foo": {
-                "type": "remove_pair_value",
-                "key_pattern": "foo",
-                "replace_with": {
-                    "new_value": "whatever"
+                "type": "removePair",
+                "keyPattern": "foo",
+                "redaction": {
+                    "method": "replace",
+                    "newValue": "whatever"
                 }
             },
             "remove_ip": {
@@ -590,8 +583,9 @@ fn test_basic_stripping() {
             "hash_ip": {
                 "type": "pattern",
                 "pattern": "\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}",
-                "replace_with": {
-                    "hash": "HMAC-SHA256",
+                "redaction": {
+                    "method": "hash",
+                    "algorithm": "HMAC-SHA256",
                     "key": "DEADBEEF1234"
                 },
                 "note": "IP address hashed"

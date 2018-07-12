@@ -17,6 +17,7 @@ extern crate serde;
 extern crate serde_derive;
 extern crate hmac;
 extern crate serde_json;
+extern crate sha1;
 extern crate sha2;
 extern crate uuid;
 
@@ -31,6 +32,7 @@ mod macros;
 
 mod chunk;
 mod common;
+mod detectors;
 mod meta;
 mod meta_ser;
 mod processor;
