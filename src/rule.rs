@@ -136,7 +136,7 @@ pub(crate) enum Redaction {
     #[serde(rename_all = "camelCase")]
     Replace {
         /// The replacement string.
-        new_value: Value,
+        text: String,
     },
     /// Overwrites the matched value by masking.
     #[serde(rename_all = "camelCase")]
@@ -205,8 +205,8 @@ impl Redaction {
                     note,
                 ));
             }
-            Redaction::Replace { ref new_value } => {
-                output.push(Chunk::Redaction(new_value.to_string().into(), note));
+            Redaction::Replace { ref text } => {
+                output.push(Chunk::Redaction(text.clone(), note));
             }
         }
     }
@@ -246,8 +246,8 @@ impl Redaction {
                 }
                 annotated @ Annotated(None, _) => annotated.with_removed_value(Remark::new(note)),
             },
-            Redaction::Replace { ref new_value } => {
-                annotated.set_value(Some(new_value.clone()));
+            Redaction::Replace { ref text } => {
+                annotated.set_value(Some(Value::String(text.clone())));
                 annotated.meta_mut().remarks_mut().push(Remark::new(note));
                 annotated
             }
@@ -259,13 +259,13 @@ impl Redaction {
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct RuleSpec {
     #[serde(flatten)]
-    ty: RuleType,
-    redaction: Option<Redaction>,
-    note: Option<String>,
+    pub(crate) ty: RuleType,
+    pub(crate) redaction: Option<Redaction>,
+    pub(crate) note: Option<String>,
 }
 
 /// A rule is a rule config plus id.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Rule<'a> {
     id: &'a str,
     spec: &'a RuleSpec,
@@ -481,7 +481,9 @@ impl<'a> RuleBasedPiiProcessor<'a> {
         for (&pii_kind, cfg_applications) in &cfg.applications {
             let mut rules = vec![];
             for application in cfg_applications {
-                if let Some(rule_spec) = cfg.rules.get(application) {
+                if let Some(rule) = WELL_KNOWN_RULES.get(application.as_str()) {
+                    rules.push((*rule).clone());
+                } else if let Some(rule_spec) = cfg.rules.get(application) {
                     rules.push(Rule {
                         id: application.as_str(),
                         spec: rule_spec,
@@ -559,6 +561,79 @@ impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
     }
 }
 
+macro_rules! declare_well_known_rules {
+    ($($rule_id:expr => $spec:expr;)*) => {
+        lazy_static! {
+            static ref WELL_KNOWN_RULES: BTreeMap<&'static str, Rule<'static>> = {
+                let mut map = BTreeMap::new();
+                $(
+                    map.insert($rule_id, Rule {
+                        id: $rule_id,
+                        spec: Box::leak(Box::new($spec)),
+                    });
+                )*
+                map
+            };
+        }
+    }
+}
+
+declare_well_known_rules! {
+    "@ip:mask" => RuleSpec {
+        ty: RuleType::Ip,
+        redaction: Some(Redaction::Mask {
+            mask_char: '*',
+            chars_to_ignore: ".:".into(),
+            range: (None, None),
+        }),
+        note: Some("ip address".into()),
+    };
+
+    "@ip:strip" => RuleSpec {
+        ty: RuleType::Ip,
+        redaction: Some(Redaction::Replace {
+            text: "[ip]".into(),
+        }),
+        note: Some("ip address".into()),
+    };
+
+    "@email:mask" => RuleSpec {
+        ty: RuleType::Email,
+        redaction: Some(Redaction::Mask {
+            mask_char: '*',
+            chars_to_ignore: ".@".into(),
+            range: (None, None),
+        }),
+        note: Some("email address".into()),
+    };
+
+    "@email:strip" => RuleSpec {
+        ty: RuleType::Email,
+        redaction: Some(Redaction::Replace {
+            text: "[email]".into(),
+        }),
+        note: Some("email address".into()),
+    };
+
+    "@creditcard:mask" => RuleSpec {
+        ty: RuleType::Creditcard,
+        redaction: Some(Redaction::Mask {
+            mask_char: '*',
+            chars_to_ignore: " -".into(),
+            range: (None, Some(-4)),
+        }),
+        note: Some("creditcard number".into()),
+    };
+
+    "@creditcard:strip" => RuleSpec {
+        ty: RuleType::Creditcard,
+        redaction: Some(Redaction::Replace {
+            text: "[creditcard]".into(),
+        }),
+        note: Some("creditcard number".into()),
+    };
+}
+
 #[test]
 fn test_basic_stripping() {
     use common::Map;
@@ -574,7 +649,7 @@ fn test_basic_stripping() {
                 "replaceGroups": [1],
                 "redaction": {
                     "method": "replace",
-                    "newValue": "[username]"
+                    "text": "[username]"
                 },
                 "note": "username in path"
             },
@@ -604,7 +679,7 @@ fn test_basic_stripping() {
                 "keyPattern": "foo",
                 "redaction": {
                     "method": "replace",
-                    "newValue": "whatever"
+                    "text": "whatever"
                 }
             },
             "remove_ip": {
