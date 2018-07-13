@@ -641,11 +641,6 @@ declare_well_known_rules! {
         }),
     };
 
-    "@ip:remove" => RuleSpec {
-        ty: RuleType::Ip,
-        redaction: None,
-    };
-
     "@ip:hash" => RuleSpec {
         ty: RuleType::Ip,
         redaction: Some(Redaction::Hash {
@@ -670,11 +665,6 @@ declare_well_known_rules! {
         }),
     };
 
-    "@email:remove" => RuleSpec {
-        ty: RuleType::Email,
-        redaction: None,
-    };
-
     "@email:hash" => RuleSpec {
         ty: RuleType::Email,
         redaction: Some(Redaction::Hash {
@@ -697,11 +687,6 @@ declare_well_known_rules! {
         redaction: Some(Redaction::Replace {
             text: "[creditcard]".into(),
         }),
-    };
-
-    "@creditcard:remove" => RuleSpec {
-        ty: RuleType::Creditcard,
-        redaction: None,
     };
 
     "@creditcard:hash" => RuleSpec {
