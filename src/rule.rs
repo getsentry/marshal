@@ -14,7 +14,7 @@ use sha2::{Sha256, Sha512};
 use chunk::{self, Chunk};
 use common::Value;
 use detectors;
-use meta::{Annotated, Meta, Note, Remark};
+use meta::{Annotated, Meta, Remark, RemarkType};
 use processor::{PiiKind, PiiProcessor, ProcessAnnotatedValue, ValueInfo};
 
 lazy_static! {
@@ -177,7 +177,7 @@ fn in_range(range: (Option<i32>, Option<i32>), pos: usize, len: usize) -> bool {
 }
 
 impl Redaction {
-    fn insert_replacement_chunks(&self, text: &str, note: Note, output: &mut Vec<Chunk>) {
+    fn insert_replacement_chunks(&self, rule_id: &str, text: &str, output: &mut Vec<Chunk>) {
         match *self {
             Redaction::Mask {
                 mask_char,
@@ -194,27 +194,36 @@ impl Redaction {
                         buf.push(c);
                     }
                 }
-                output.push(Chunk::Redaction(buf.into_iter().collect(), note));
+                output.push(Chunk::Redaction {
+                    ty: RemarkType::Masked,
+                    rule_id: rule_id.into(),
+                    text: buf.into_iter().collect(),
+                })
             }
             Redaction::Hash {
                 ref algorithm,
                 ref key,
             } => {
-                output.push(Chunk::Redaction(
-                    algorithm.hash_value(text, key.as_str()),
-                    note,
-                ));
+                output.push(Chunk::Redaction {
+                    ty: RemarkType::Pseudonymized,
+                    rule_id: rule_id.into(),
+                    text: algorithm.hash_value(text, key.as_str()),
+                });
             }
             Redaction::Replace { ref text } => {
-                output.push(Chunk::Redaction(text.clone(), note));
+                output.push(Chunk::Redaction {
+                    ty: RemarkType::Substituted,
+                    rule_id: rule_id.into(),
+                    text: text.clone(),
+                });
             }
         }
     }
 
     fn set_replacement_value(
         &self,
+        rule_id: &str,
         mut annotated: Annotated<Value>,
-        note: Note,
     ) -> Annotated<Value> {
         match *self {
             Redaction::Mask { .. } => match annotated {
@@ -222,14 +231,16 @@ impl Redaction {
                     let value_as_string = value.to_string();
                     let original_length = value_as_string.len();
                     let mut output = vec![];
-                    self.insert_replacement_chunks(&value_as_string, note, &mut output);
+                    self.insert_replacement_chunks(rule_id, &value_as_string, &mut output);
                     let (value, mut meta) = chunk::chunks_to_string(output, meta);
                     if value.len() != original_length && meta.original_length.is_none() {
                         meta.original_length = Some(original_length as u32);
                     }
                     Annotated(Some(Value::String(value)), meta)
                 }
-                annotated @ Annotated(None, _) => annotated.with_removed_value(Remark::new(note)),
+                annotated @ Annotated(None, _) => {
+                    annotated.with_removed_value(Remark::new(RemarkType::Masked, rule_id))
+                }
             },
             Redaction::Hash {
                 ref algorithm,
@@ -244,11 +255,16 @@ impl Redaction {
                     }
                     Annotated(Some(Value::String(value)), meta)
                 }
-                annotated @ Annotated(None, _) => annotated.with_removed_value(Remark::new(note)),
+                annotated @ Annotated(None, _) => {
+                    annotated.with_removed_value(Remark::new(RemarkType::Pseudonymized, rule_id))
+                }
             },
             Redaction::Replace { ref text } => {
                 annotated.set_value(Some(Value::String(text.clone())));
-                annotated.meta_mut().remarks_mut().push(Remark::new(note));
+                annotated
+                    .meta_mut()
+                    .remarks_mut()
+                    .push(Remark::new(RemarkType::Substituted, rule_id));
                 annotated
             }
         }
@@ -286,22 +302,20 @@ pub struct RuleBasedPiiProcessor<'a> {
 }
 
 impl<'a> Rule<'a> {
-    /// Creates a new note.
-    pub fn create_note(&self) -> Note {
-        Note::new(self.id.to_string(), self.spec.note.clone())
-    }
-
     /// Inserts replacement chunks into the given chunk buffer.
     ///
     /// If the rule is configured with `redaction` then replacement chunks are
     /// added to the buffer based on that information.  If `redaction` is not
     /// defined an empty redaction chunk is added with the supplied note.
     fn insert_replacement_chunks(&self, text: &str, output: &mut Vec<Chunk>) {
-        let note = self.create_note();
         if let Some(ref redaction) = self.spec.redaction {
-            redaction.insert_replacement_chunks(text, note, output);
+            redaction.insert_replacement_chunks(self.id, text, output);
         } else {
-            output.push(Chunk::Redaction("".to_string(), note));
+            output.push(Chunk::Redaction {
+                rule_id: self.id.to_string(),
+                ty: RemarkType::Removed,
+                text: "".to_string(),
+            });
         }
     }
 
@@ -311,11 +325,10 @@ impl<'a> Rule<'a> {
     /// from the config.  If no replacement value is defined (which is likely) then
     /// then no value is set (null).  In either case the given note is recorded.
     fn replace_value(&self, annotated: Annotated<Value>) -> Annotated<Value> {
-        let note = self.create_note();
         if let Some(ref redaction) = self.spec.redaction {
-            redaction.set_replacement_value(annotated, note)
+            redaction.set_replacement_value(self.id, annotated)
         } else {
-            annotated.with_removed_value(Remark::new(note))
+            annotated.with_removed_value(Remark::new(RemarkType::Removed, self.id))
         }
     }
 
@@ -369,8 +382,8 @@ impl<'a> Rule<'a> {
         let mut replacement_chunks = vec![];
         for chunk in chunks {
             match chunk {
-                Chunk::Text(ref text) => search_string.push_str(&text.replace("\x00", "")),
-                chunk @ Chunk::Redaction(..) => {
+                Chunk::Text { ref text } => search_string.push_str(&text.replace("\x00", "")),
+                chunk @ Chunk::Redaction { .. } => {
                     replacement_chunks.push(chunk);
                     search_string.push('\x00');
                 }
@@ -385,11 +398,15 @@ impl<'a> Rule<'a> {
             }
             let mut pos = 0;
             for piece in NULL_SPLIT_RE.find_iter(text) {
-                rv.push(Chunk::Text(text[pos..piece.start()].to_string().into()));
+                rv.push(Chunk::Text {
+                    text: text[pos..piece.start()].to_string().into(),
+                });
                 rv.push(replacement_chunks.pop().unwrap());
                 pos = piece.end();
             }
-            rv.push(Chunk::Text(text[pos..].to_string().into()));
+            rv.push(Chunk::Text {
+                text: text[pos..].to_string().into(),
+            });
         }
 
         let mut pos = 0;
@@ -676,11 +693,7 @@ fn test_basic_stripping() {
             },
             "remove_foo": {
                 "type": "removePair",
-                "keyPattern": "foo",
-                "redaction": {
-                    "method": "replace",
-                    "text": "whatever"
-                }
+                "keyPattern": "foo"
             },
             "remove_ip": {
                 "type": "remove",
@@ -742,19 +755,10 @@ fn test_basic_stripping() {
         new_event.message.meta(),
         &Meta {
             remarks: vec![
-                Remark::with_range(
-                    Note::new("email_address", Some("potential email address")),
-                    (6, 21),
-                ),
-                Remark::with_range(
-                    Note::new("creditcard_number", Some("creditcard number")),
-                    (48, 67),
-                ),
-                Remark::with_range(
-                    Note::new("path_username", Some("username in path")),
-                    (98, 108),
-                ),
-                Remark::with_range(Note::new("hash_ip", Some("IP address hashed")), (137, 201)),
+                Remark::with_range(RemarkType::Masked, "email_address", (6, 21)),
+                Remark::with_range(RemarkType::Masked, "creditcard_number", (48, 67)),
+                Remark::with_range(RemarkType::Substituted, "path_username", (98, 108)),
+                Remark::with_range(RemarkType::Pseudonymized, "hash_ip", (137, 201)),
             ],
             errors: vec![],
             original_length: Some(142),
@@ -767,7 +771,7 @@ fn test_basic_stripping() {
     assert_eq!(
         foo.meta(),
         &Meta {
-            remarks: vec![Remark::new(Note::well_known("remove_foo"))],
+            remarks: vec![Remark::new(RemarkType::Removed, "remove_foo")],
             errors: vec![],
             original_length: None,
             path: None,
@@ -779,10 +783,7 @@ fn test_basic_stripping() {
     assert_eq!(
         ip.meta(),
         &Meta {
-            remarks: vec![Remark::new(Note::new(
-                "remove_ip",
-                Some("IP address removed"),
-            ))],
+            remarks: vec![Remark::new(RemarkType::Removed, "remove_ip")],
             errors: vec![],
             original_length: None,
             path: None,
@@ -790,5 +791,5 @@ fn test_basic_stripping() {
     );
 
     let value = processed_event.to_string().unwrap();
-    assert_eq!(value, "{\"message\":\"Hello *****@*****.***.  You signed up with card ****-****-****-1234. Your home folder is C:\\\\Users\\\\[username] Look at our compliance from 5A2DF387CD660E9F3E0AB20F9E7805450D56C5DACE9B959FC620C336E2B5D09A\",\"extra\":{\"bar\":true,\"foo\":null},\"ip\":null,\"metadata\":{\"extra\":{\"foo\":{\"\":{\"remarks\":[[[\"remove_foo\"]]]}}},\"ip\":{\"\":{\"remarks\":[[[\"remove_ip\",\"IP address removed\"]]]}},\"message\":{\"\":{\"original_length\":142,\"remarks\":[[[\"email_address\",\"potential email address\"],[6,21]],[[\"creditcard_number\",\"creditcard number\"],[48,67]],[[\"path_username\",\"username in path\"],[98,108]],[[\"hash_ip\",\"IP address hashed\"],[137,201]]]}}}}");
+    assert_eq!(value, "{\"message\":\"Hello *****@*****.***.  You signed up with card ****-****-****-1234. Your home folder is C:\\\\Users\\\\[username] Look at our compliance from 5A2DF387CD660E9F3E0AB20F9E7805450D56C5DACE9B959FC620C336E2B5D09A\",\"extra\":{\"bar\":true,\"foo\":null},\"ip\":null,\"metadata\":{\"extra\":{\"foo\":{\"\":{\"remarks\":[[\"remove_foo\",\"x\"]]}}},\"ip\":{\"\":{\"remarks\":[[\"remove_ip\",\"x\"]]}},\"message\":{\"\":{\"original_length\":142,\"remarks\":[[\"email_address\",\"m\",[6,21]],[\"creditcard_number\",\"m\",[48,67]],[\"path_username\",\"s\",[98,108]],[\"hash_ip\",\"p\",[137,201]]]}}}}");
 }

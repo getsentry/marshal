@@ -387,7 +387,7 @@ fn test_basic_processing() {
 
 #[test]
 fn test_pii_processing() {
-    use meta::Note;
+    use meta::RemarkType;
 
     #[derive(ProcessAnnotatedValue)]
     struct Event {
@@ -409,7 +409,7 @@ fn test_pii_processing() {
             use meta::Remark;
             match (annotated, pii_kind) {
                 (annotated, PiiKind::Id) => {
-                    annotated.with_removed_value(Remark::well_known("@id-removed"))
+                    annotated.with_removed_value(Remark::new(RemarkType::Removed, "@id-removed"))
                 }
                 (annotated, _) => annotated,
             }
@@ -429,8 +429,5 @@ fn test_pii_processing() {
     );
     let id = new_event.0.unwrap().id;
     assert!(id.value().is_none());
-    assert_eq!(
-        id.meta().remarks().next().unwrap().note(),
-        &Note::well_known("@id-removed")
-    );
+    assert_eq!(id.meta().remarks().next().unwrap().rule_id(), "@id-removed");
 }

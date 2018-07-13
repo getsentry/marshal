@@ -1,22 +1,32 @@
 //! Utilities for dealing with annotated strings.
 
-use meta::{Meta, Note, Remark};
+use meta::{Meta, Remark, RemarkType};
 
 /// A type for dealing with chunks of annotated text.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Chunk {
     /// Unmodified text chunk.
-    Text(String),
+    Text {
+        /// The text value of the chunk
+        text: String,
+    },
     /// Redacted text chunk with a note.
-    Redaction(String, Note),
+    Redaction {
+        /// The redacted text value
+        text: String,
+        /// The rule that crated this redaction
+        rule_id: String,
+        /// Type type of remark for this redaction
+        ty: RemarkType,
+    },
 }
 
 impl Chunk {
     /// The text of this chunk.
     pub fn as_str(&self) -> &str {
         match *self {
-            Chunk::Text(ref text) => &text,
-            Chunk::Redaction(ref text, ..) => &text,
+            Chunk::Text { ref text } => &text,
+            Chunk::Redaction { ref text, .. } => &text,
         }
     }
 
@@ -39,13 +49,19 @@ pub fn chunks_from_str(text: &str, meta: &Meta) -> Vec<Chunk> {
 
         if start > pos {
             if let Some(piece) = text.get(pos..start) {
-                rv.push(Chunk::Text(piece.to_string()));
+                rv.push(Chunk::Text {
+                    text: piece.to_string(),
+                });
             } else {
                 break;
             }
         }
         if let Some(piece) = text.get(start..end) {
-            rv.push(Chunk::Redaction(piece.to_string(), remark.note().clone()));
+            rv.push(Chunk::Redaction {
+                text: piece.to_string(),
+                rule_id: remark.rule_id().into(),
+                ty: remark.ty(),
+            });
         } else {
             break;
         }
@@ -54,7 +70,9 @@ pub fn chunks_from_str(text: &str, meta: &Meta) -> Vec<Chunk> {
 
     if pos < text.len() {
         if let Some(piece) = text.get(pos..) {
-            rv.push(Chunk::Text(piece.to_string()));
+            rv.push(Chunk::Text {
+                text: piece.to_string(),
+            });
         }
     }
 
@@ -70,8 +88,11 @@ pub fn chunks_to_string(chunks: Vec<Chunk>, mut meta: Meta) -> (String, Meta) {
     for chunk in chunks {
         let new_pos = pos + chunk.len();
         rv.push_str(chunk.as_str());
-        if let Chunk::Redaction(_, note) = chunk {
-            remarks.push(Remark::with_range(note, (pos, new_pos)));
+        if let Chunk::Redaction {
+            ref rule_id, ty, ..
+        } = chunk
+        {
+            remarks.push(Remark::with_range(ty, rule_id.clone(), (pos, new_pos)));
         }
         pos = new_pos;
     }
@@ -86,7 +107,8 @@ fn test_chunking() {
         "Hello Peter, my email address is ****@*****.com. See you",
         &Meta {
             remarks: vec![Remark::with_range(
-                Note::well_known("@email-address"),
+                RemarkType::Masked,
+                "@email:strip",
                 (33, 47),
             )],
             ..Default::default()
@@ -96,9 +118,17 @@ fn test_chunking() {
     assert_eq!(
         chunks,
         vec![
-            Chunk::Text("Hello Peter, my email address is ".into()),
-            Chunk::Redaction("****@*****.com".into(), Note::well_known("@email-address")),
-            Chunk::Text(". See you".into()),
+            Chunk::Text {
+                text: "Hello Peter, my email address is ".into(),
+            },
+            Chunk::Redaction {
+                ty: RemarkType::Masked,
+                text: "****@*****.com".into(),
+                rule_id: "@email:strip".into(),
+            },
+            Chunk::Text {
+                text: ". See you".into(),
+            },
         ]
     );
 
@@ -108,7 +138,8 @@ fn test_chunking() {
             "Hello Peter, my email address is ****@*****.com. See you".into(),
             Meta {
                 remarks: vec![Remark::with_range(
-                    Note::well_known("@email-address"),
+                    RemarkType::Masked,
+                    "@email:strip",
                     (33, 47),
                 )],
                 ..Default::default()
