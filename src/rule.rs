@@ -103,7 +103,7 @@ pub enum HashAlgorithm {
 
 impl Default for HashAlgorithm {
     fn default() -> HashAlgorithm {
-        HashAlgorithm::HmacSha256
+        HashAlgorithm::HmacSha1
     }
 }
 
@@ -157,8 +157,8 @@ pub(crate) enum Redaction {
         /// The hash algorithm
         #[serde(default)]
         algorithm: HashAlgorithm,
-        /// The secret key
-        key: String,
+        /// The secret key (if not to use the default)
+        key: Option<String>,
     },
 }
 
@@ -177,7 +177,7 @@ fn in_range(range: (Option<i32>, Option<i32>), pos: usize, len: usize) -> bool {
 }
 
 impl Redaction {
-    fn insert_replacement_chunks(&self, rule_id: &str, text: &str, output: &mut Vec<Chunk>) {
+    fn insert_replacement_chunks(&self, rule: &Rule, text: &str, output: &mut Vec<Chunk>) {
         match *self {
             Redaction::Mask {
                 mask_char,
@@ -196,24 +196,21 @@ impl Redaction {
                 }
                 output.push(Chunk::Redaction {
                     ty: RemarkType::Masked,
-                    rule_id: rule_id.into(),
+                    rule_id: rule.rule_id().into(),
                     text: buf.into_iter().collect(),
                 })
             }
-            Redaction::Hash {
-                ref algorithm,
-                ref key,
-            } => {
+            Redaction::Hash { ref algorithm, .. } => {
                 output.push(Chunk::Redaction {
                     ty: RemarkType::Pseudonymized,
-                    rule_id: rule_id.into(),
-                    text: algorithm.hash_value(text, key.as_str()),
+                    rule_id: rule.rule_id().into(),
+                    text: algorithm.hash_value(text, rule.hash_key()),
                 });
             }
             Redaction::Replace { ref text } => {
                 output.push(Chunk::Redaction {
                     ty: RemarkType::Substituted,
-                    rule_id: rule_id.into(),
+                    rule_id: rule.rule_id().into(),
                     text: text.clone(),
                 });
             }
@@ -222,7 +219,7 @@ impl Redaction {
 
     fn set_replacement_value(
         &self,
-        rule_id: &str,
+        rule: &Rule,
         mut annotated: Annotated<Value>,
     ) -> Annotated<Value> {
         match *self {
@@ -231,7 +228,7 @@ impl Redaction {
                     let value_as_string = value.to_string();
                     let original_length = value_as_string.len();
                     let mut output = vec![];
-                    self.insert_replacement_chunks(rule_id, &value_as_string, &mut output);
+                    self.insert_replacement_chunks(rule, &value_as_string, &mut output);
                     let (value, mut meta) = chunk::chunks_to_string(output, meta);
                     if value.len() != original_length && meta.original_length.is_none() {
                         meta.original_length = Some(original_length as u32);
@@ -239,32 +236,28 @@ impl Redaction {
                     Annotated(Some(Value::String(value)), meta)
                 }
                 annotated @ Annotated(None, _) => {
-                    annotated.with_removed_value(Remark::new(RemarkType::Masked, rule_id))
+                    annotated.with_removed_value(Remark::new(RemarkType::Masked, rule.rule_id()))
                 }
             },
-            Redaction::Hash {
-                ref algorithm,
-                ref key,
-            } => match annotated {
+            Redaction::Hash { ref algorithm, .. } => match annotated {
                 Annotated(Some(value), mut meta) => {
                     let value_as_string = value.to_string();
                     let original_length = value_as_string.len();
-                    let value = algorithm.hash_value(&value_as_string, key.as_str());
+                    let value = algorithm.hash_value(&value_as_string, rule.hash_key());
                     if value.len() != original_length && meta.original_length.is_none() {
                         meta.original_length = Some(original_length as u32);
                     }
                     Annotated(Some(Value::String(value)), meta)
                 }
-                annotated @ Annotated(None, _) => {
-                    annotated.with_removed_value(Remark::new(RemarkType::Pseudonymized, rule_id))
-                }
+                annotated @ Annotated(None, _) => annotated
+                    .with_removed_value(Remark::new(RemarkType::Pseudonymized, rule.rule_id())),
             },
             Redaction::Replace { ref text } => {
                 annotated.set_value(Some(Value::String(text.clone())));
                 annotated
                     .meta_mut()
                     .remarks_mut()
-                    .push(Remark::new(RemarkType::Substituted, rule_id));
+                    .push(Remark::new(RemarkType::Substituted, rule.rule_id()));
                 annotated
             }
         }
@@ -277,7 +270,6 @@ pub(crate) struct RuleSpec {
     #[serde(flatten)]
     pub(crate) ty: RuleType,
     pub(crate) redaction: Option<Redaction>,
-    pub(crate) note: Option<String>,
 }
 
 /// A rule is a rule config plus id.
@@ -285,23 +277,58 @@ pub(crate) struct RuleSpec {
 pub(crate) struct Rule<'a> {
     id: &'a str,
     spec: &'a RuleSpec,
+    cfg: &'a PiiConfig,
+}
+
+/// Common config vars.
+#[derive(Serialize, Deserialize, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Vars {
+    /// The default secret key for hashing operations.
+    hash_key: Option<String>,
 }
 
 /// A set of named rule configurations.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct RuleConfig {
+pub struct PiiConfig {
     rules: BTreeMap<String, RuleSpec>,
+    #[serde(default)]
+    vars: Vars,
     #[serde(default)]
     applications: BTreeMap<PiiKind, Vec<String>>,
 }
 
 /// A PII processor that uses JSON rules.
 pub struct RuleBasedPiiProcessor<'a> {
-    cfg: &'a RuleConfig,
+    cfg: &'a PiiConfig,
     applications: BTreeMap<PiiKind, Vec<Rule<'a>>>,
 }
 
 impl<'a> Rule<'a> {
+    /// The rule ID.
+    pub fn rule_id(&self) -> &str {
+        &self.id
+    }
+
+    /// Return a reference to the rule config.
+    pub fn config(&self) -> &PiiConfig {
+        self.cfg
+    }
+
+    /// Returns the hmac config key.
+    pub fn hash_key(&self) -> &str {
+        if let Some(Redaction::Hash {
+            key: Some(ref key), ..
+        }) = self.spec.redaction
+        {
+            key.as_str()
+        } else if let Some(ref key) = self.config().vars.hash_key {
+            key.as_str()
+        } else {
+            ""
+        }
+    }
+
     /// Inserts replacement chunks into the given chunk buffer.
     ///
     /// If the rule is configured with `redaction` then replacement chunks are
@@ -309,10 +336,10 @@ impl<'a> Rule<'a> {
     /// defined an empty redaction chunk is added with the supplied note.
     fn insert_replacement_chunks(&self, text: &str, output: &mut Vec<Chunk>) {
         if let Some(ref redaction) = self.spec.redaction {
-            redaction.insert_replacement_chunks(self.id, text, output);
+            redaction.insert_replacement_chunks(self, text, output);
         } else {
             output.push(Chunk::Redaction {
-                rule_id: self.id.to_string(),
+                rule_id: self.rule_id().to_string(),
                 ty: RemarkType::Removed,
                 text: "".to_string(),
             });
@@ -326,7 +353,7 @@ impl<'a> Rule<'a> {
     /// then no value is set (null).  In either case the given note is recorded.
     fn replace_value(&self, annotated: Annotated<Value>) -> Annotated<Value> {
         if let Some(ref redaction) = self.spec.redaction {
-            redaction.set_replacement_value(self.id, annotated)
+            redaction.set_replacement_value(self, annotated)
         } else {
             annotated.with_removed_value(Remark::new(RemarkType::Removed, self.id))
         }
@@ -492,18 +519,23 @@ impl<'a> Rule<'a> {
 
 impl<'a> RuleBasedPiiProcessor<'a> {
     /// Creates a new rule based PII processor from a config.
-    pub fn new(cfg: &'a RuleConfig) -> Result<RuleBasedPiiProcessor<'a>, BadRuleConfig> {
+    pub fn new(cfg: &'a PiiConfig) -> Result<RuleBasedPiiProcessor<'a>, BadRuleConfig> {
         let mut applications = BTreeMap::new();
 
         for (&pii_kind, cfg_applications) in &cfg.applications {
             let mut rules = vec![];
             for application in cfg_applications {
-                if let Some(rule) = WELL_KNOWN_RULES.get(application.as_str()) {
-                    rules.push((*rule).clone());
+                if let Some(rule_spec) = WELL_KNOWN_RULES.get(application.as_str()) {
+                    rules.push(Rule {
+                        id: application.as_str(),
+                        spec: rule_spec,
+                        cfg: cfg,
+                    });
                 } else if let Some(rule_spec) = cfg.rules.get(application) {
                     rules.push(Rule {
                         id: application.as_str(),
                         spec: rule_spec,
+                        cfg: cfg,
                     });
                 } else {
                     return Err(BadRuleConfig::BadReference(application.to_string()));
@@ -519,7 +551,7 @@ impl<'a> RuleBasedPiiProcessor<'a> {
     }
 
     /// Returns a reference to the config that created the processor.
-    pub fn config(&self) -> &RuleConfig {
+    pub fn config(&self) -> &PiiConfig {
         self.cfg
     }
 
@@ -581,13 +613,10 @@ impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
 macro_rules! declare_well_known_rules {
     ($($rule_id:expr => $spec:expr;)*) => {
         lazy_static! {
-            static ref WELL_KNOWN_RULES: BTreeMap<&'static str, Rule<'static>> = {
+            static ref WELL_KNOWN_RULES: BTreeMap<&'static str, &'static RuleSpec> = {
                 let mut map = BTreeMap::new();
                 $(
-                    map.insert($rule_id, Rule {
-                        id: $rule_id,
-                        spec: Box::leak(Box::new($spec)),
-                    });
+                    map.insert($rule_id, Box::leak(Box::new($spec)) as &'static _);
                 )*
                 map
             };
@@ -603,15 +632,26 @@ declare_well_known_rules! {
             chars_to_ignore: ".:".into(),
             range: (None, None),
         }),
-        note: Some("ip address".into()),
     };
 
-    "@ip:strip" => RuleSpec {
+    "@ip:replace" => RuleSpec {
         ty: RuleType::Ip,
         redaction: Some(Redaction::Replace {
             text: "[ip]".into(),
         }),
-        note: Some("ip address".into()),
+    };
+
+    "@ip:remove" => RuleSpec {
+        ty: RuleType::Ip,
+        redaction: None,
+    };
+
+    "@ip:hash" => RuleSpec {
+        ty: RuleType::Ip,
+        redaction: Some(Redaction::Hash {
+            algorithm: HashAlgorithm::HmacSha1,
+            key: None,
+        }),
     };
 
     "@email:mask" => RuleSpec {
@@ -621,15 +661,26 @@ declare_well_known_rules! {
             chars_to_ignore: ".@".into(),
             range: (None, None),
         }),
-        note: Some("email address".into()),
     };
 
-    "@email:strip" => RuleSpec {
+    "@email:replace" => RuleSpec {
         ty: RuleType::Email,
         redaction: Some(Redaction::Replace {
             text: "[email]".into(),
         }),
-        note: Some("email address".into()),
+    };
+
+    "@email:remove" => RuleSpec {
+        ty: RuleType::Email,
+        redaction: None,
+    };
+
+    "@email:hash" => RuleSpec {
+        ty: RuleType::Email,
+        redaction: Some(Redaction::Hash {
+            algorithm: HashAlgorithm::HmacSha1,
+            key: None,
+        }),
     };
 
     "@creditcard:mask" => RuleSpec {
@@ -639,15 +690,26 @@ declare_well_known_rules! {
             chars_to_ignore: " -".into(),
             range: (None, Some(-4)),
         }),
-        note: Some("creditcard number".into()),
     };
 
-    "@creditcard:strip" => RuleSpec {
+    "@creditcard:replace" => RuleSpec {
         ty: RuleType::Creditcard,
         redaction: Some(Redaction::Replace {
             text: "[creditcard]".into(),
         }),
-        note: Some("creditcard number".into()),
+    };
+
+    "@creditcard:remove" => RuleSpec {
+        ty: RuleType::Creditcard,
+        redaction: None,
+    };
+
+    "@creditcard:hash" => RuleSpec {
+        ty: RuleType::Creditcard,
+        redaction: Some(Redaction::Hash {
+            algorithm: HashAlgorithm::HmacSha1,
+            key: None,
+        }),
     };
 }
 
@@ -657,7 +719,7 @@ fn test_basic_stripping() {
     use meta::Remark;
     use serde_json;
 
-    let cfg: RuleConfig = serde_json::from_str(
+    let cfg: PiiConfig = serde_json::from_str(
         r#"{
         "rules": {
             "path_username": {
@@ -667,8 +729,7 @@ fn test_basic_stripping() {
                 "redaction": {
                     "method": "replace",
                     "text": "[username]"
-                },
-                "note": "username in path"
+                }
             },
             "creditcard_number": {
                 "type": "pattern",
@@ -678,8 +739,7 @@ fn test_basic_stripping() {
                     "maskChar": "*",
                     "charsToIgnore": "- ",
                     "range": [0, -4]
-                },
-                "note": "creditcard number"
+                }
             },
             "email_address": {
                 "type": "pattern",
@@ -688,16 +748,14 @@ fn test_basic_stripping() {
                     "method": "mask",
                     "maskChar": "*",
                     "charsToIgnore": "@."
-                },
-                "note": "potential email address"
+                }
             },
             "remove_foo": {
                 "type": "removePair",
                 "keyPattern": "foo"
             },
             "remove_ip": {
-                "type": "remove",
-                "note": "IP address removed"
+                "type": "remove"
             },
             "hash_ip": {
                 "type": "pattern",
@@ -706,8 +764,7 @@ fn test_basic_stripping() {
                     "method": "hash",
                     "algorithm": "HMAC-SHA256",
                     "key": "DEADBEEF1234"
-                },
-                "note": "IP address hashed"
+                }
             }
         },
         "applications": {
