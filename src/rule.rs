@@ -791,5 +791,5 @@ fn test_basic_stripping() {
     );
 
     let value = processed_event.to_string().unwrap();
-    assert_eq!(value, "{\"message\":\"Hello *****@*****.***.  You signed up with card ****-****-****-1234. Your home folder is C:\\\\Users\\\\[username] Look at our compliance from 5A2DF387CD660E9F3E0AB20F9E7805450D56C5DACE9B959FC620C336E2B5D09A\",\"extra\":{\"bar\":true,\"foo\":null},\"ip\":null,\"metadata\":{\"extra\":{\"foo\":{\"\":{\"remarks\":[[\"remove_foo\",\"x\"]]}}},\"ip\":{\"\":{\"remarks\":[[\"remove_ip\",\"x\"]]}},\"message\":{\"\":{\"original_length\":142,\"remarks\":[[\"email_address\",\"m\",[6,21]],[\"creditcard_number\",\"m\",[48,67]],[\"path_username\",\"s\",[98,108]],[\"hash_ip\",\"p\",[137,201]]]}}}}");
+    assert_eq!(value, "{\"message\":\"Hello *****@*****.***.  You signed up with card ****-****-****-1234. Your home folder is C:\\\\Users\\\\[username] Look at our compliance from 5A2DF387CD660E9F3E0AB20F9E7805450D56C5DACE9B959FC620C336E2B5D09A\",\"extra\":{\"bar\":true,\"foo\":null},\"ip\":null,\"\":{\"extra\":{\"foo\":{\"\":{\"rem\":[[\"remove_foo\",\"x\"]]}}},\"ip\":{\"\":{\"rem\":[[\"remove_ip\",\"x\"]]}},\"message\":{\"\":{\"len\":142,\"rem\":[[\"email_address\",\"m\",6,21],[\"creditcard_number\",\"m\",48,67],[\"path_username\",\"s\",98,108],[\"hash_ip\",\"p\",137,201]]}}}}");
 }

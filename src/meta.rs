@@ -111,10 +111,16 @@ impl<'de> de::Visitor<'de> for RemarkVisitor {
             .ok_or_else(|| de::Error::custom("missing required rule-id"))?;
         let ty = seq.next_element()?
             .ok_or_else(|| de::Error::custom("missing required remark-type"))?;
-        let range = seq.next_element()?;
+        let start = seq.next_element()?;
+        let end = seq.next_element()?;
 
         // Drain the sequence
         while let Some(IgnoredAny) = seq.next_element()? {}
+
+        let range = match (start, end) {
+            (Some(start), Some(end)) => Some((start, end)),
+            _ => None,
+        };
 
         Ok(Remark { ty, rule_id, range })
     }
@@ -132,7 +138,8 @@ impl Serialize for Remark {
         seq.serialize_element(self.rule_id())?;
         seq.serialize_element(&self.ty())?;
         if let Some(range) = self.range() {
-            seq.serialize_element(range)?;
+            seq.serialize_element(&range.0)?;
+            seq.serialize_element(&range.1)?;
         }
         seq.end()
     }
@@ -142,15 +149,15 @@ impl Serialize for Remark {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Meta {
     /// Remarks detailling modifications of this field.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "rem")]
     pub remarks: Vec<Remark>,
 
     /// Errors that happened during deserialization or processing.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "err")]
     pub errors: Vec<String>,
 
     /// The original length of modified text fields or collections.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "len")]
     pub original_length: Option<u32>,
 
     /// Path at which the annotated value was deserialized.
@@ -760,7 +767,7 @@ mod test_meta_map {
     #[test]
     fn test_root() {
         let json = r#"{
-            "": {"errors": ["a"]}
+            "": {"err": ["a"]}
         }"#;
 
         let mut map = MetaMap::new();
@@ -772,11 +779,11 @@ mod test_meta_map {
     #[test]
     fn test_nested() {
         let json = r#"{
-            "": {"errors": ["a"]},
+            "": {"err": ["a"]},
             "foo": {
-                "": {"errors": ["b"]},
+                "": {"err": ["b"]},
                 "bar": {
-                    "": {"errors": ["c"]}
+                    "": {"err": ["c"]}
                 }
             }
         }"#;
@@ -815,7 +822,7 @@ mod test_remarks {
 
     #[test]
     fn test_with_range() {
-        let json = r#"["@test","s",[21,42]]"#;
+        let json = r#"["@test","s",21,42]"#;
         let remark = Remark::with_range(RemarkType::Substituted, "@test", (21, 42));
 
         assert_eq!(remark, serde_json::from_str(json).unwrap());
@@ -824,8 +831,8 @@ mod test_remarks {
 
     #[test]
     fn test_with_additional() {
-        let input = r#"["test","x",[21,42],null]"#;
-        let output = r#"["test","x",[21,42]]"#;
+        let input = r#"["test","x",21,42,null]"#;
+        let output = r#"["test","x",21,42]"#;
         let remark = Remark::with_range(RemarkType::Removed, "test", (21, 42));
 
         assert_eq!(remark, serde_json::from_str(input).unwrap());
@@ -871,10 +878,7 @@ mod test_serialize_meta {
     #[test]
     fn test_basic() {
         let value = Annotated::new(42, Meta::from_error("some error"));
-        assert_eq!(
-            serialize(&value).unwrap(),
-            r#"{"":{"errors":["some error"]}}"#
-        );
+        assert_eq!(serialize(&value).unwrap(), r#"{"":{"err":["some error"]}}"#);
     }
 
     #[test]
@@ -887,7 +891,7 @@ mod test_serialize_meta {
         );
         assert_eq!(
             serialize(&value).unwrap(),
-            r#"{"":{"errors":["outer error"]},"answer":{"":{"errors":["inner error"]}}}"#
+            r#"{"":{"err":["outer error"]},"answer":{"":{"err":["inner error"]}}}"#
         );
     }
 
@@ -899,7 +903,7 @@ mod test_serialize_meta {
         ]);
         assert_eq!(
             serialize(&value).unwrap(),
-            r#"{"0":{"":{"errors":["a"]}},"1":{"":{"errors":["b"]}}}"#
+            r#"{"0":{"":{"err":["a"]}},"1":{"":{"err":["b"]}}}"#
         );
     }
 }

@@ -327,6 +327,7 @@ mod fingerprint {
 
 #[derive(Debug, Deserialize)]
 struct EventMetaDeserializeHelper {
+    #[serde(rename = "")]
     metadata: Option<MetaMap>,
 }
 
@@ -358,6 +359,7 @@ pub(crate) fn from_str<'de, T: Deserialize<'de>>(
 struct EventMetaSerializeHelper<'a, T: Serialize + 'a> {
     #[serde(flatten)]
     event: Option<&'a T>,
+    #[serde(rename = "")]
     metadata: MetaTree,
 }
 
@@ -415,10 +417,10 @@ mod test_event {
   "fingerprint": [
     "myprint"
   ],
-  "metadata": {
+  "": {
     "event_id": {
       "": {
-        "errors": [
+        "err": [
           "some error"
         ]
       }
