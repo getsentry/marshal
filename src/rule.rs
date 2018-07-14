@@ -31,6 +31,11 @@ macro_rules! ip {
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
 lazy_static! {
+    static ref GROUP_1: BTreeSet<u8> = {
+        let mut set = BTreeSet::new();
+        set.insert(1);
+        set
+    };
     static ref IMEI_REGEX: Regex = Regex::new(
         r#"(?x)
             \b
@@ -49,7 +54,7 @@ lazy_static! {
     static ref IPV4_REGEX: Regex = Regex::new(concat!("\\b", ip!(v4a), "\\b")).unwrap();
     static ref IPV6_REGEX: Regex = Regex::new(
         concat!(
-            "\\b(",
+            "(?:[\\s]|[[:punct:]]|^)(",
                 "(", ip!(v6s), ":){7}", ip!(v6s), "|",
                 "(", ip!(v6s), ":){1,7}:|",
                 "(", ip!(v6s), ":){1,6}::", ip!(v6s), "|",
@@ -62,7 +67,7 @@ lazy_static! {
                 "fe80:(:", ip!(v6s), "){0,4}%[0-9a-zA-Z]{1,}",
                 "::(ffff(:0{1,4}){0,1}:){0,1}", ip!(v4a), "|",
                 "(", ip!(v6s), ":){1,4}:", ip!(v4a),
-            ")\\b",
+            ")([\\s]|[[:punct:]]|^)",
         )
     ).unwrap();
     static ref CREDITCARD_REGEX: Regex = Regex::new(
@@ -603,7 +608,7 @@ impl<'a> Rule<'a> {
             RuleType::Email => apply_regex!(EMAIL_REGEX, None),
             RuleType::Ip => {
                 apply_regex!(IPV4_REGEX, None);
-                apply_regex!(IPV6_REGEX, None);
+                apply_regex!(IPV6_REGEX, Some(&*GROUP_1));
             }
             RuleType::Creditcard => apply_regex!(CREDITCARD_REGEX, None),
             RuleType::Alias {

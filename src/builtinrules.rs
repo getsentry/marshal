@@ -157,7 +157,7 @@ mod test {
     }
 
     #[test]
-    fn test_ip() {
+    fn test_ipv4() {
         assert_rule!(
             rule = "@ip";
             input = "before 127.0.0.1 after";
@@ -180,6 +180,68 @@ mod test {
             output = "before AE12FE3B5F129B5CC4CDD2B136B7B7947C4D2741 after";
             remarks = vec![
                 Remark::with_range(RemarkType::Pseudonymized, "@ip:hash", (7, 47)),
+            ];
+        );
+    }
+
+    #[test]
+    fn test_ipv6() {
+        assert_rule!(
+            rule = "@ip";
+            input = "before ::1 after";
+            output = "before [ip] after";
+            remarks = vec![
+                Remark::with_range(RemarkType::Substituted, "@ip:replace", (7, 11)),
+            ];
+        );
+        assert_rule!(
+            rule = "@ip";
+            input = "[2001:0db8:85a3:0000:0000:8a2e:0370:7334]";
+            output = "[[ip]]";
+            remarks = vec![
+                Remark::with_range(RemarkType::Substituted, "@ip:replace", (1, 5)),
+            ];
+        );
+        assert_rule!(
+            rule = "@ip:hash";
+            input = "before 2001:0db8:85a3:0000:0000:8a2e:0370:7334 after";
+            output = "before 8C3DC9BEED9ADE493670547E24E4E45EDE69FF03 after";
+            remarks = vec![
+                Remark::with_range(RemarkType::Pseudonymized, "@ip:hash", (7, 47)),
+            ];
+        );
+        assert_rule!(
+            rule = "@ip";
+            input = "foo::1";
+            output = "foo::1";
+            remarks = vec![];
+        );
+    }
+
+    #[test]
+    fn test_imei() {
+        assert_rule!(
+            rule = "@imei";
+            input = "before 356938035643809 after";
+            output = "before [imei] after";
+            remarks = vec![
+                Remark::with_range(RemarkType::Substituted, "@imei:replace", (7, 13)),
+            ];
+        );
+        assert_rule!(
+            rule = "@imei:replace";
+            input = "before 356938035643809 after";
+            output = "before [imei] after";
+            remarks = vec![
+                Remark::with_range(RemarkType::Substituted, "@imei:replace", (7, 13)),
+            ];
+        );
+        assert_rule!(
+            rule = "@imei:hash";
+            input = "before 356938035643809 after";
+            output = "before 3888108AA99417402969D0B47A2CA4ECD2A1AAD3 after";
+            remarks = vec![
+                Remark::with_range(RemarkType::Pseudonymized, "@imei:hash", (7, 47)),
             ];
         );
     }
