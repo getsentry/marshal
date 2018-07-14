@@ -69,16 +69,14 @@ pub(crate) enum RuleType {
     },
     /// Matches an email
     Email,
-    /// Matches an IPv4 address
-    Ipv4,
-    /// Matches an IPv6 address
-    Ipv6,
     /// Matches any IP address
     Ip,
     /// Matches a creditcard number
     Creditcard,
     /// Unconditionally removes the value
     Remove,
+    /// Applies multiple rules.
+    Multiple { rules: Vec<String> },
     /// When a regex matches a key, a value is removed
     #[serde(rename_all = "camelCase")]
     RemovePair {
@@ -304,6 +302,27 @@ pub struct RuleBasedPiiProcessor<'a> {
     applications: BTreeMap<PiiKind, Vec<Rule<'a>>>,
 }
 
+impl PiiConfig {
+    /// Looks up a rule in the PII config.
+    fn lookup_rule<'a>(&'a self, rule_id: &'a str) -> Option<Rule<'a>> {
+        if let Some(rule_spec) = self.rules.get(rule_id) {
+            Some(Rule {
+                id: rule_id,
+                spec: rule_spec,
+                cfg: self,
+            })
+        } else if let Some(rule_spec) = WELL_KNOWN_RULES.get(rule_id) {
+            Some(Rule {
+                id: rule_id,
+                spec: rule_spec,
+                cfg: self,
+            })
+        } else {
+            None
+        }
+    }
+}
+
 impl<'a> Rule<'a> {
     /// The rule ID.
     pub fn rule_id(&self) -> &str {
@@ -376,12 +395,6 @@ impl<'a> Rule<'a> {
             RuleType::Email => {
                 Ok(self.apply_regex_to_chunks(chunks, meta, &*detectors::EMAIL_REGEX, None))
             }
-            RuleType::Ipv4 => {
-                Ok(self.apply_regex_to_chunks(chunks, meta, &*detectors::IPV4_REGEX, None))
-            }
-            RuleType::Ipv6 => {
-                Ok(self.apply_regex_to_chunks(chunks, meta, &*detectors::IPV6_REGEX, None))
-            }
             RuleType::Ip => {
                 let (chunks, meta) =
                     self.apply_regex_to_chunks(chunks, meta, &*detectors::IPV4_REGEX, None);
@@ -391,6 +404,27 @@ impl<'a> Rule<'a> {
             }
             RuleType::Creditcard => {
                 Ok(self.apply_regex_to_chunks(chunks, meta, &*detectors::CREDITCARD_REGEX, None))
+            }
+            RuleType::Multiple { ref rules } => {
+                let mut item = (chunks, meta);
+                let mut processed = false;
+                for rule_id in rules.iter() {
+                    // XXX: handle bad references here?
+                    if let Some(rule) = self.config().lookup_rule(rule_id) {
+                        item = match rule.process_chunks(item.0, item.1) {
+                            Ok(rv) => {
+                                processed = true;
+                                rv
+                            }
+                            Err(rv) => rv,
+                        };
+                    }
+                }
+                if processed {
+                    Ok(item)
+                } else {
+                    Err(item)
+                }
             }
             // no special handling for strings, falls back to `process_value`
             RuleType::Remove | RuleType::RemovePair { .. } => Err((chunks, meta)),
@@ -490,20 +524,37 @@ impl<'a> Rule<'a> {
     /// `Ok` is returned then no further modifications are applied.
     fn process_value(
         &self,
-        value: Annotated<Value>,
+        mut value: Annotated<Value>,
         kind: PiiKind,
     ) -> Result<Annotated<Value>, Annotated<Value>> {
         let _kind = kind;
         match self.spec.ty {
             // pattern matches are not implemented for non strings
-            RuleType::Pattern { .. }
-            | RuleType::Email
-            | RuleType::Ipv4
-            | RuleType::Ipv6
-            | RuleType::Ip
-            | RuleType::Creditcard => Err(value),
+            RuleType::Pattern { .. } | RuleType::Email | RuleType::Ip | RuleType::Creditcard => {
+                Err(value)
+            }
             RuleType::Remove => {
                 return Ok(self.replace_value(value));
+            }
+            RuleType::Multiple { ref rules } => {
+                let mut processed = false;
+                for rule_id in rules.iter() {
+                    // XXX: handle bad references here?
+                    if let Some(rule) = self.config().lookup_rule(rule_id) {
+                        value = match rule.process_value(value, kind) {
+                            Ok(rv) => {
+                                processed = true;
+                                rv
+                            }
+                            Err(rv) => rv,
+                        };
+                    }
+                }
+                if processed {
+                    Ok(value)
+                } else {
+                    Err(value)
+                }
             }
             RuleType::RemovePair { ref key_pattern } => {
                 if let Some(ref path) = value.meta().path() {
@@ -525,18 +576,8 @@ impl<'a> RuleBasedPiiProcessor<'a> {
         for (&pii_kind, cfg_applications) in &cfg.applications {
             let mut rules = vec![];
             for application in cfg_applications {
-                if let Some(rule_spec) = WELL_KNOWN_RULES.get(application.as_str()) {
-                    rules.push(Rule {
-                        id: application.as_str(),
-                        spec: rule_spec,
-                        cfg: cfg,
-                    });
-                } else if let Some(rule_spec) = cfg.rules.get(application) {
-                    rules.push(Rule {
-                        id: application.as_str(),
-                        spec: rule_spec,
-                        cfg: cfg,
-                    });
+                if let Some(rule) = cfg.lookup_rule(application.as_str()) {
+                    rules.push(rule);
                 } else {
                     return Err(BadRuleConfig::BadReference(application.to_string()));
                 }
@@ -834,4 +875,81 @@ fn test_basic_stripping() {
 
     let value = processed_event.to_string().unwrap();
     assert_eq!(value, "{\"message\":\"Hello *****@*****.***.  You signed up with card ****-****-****-1234. Your home folder is C:\\\\Users\\\\[username] Look at our compliance from 5A2DF387CD660E9F3E0AB20F9E7805450D56C5DACE9B959FC620C336E2B5D09A\",\"extra\":{\"bar\":true,\"foo\":null},\"ip\":null,\"\":{\"extra\":{\"foo\":{\"\":{\"rem\":[[\"remove_foo\",\"x\"]]}}},\"ip\":{\"\":{\"rem\":[[\"remove_ip\",\"x\"]]}},\"message\":{\"\":{\"len\":142,\"rem\":[[\"email_address\",\"m\",6,21],[\"creditcard_number\",\"m\",48,67],[\"path_username\",\"s\",98,108],[\"hash_ip\",\"p\",137,201]]}}}}");
+}
+
+#[test]
+fn test_well_known_stripping() {
+    use meta::Remark;
+    use serde_json;
+
+    let cfg: PiiConfig = serde_json::from_str(
+        r#"{
+        "rules": {
+            "user_id": {
+                "type": "pattern",
+                "pattern": "u/[a-f0-9]{12}",
+                "redaction": {
+                    "method": "replace",
+                    "text": "[user-id]"
+                }
+            },
+            "device_id": {
+                "type": "pattern",
+                "pattern": "d/[a-f0-9]{12}",
+                "redaction": {
+                    "method": "replace",
+                    "text": "[device-id]"
+                }
+            },
+            "ids": {
+                "type": "multiple",
+                "rules": [
+                    "user_id",
+                    "device_id"
+                ]
+            }
+        },
+        "applications": {
+            "freeform": ["ids", "@ip:replace"]
+        }
+    }"#,
+    ).unwrap();
+
+    #[derive(ProcessAnnotatedValue, Debug, Deserialize, Serialize, Clone)]
+    struct Event {
+        #[process_annotated_value(pii_kind = "freeform")]
+        message: Annotated<String>,
+    }
+
+    let event = Annotated::<Event>::from_str(
+        r#"
+        {
+            "message": "u/f444e9498e6b on d/db3d6129ca10 (144.132.11.23): Hello World!"
+        }
+    "#,
+    ).unwrap();
+
+    let processor = RuleBasedPiiProcessor::new(&cfg).unwrap();
+    let processed_event = processor.process_root_value(event);
+    let new_event = processed_event.clone().0.unwrap();
+
+    let message = new_event.message.value().unwrap();
+    println!("{:#?}", &new_event);
+    assert_eq!(message, "[user-id] on [device-id] ([ip]): Hello World!");
+    assert_eq!(
+        new_event.message.meta(),
+        &Meta {
+            remarks: vec![
+                Remark::with_range(RemarkType::Substituted, "user_id", (0, 9)),
+                Remark::with_range(RemarkType::Substituted, "device_id", (13, 24)),
+                Remark::with_range(RemarkType::Substituted, "@ip:replace", (26, 30)),
+            ],
+            errors: vec![],
+            original_length: Some(62),
+            path: None,
+        }
+    );
+
+    let value = processed_event.to_string().unwrap();
+    assert_eq!(value, "{\"message\":\"[user-id] on [device-id] ([ip]): Hello World!\",\"\":{\"message\":{\"\":{\"len\":62,\"rem\":[[\"user_id\",\"s\",0,9],[\"device_id\",\"s\",13,24],[\"@ip:replace\",\"s\",26,30]]}}}}");
 }
