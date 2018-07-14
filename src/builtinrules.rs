@@ -45,6 +45,22 @@ declare_builtin_rules! {
         },
     };
 
+    // imei rules
+    "@imei" => rule_alias!("@imei:replace");
+    "@imei:replace" => RuleSpec {
+        ty: RuleType::Imei,
+        redaction: Redaction::Replace {
+            text: "[imei]".into(),
+        },
+    };
+    "@imei:hash" => RuleSpec {
+        ty: RuleType::Imei,
+        redaction: Redaction::Hash {
+            algorithm: HashAlgorithm::HmacSha1,
+            key: None,
+        },
+    };
+
     // email rules
     "@email" => rule_alias!("@email:replace");
     "@email:mask" => RuleSpec {

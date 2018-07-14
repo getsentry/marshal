@@ -31,6 +31,16 @@ macro_rules! ip {
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
 lazy_static! {
+    static ref IMEI_REGEX: Regex = Regex::new(
+        r#"(?x)
+            \b
+                (\d{2}-?
+                 \d{6}-?
+                 \d{6}-?
+                 \d{1,2})
+            \b
+        "#
+    ).unwrap();
     static ref EMAIL_REGEX: Regex = Regex::new(
         r#"(?x)
             \b[a-z0-9!#$%&'*+/=?^_`{|}~.-]+@[a-z0-9-]+(\\.[a-z0-9-]+)\b
@@ -100,6 +110,8 @@ pub(crate) enum RuleType {
         /// The match group indices to replace.
         replace_groups: Option<BTreeSet<u8>>,
     },
+    /// Matchse an IMEI or IMEISV
+    Imei,
     /// Matches an email
     Email,
     /// Matches any IP address
@@ -586,6 +598,7 @@ impl<'a> Rule<'a> {
                 ref pattern,
                 ref replace_groups,
             } => apply_regex!(&pattern.0, replace_groups.as_ref()),
+            RuleType::Imei => apply_regex!(IMEI_REGEX, None),
             RuleType::Email => apply_regex!(EMAIL_REGEX, None),
             RuleType::Ip => {
                 apply_regex!(IPV4_REGEX, None);
@@ -645,9 +658,11 @@ impl<'a> Rule<'a> {
 
         match self.spec.ty {
             // pattern matches are not implemented for non strings
-            RuleType::Pattern { .. } | RuleType::Email | RuleType::Ip | RuleType::Creditcard => {
-                Err(value)
-            }
+            RuleType::Pattern { .. }
+            | RuleType::Imei
+            | RuleType::Email
+            | RuleType::Ip
+            | RuleType::Creditcard => Err(value),
             RuleType::Remove => Ok(redaction.replace_value(report_rule, self.config(), value)),
             RuleType::Alias {
                 ref rule,
