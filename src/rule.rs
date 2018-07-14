@@ -8,6 +8,7 @@ use hmac::{Hmac, Mac};
 use regex::{Regex, RegexBuilder};
 use serde::de::{Deserialize, Deserializer, Error};
 use serde::ser::{Serialize, Serializer};
+use serde_json;
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 
@@ -22,7 +23,7 @@ lazy_static! {
 }
 
 /// A regex pattern for text replacement.
-pub struct Pattern(pub Regex);
+pub(crate) struct Pattern(pub Regex);
 
 impl fmt::Debug for Pattern {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -93,7 +94,7 @@ pub(crate) enum RuleType {
 
 /// Defines the hash algorithm to use for hashing
 #[derive(Serialize, Deserialize, Debug)]
-pub enum HashAlgorithm {
+pub(crate) enum HashAlgorithm {
     /// HMAC-SHA1
     #[serde(rename = "HMAC-SHA1")]
     HmacSha1,
@@ -430,7 +431,7 @@ pub(crate) struct Rule<'a> {
 /// Common config vars.
 #[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
-pub struct Vars {
+pub(crate) struct Vars {
     /// The default secret key for hashing operations.
     hash_key: Option<String>,
 }
@@ -452,6 +453,16 @@ pub struct RuleBasedPiiProcessor<'a> {
 }
 
 impl PiiConfig {
+    /// Loads a PII config from a JSON string.
+    pub fn from_str(s: &str) -> Result<PiiConfig, serde_json::Error> {
+        serde_json::from_str(s)
+    }
+
+    /// Creates a PII processor from the config.
+    pub fn processor(&self) -> RuleBasedPiiProcessor {
+        RuleBasedPiiProcessor::new(self)
+    }
+
     /// Looks up a rule in the PII config.
     fn lookup_rule<'a>(&'a self, rule_id: &'a str) -> Option<Rule<'a>> {
         if let Some(rule_spec) = self.rules.get(rule_id) {
@@ -653,7 +664,7 @@ impl<'a> Rule<'a> {
 
 impl<'a> RuleBasedPiiProcessor<'a> {
     /// Creates a new rule based PII processor from a config.
-    pub fn new(cfg: &'a PiiConfig) -> RuleBasedPiiProcessor<'a> {
+    fn new(cfg: &'a PiiConfig) -> RuleBasedPiiProcessor<'a> {
         let mut applications = BTreeMap::new();
 
         for (&pii_kind, cfg_applications) in &cfg.applications {
@@ -679,6 +690,9 @@ impl<'a> RuleBasedPiiProcessor<'a> {
     }
 
     /// Processes a root value (annotated event for instance)
+    ///
+    /// This is a convenience method that invokes `ProcessAnnotatedValue`
+    /// with some sensible defaults.
     pub fn process_root_value<T: ProcessAnnotatedValue>(
         &self,
         value: Annotated<T>,
@@ -840,9 +854,8 @@ declare_well_known_rules! {
 fn test_basic_stripping() {
     use common::Map;
     use meta::Remark;
-    use serde_json;
 
-    let cfg: PiiConfig = serde_json::from_str(
+    let cfg = PiiConfig::from_str(
         r#"{
         "rules": {
             "path_username": {
@@ -919,7 +932,7 @@ fn test_basic_stripping() {
         }
     "#).unwrap();
 
-    let processor = RuleBasedPiiProcessor::new(&cfg);
+    let processor = cfg.processor();
     let processed_event = processor.process_root_value(event);
     let new_event = processed_event.clone().0.unwrap();
 
@@ -977,9 +990,8 @@ fn test_basic_stripping() {
 #[test]
 fn test_well_known_stripping() {
     use meta::Remark;
-    use serde_json;
 
-    let cfg: PiiConfig = serde_json::from_str(
+    let cfg = PiiConfig::from_str(
         r#"{
         "rules": {
             "user_id": {
@@ -1026,7 +1038,7 @@ fn test_well_known_stripping() {
     "#,
     ).unwrap();
 
-    let processor = RuleBasedPiiProcessor::new(&cfg);
+    let processor = cfg.processor();
     let processed_event = processor.process_root_value(event);
     let new_event = processed_event.clone().0.unwrap();
 
@@ -1054,9 +1066,8 @@ fn test_well_known_stripping() {
 #[test]
 fn test_well_known_stripping_common_redaction() {
     use meta::Remark;
-    use serde_json;
 
-    let cfg: PiiConfig = serde_json::from_str(
+    let cfg = PiiConfig::from_str(
         r#"{
         "rules": {
             "user_id": {
@@ -1109,7 +1120,7 @@ fn test_well_known_stripping_common_redaction() {
     "#,
     ).unwrap();
 
-    let processor = RuleBasedPiiProcessor::new(&cfg);
+    let processor = cfg.processor();
     let processed_event = processor.process_root_value(event);
     let new_event = processed_event.clone().0.unwrap();
 
