@@ -16,22 +16,27 @@ macro_rules! declare_builtin_rules {
     }
 }
 
-declare_builtin_rules! {
-    "@ip" => RuleSpec {
-        ty: RuleType::Alias {
-            rule: "@ip:replace".into(),
-            hide_rule: true,
-        },
-        redaction: Redaction::Default,
-    };
+macro_rules! rule_alias {
+    ($target:expr) => {
+        RuleSpec {
+            ty: RuleType::Alias {
+                rule: ($target).into(),
+                hide_rule: false,
+            },
+            redaction: Redaction::Default,
+        }
+    }
+}
 
+declare_builtin_rules! {
+    // ip rules
+    "@ip" => rule_alias!("@ip:replace");
     "@ip:replace" => RuleSpec {
         ty: RuleType::Ip,
         redaction: Redaction::Replace {
             text: "[ip]".into(),
         },
     };
-
     "@ip:hash" => RuleSpec {
         ty: RuleType::Ip,
         redaction: Redaction::Hash {
@@ -40,14 +45,8 @@ declare_builtin_rules! {
         },
     };
 
-    "@email" => RuleSpec {
-        ty: RuleType::Alias {
-            rule: "@email:replace".into(),
-            hide_rule: true,
-        },
-        redaction: Redaction::Default,
-    };
-
+    // email rules
+    "@email" => rule_alias!("@email:replace");
     "@email:mask" => RuleSpec {
         ty: RuleType::Email,
         redaction: Redaction::Mask {
@@ -56,14 +55,12 @@ declare_builtin_rules! {
             range: (None, None),
         },
     };
-
     "@email:replace" => RuleSpec {
         ty: RuleType::Email,
         redaction: Redaction::Replace {
             text: "[email]".into(),
         },
     };
-
     "@email:hash" => RuleSpec {
         ty: RuleType::Email,
         redaction: Redaction::Hash {
@@ -72,14 +69,8 @@ declare_builtin_rules! {
         },
     };
 
-    "@creditcard" => RuleSpec {
-        ty: RuleType::Alias {
-            rule: "@creditcard:mask".into(),
-            hide_rule: true,
-        },
-        redaction: Redaction::Default,
-    };
-
+    // creditcard rules
+    "@creditcard" => rule_alias!("@creditcard:mask");
     "@creditcard:mask" => RuleSpec {
         ty: RuleType::Creditcard,
         redaction: Redaction::Mask {
@@ -88,14 +79,12 @@ declare_builtin_rules! {
             range: (None, Some(-4)),
         },
     };
-
     "@creditcard:replace" => RuleSpec {
         ty: RuleType::Creditcard,
         redaction: Redaction::Replace {
             text: "[creditcard]".into(),
         },
     };
-
     "@creditcard:hash" => RuleSpec {
         ty: RuleType::Creditcard,
         redaction: Redaction::Hash {
