@@ -12,14 +12,54 @@ use serde_json;
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 
+use builtinrules::BUILTIN_RULES;
 use chunk::{self, Chunk};
 use common::Value;
-use detectors;
 use meta::{Annotated, Meta, Remark, RemarkType};
 use processor::{PiiKind, PiiProcessor, ProcessAnnotatedValue, ValueInfo};
 
 lazy_static! {
     static ref NULL_SPLIT_RE: Regex = Regex::new("\x00").unwrap();
+}
+
+#[cfg_attr(rustfmt, rustfmt_skip)]
+macro_rules! ip {
+    (v4s) => { "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)" };
+    (v4a) => { concat!(ip!(v4s), "\\.", ip!(v4s), "\\.", ip!(v4s), "\\.", ip!(v4s)) };
+    (v6s) => { "[0-9a-fA-F]{1,4}" };
+}
+
+#[cfg_attr(rustfmt, rustfmt_skip)]
+lazy_static! {
+    static ref EMAIL_REGEX: Regex = Regex::new(
+        r#"(?x)
+            \b[a-z0-9!#$%&'*+/=?^_`{|}~.-]+@[a-z0-9-]+(\\.[a-z0-9-]+)\b
+    "#
+    ).unwrap();
+    static ref IPV4_REGEX: Regex = Regex::new(concat!("\\b", ip!(v4a), "\\b")).unwrap();
+    static ref IPV6_REGEX: Regex = Regex::new(
+        concat!(
+            "\\b(",
+                "(", ip!(v6s), ":){7}", ip!(v6s), "|",
+                "(", ip!(v6s), ":){1,7}:|",
+                "(", ip!(v6s), ":){1,6}::", ip!(v6s), "|",
+                "(", ip!(v6s), ":){1,5}:(:", ip!(v6s), "){1,2}|",
+                "(", ip!(v6s), ":){1,4}:(:", ip!(v6s), "){1,3}|",
+                "(", ip!(v6s), ":){1,3}:(:", ip!(v6s), "){1,4}|",
+                "(", ip!(v6s), ":){1,2}:(:", ip!(v6s), "){1,5}|",
+                ip!(v6s), ":((:", ip!(v6s), "){1,6})|",
+                ":((:", ip!(v6s), "){1,7}|:)|",
+                "fe80:(:", ip!(v6s), "){0,4}%[0-9a-zA-Z]{1,}",
+                "::(ffff(:0{1,4}){0,1}:){0,1}", ip!(v4a), "|",
+                "(", ip!(v6s), ":){1,4}:", ip!(v4a),
+            ")\\b",
+        )
+    ).unwrap();
+    static ref CREDITCARD_REGEX: Regex = Regex::new(
+        r#"(?x)
+            \d{4}[- ]?\d{4,6}[- ]?\d{4,5}(?:[- ]?\d{4})
+    "#
+    ).unwrap();
 }
 
 /// A regex pattern for text replacement.
@@ -471,7 +511,7 @@ impl PiiConfig {
                 spec: rule_spec,
                 cfg: self,
             })
-        } else if let Some(rule_spec) = WELL_KNOWN_RULES.get(rule_id) {
+        } else if let Some(rule_spec) = BUILTIN_RULES.get(rule_id) {
             Some(Rule {
                 id: rule_id,
                 spec: rule_spec,
@@ -546,12 +586,12 @@ impl<'a> Rule<'a> {
                 ref pattern,
                 ref replace_groups,
             } => apply_regex!(&pattern.0, replace_groups.as_ref()),
-            RuleType::Email => apply_regex!(detectors::EMAIL_REGEX, None),
+            RuleType::Email => apply_regex!(EMAIL_REGEX, None),
             RuleType::Ip => {
-                apply_regex!(detectors::IPV4_REGEX, None);
-                apply_regex!(detectors::IPV6_REGEX, None);
+                apply_regex!(IPV4_REGEX, None);
+                apply_regex!(IPV6_REGEX, None);
             }
-            RuleType::Creditcard => apply_regex!(detectors::CREDITCARD_REGEX, None),
+            RuleType::Creditcard => apply_regex!(CREDITCARD_REGEX, None),
             RuleType::Alias {
                 ref rule,
                 hide_rule,
@@ -745,109 +785,6 @@ impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
         }
         value
     }
-}
-
-macro_rules! declare_well_known_rules {
-    ($($rule_id:expr => $spec:expr;)*) => {
-        lazy_static! {
-            static ref WELL_KNOWN_RULES: BTreeMap<&'static str, &'static RuleSpec> = {
-                let mut map = BTreeMap::new();
-                $(
-                    map.insert($rule_id, Box::leak(Box::new($spec)) as &'static _);
-                )*
-                map
-            };
-        }
-    }
-}
-
-declare_well_known_rules! {
-    "@ip" => RuleSpec {
-        ty: RuleType::Alias {
-            rule: "@ip:replace".into(),
-            hide_rule: true,
-        },
-        redaction: Redaction::Default,
-    };
-
-    "@ip:replace" => RuleSpec {
-        ty: RuleType::Ip,
-        redaction: Redaction::Replace {
-            text: "[ip]".into(),
-        },
-    };
-
-    "@ip:hash" => RuleSpec {
-        ty: RuleType::Ip,
-        redaction: Redaction::Hash {
-            algorithm: HashAlgorithm::HmacSha1,
-            key: None,
-        },
-    };
-
-    "@email" => RuleSpec {
-        ty: RuleType::Alias {
-            rule: "@email:replace".into(),
-            hide_rule: true,
-        },
-        redaction: Redaction::Default,
-    };
-
-    "@email:mask" => RuleSpec {
-        ty: RuleType::Email,
-        redaction: Redaction::Mask {
-            mask_char: '*',
-            chars_to_ignore: ".@".into(),
-            range: (None, None),
-        },
-    };
-
-    "@email:replace" => RuleSpec {
-        ty: RuleType::Email,
-        redaction: Redaction::Replace {
-            text: "[email]".into(),
-        },
-    };
-
-    "@email:hash" => RuleSpec {
-        ty: RuleType::Email,
-        redaction: Redaction::Hash {
-            algorithm: HashAlgorithm::HmacSha1,
-            key: None,
-        },
-    };
-
-    "@creditcard" => RuleSpec {
-        ty: RuleType::Alias {
-            rule: "@creditcard:mask".into(),
-            hide_rule: true,
-        },
-        redaction: Redaction::Default,
-    };
-
-    "@creditcard:mask" => RuleSpec {
-        ty: RuleType::Creditcard,
-        redaction: Redaction::Mask {
-            mask_char: '*',
-            chars_to_ignore: " -".into(),
-            range: (None, Some(-4)),
-        },
-    };
-
-    "@creditcard:replace" => RuleSpec {
-        ty: RuleType::Creditcard,
-        redaction: Redaction::Replace {
-            text: "[creditcard]".into(),
-        },
-    };
-
-    "@creditcard:hash" => RuleSpec {
-        ty: RuleType::Creditcard,
-        redaction: Redaction::Hash {
-            algorithm: HashAlgorithm::HmacSha1,
-            key: None,
-        },
-    };
 }
 
 #[test]

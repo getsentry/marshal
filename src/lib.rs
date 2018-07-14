@@ -30,9 +30,9 @@ pub use {chunk::*, meta::*, processor::*, rule::*};
 #[macro_use]
 mod macros;
 
+mod builtinrules;
 mod chunk;
 mod common;
-mod detectors;
 mod meta;
 mod meta_ser;
 mod processor;
