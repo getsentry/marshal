@@ -46,6 +46,11 @@ lazy_static! {
             \b
         "#
     ).unwrap();
+    static ref MAC_REGEX: Regex = Regex::new(
+        r#"(?x)
+            \b([[:xdigit:]]{2}[:-]){5}[[:xdigit:]]{2}\b
+        "#
+    ).unwrap();
     static ref EMAIL_REGEX: Regex = Regex::new(
         r#"(?x)
             \b
@@ -121,6 +126,8 @@ pub(crate) enum RuleType {
     },
     /// Matchse an IMEI or IMEISV
     Imei,
+    /// Matches a mac address
+    Mac,
     /// Matches an email
     Email,
     /// Matches any IP address
@@ -609,6 +616,7 @@ impl<'a> Rule<'a> {
                 ref replace_groups,
             } => apply_regex!(&pattern.0, replace_groups.as_ref()),
             RuleType::Imei => apply_regex!(IMEI_REGEX, None),
+            RuleType::Mac => apply_regex!(MAC_REGEX, None),
             RuleType::Email => apply_regex!(EMAIL_REGEX, None),
             RuleType::Ip => {
                 apply_regex!(IPV4_REGEX, None);
@@ -670,6 +678,7 @@ impl<'a> Rule<'a> {
             // pattern matches are not implemented for non strings
             RuleType::Pattern { .. }
             | RuleType::Imei
+            | RuleType::Mac
             | RuleType::Email
             | RuleType::Ip
             | RuleType::Creditcard => Err(value),

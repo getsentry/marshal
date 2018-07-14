@@ -61,6 +61,30 @@ declare_builtin_rules! {
         },
     };
 
+    // mac rules
+    "@mac" => rule_alias!("@mac:mask");
+    "@mac:replace" => RuleSpec {
+        ty: RuleType::Mac,
+        redaction: Redaction::Replace {
+            text: "[mac]".into(),
+        },
+    };
+    "@mac:mask" => RuleSpec {
+        ty: RuleType::Mac,
+        redaction: Redaction::Mask {
+            mask_char: '*',
+            chars_to_ignore: "-:".into(),
+            range: (Some(9), None),
+        },
+    };
+    "@mac:hash" => RuleSpec {
+        ty: RuleType::Mac,
+        redaction: Redaction::Hash {
+            algorithm: HashAlgorithm::HmacSha1,
+            key: None,
+        },
+    };
+
     // email rules
     "@email" => rule_alias!("@email:replace");
     "@email:mask" => RuleSpec {
@@ -242,6 +266,42 @@ mod test {
             output = "before 3888108AA99417402969D0B47A2CA4ECD2A1AAD3 after";
             remarks = vec![
                 Remark::with_range(RemarkType::Pseudonymized, "@imei:hash", (7, 47)),
+            ];
+        );
+    }
+
+    #[test]
+    fn test_mac() {
+        assert_rule!(
+            rule = "@mac";
+            input = "ether 4a:00:04:10:9b:50";
+            output = "ether 4a:00:04:**:**:**";
+            remarks = vec![
+                Remark::with_range(RemarkType::Masked, "@mac:mask", (6, 23)),
+            ];
+        );
+        assert_rule!(
+            rule = "@mac:mask";
+            input = "ether 4a:00:04:10:9b:50";
+            output = "ether 4a:00:04:**:**:**";
+            remarks = vec![
+                Remark::with_range(RemarkType::Masked, "@mac:mask", (6, 23)),
+            ];
+        );
+        assert_rule!(
+            rule = "@mac:replace";
+            input = "ether 4a:00:04:10:9b:50";
+            output = "ether [mac]";
+            remarks = vec![
+                Remark::with_range(RemarkType::Substituted, "@mac:replace", (6, 11)),
+            ];
+        );
+        assert_rule!(
+            rule = "@mac:hash";
+            input = "ether 4a:00:04:10:9b:50";
+            output = "ether 6220F3EE59BF56B32C98323D7DE43286AAF1F8F1";
+            remarks = vec![
+                Remark::with_range(RemarkType::Pseudonymized, "@mac:hash", (6, 46)),
             ];
         );
     }
