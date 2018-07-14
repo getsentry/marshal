@@ -491,11 +491,12 @@ pub(crate) struct Vars {
 /// A set of named rule configurations.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PiiConfig {
-    rules: BTreeMap<String, RuleSpec>,
     #[serde(default)]
-    vars: Vars,
+    pub(crate) rules: BTreeMap<String, RuleSpec>,
     #[serde(default)]
-    applications: BTreeMap<PiiKind, Vec<String>>,
+    pub(crate) vars: Vars,
+    #[serde(default)]
+    pub(crate) applications: BTreeMap<PiiKind, Vec<String>>,
 }
 
 /// A PII processor that uses JSON rules.
