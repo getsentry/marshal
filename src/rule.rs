@@ -104,7 +104,15 @@ impl Default for HashAlgorithm {
 }
 
 impl HashAlgorithm {
-    fn hash_value(&self, text: &str, key: &str) -> String {
+    fn hash_value(&self, text: &str, key: Option<&str>, config: &PiiConfig) -> String {
+        let key = key.unwrap_or_else(|| {
+            config
+                .vars
+                .hash_key
+                .as_ref()
+                .map(|x| x.as_str())
+                .unwrap_or("")
+        });
         macro_rules! hmac {
             ($ty:ident) => {{
                 let mut mac = Hmac::<$ty>::new_varkey(key.as_bytes()).unwrap();
@@ -182,8 +190,102 @@ fn in_range(range: (Option<i32>, Option<i32>), pos: usize, len: usize) -> bool {
     pos >= start && pos < end
 }
 
+fn apply_regex_to_chunks(
+    redaction: &Redaction,
+    chunks: Vec<Chunk>,
+    meta: Meta,
+    regex: &Regex,
+    replace_groups: Option<&BTreeSet<u8>>,
+    rule: &Rule,
+    config: &PiiConfig,
+) -> (Vec<Chunk>, Meta) {
+    let mut search_string = String::new();
+    let mut replacement_chunks = vec![];
+    for chunk in chunks {
+        match chunk {
+            Chunk::Text { ref text } => search_string.push_str(&text.replace("\x00", "")),
+            chunk @ Chunk::Redaction { .. } => {
+                replacement_chunks.push(chunk);
+                search_string.push('\x00');
+            }
+        }
+    }
+    replacement_chunks.reverse();
+    let mut rv: Vec<Chunk> = vec![];
+
+    fn process_text(text: &str, rv: &mut Vec<Chunk>, replacement_chunks: &mut Vec<Chunk>) {
+        if text.is_empty() {
+            return;
+        }
+        let mut pos = 0;
+        for piece in NULL_SPLIT_RE.find_iter(text) {
+            rv.push(Chunk::Text {
+                text: text[pos..piece.start()].to_string().into(),
+            });
+            rv.push(replacement_chunks.pop().unwrap());
+            pos = piece.end();
+        }
+        rv.push(Chunk::Text {
+            text: text[pos..].to_string().into(),
+        });
+    }
+
+    let mut pos = 0;
+    for m in regex.captures_iter(&search_string) {
+        let g0 = m.get(0).unwrap();
+
+        match replace_groups {
+            Some(groups) => {
+                for (idx, g) in m.iter().enumerate() {
+                    if idx == 0 {
+                        continue;
+                    }
+
+                    if let Some(g) = g {
+                        if groups.contains(&(idx as u8)) {
+                            process_text(
+                                &search_string[pos..g.start()],
+                                &mut rv,
+                                &mut replacement_chunks,
+                            );
+                            redaction.insert_replacement_chunks(rule, config, g.as_str(), &mut rv);
+                            pos = g.end();
+                        }
+                    }
+                }
+            }
+            None => {
+                process_text(
+                    &search_string[pos..g0.start()],
+                    &mut rv,
+                    &mut replacement_chunks,
+                );
+                redaction.insert_replacement_chunks(rule, config, g0.as_str(), &mut rv);
+                pos = g0.end();
+            }
+        }
+
+        process_text(
+            &search_string[pos..g0.end()],
+            &mut rv,
+            &mut replacement_chunks,
+        );
+        pos = g0.end();
+    }
+
+    process_text(&search_string[pos..], &mut rv, &mut replacement_chunks);
+
+    (rv, meta)
+}
+
 impl Redaction {
-    fn insert_replacement_chunks(&self, rule: &Rule, text: &str, output: &mut Vec<Chunk>) {
+    fn insert_replacement_chunks(
+        &self,
+        rule: &Rule,
+        config: &PiiConfig,
+        text: &str,
+        output: &mut Vec<Chunk>,
+    ) {
         match *self {
             Redaction::Default | Redaction::Remove => {
                 output.push(Chunk::Redaction {
@@ -213,11 +315,14 @@ impl Redaction {
                     text: buf.into_iter().collect(),
                 })
             }
-            Redaction::Hash { ref algorithm, .. } => {
+            Redaction::Hash {
+                ref algorithm,
+                ref key,
+            } => {
                 output.push(Chunk::Redaction {
                     ty: RemarkType::Pseudonymized,
                     rule_id: rule.rule_id().into(),
-                    text: algorithm.hash_value(text, rule.hash_key()),
+                    text: algorithm.hash_value(text, key.as_ref().map(|x| x.as_str()), config),
                 });
             }
             Redaction::Replace { ref text } => {
@@ -230,7 +335,12 @@ impl Redaction {
         }
     }
 
-    fn replace_value(&self, rule: &Rule, mut annotated: Annotated<Value>) -> Annotated<Value> {
+    fn replace_value(
+        &self,
+        rule: &Rule,
+        config: &PiiConfig,
+        mut annotated: Annotated<Value>,
+    ) -> Annotated<Value> {
         match *self {
             Redaction::Default | Redaction::Remove => {
                 annotated.with_removed_value(Remark::new(RemarkType::Removed, rule.rule_id()))
@@ -240,7 +350,12 @@ impl Redaction {
                     let value_as_string = value.to_string();
                     let original_length = value_as_string.len();
                     let mut output = vec![];
-                    self.insert_replacement_chunks(rule, &value_as_string, &mut output);
+                    self.insert_replacement_chunks(
+                        rule,
+                        rule.config(),
+                        &value_as_string,
+                        &mut output,
+                    );
                     let (value, mut meta) = chunk::chunks_to_string(output, meta);
                     if value.len() != original_length && meta.original_length.is_none() {
                         meta.original_length = Some(original_length as u32);
@@ -251,11 +366,18 @@ impl Redaction {
                     annotated.with_removed_value(Remark::new(RemarkType::Masked, rule.rule_id()))
                 }
             },
-            Redaction::Hash { ref algorithm, .. } => match annotated {
+            Redaction::Hash {
+                ref algorithm,
+                ref key,
+            } => match annotated {
                 Annotated(Some(value), mut meta) => {
                     let value_as_string = value.to_string();
                     let original_length = value_as_string.len();
-                    let value = algorithm.hash_value(&value_as_string, rule.hash_key());
+                    let value = algorithm.hash_value(
+                        &value_as_string,
+                        key.as_ref().map(|x| x.as_str()),
+                        config,
+                    );
                     if value.len() != original_length && meta.original_length.is_none() {
                         meta.original_length = Some(original_length as u32);
                     }
@@ -349,40 +471,6 @@ impl<'a> Rule<'a> {
         self.cfg
     }
 
-    /// Returns the hmac config key.
-    pub fn hash_key(&self) -> &str {
-        if let Redaction::Hash {
-            key: Some(ref key), ..
-        } = self.spec.redaction
-        {
-            key.as_str()
-        } else if let Some(ref key) = self.config().vars.hash_key {
-            key.as_str()
-        } else {
-            ""
-        }
-    }
-
-    /// Inserts replacement chunks into the given chunk buffer.
-    ///
-    /// If the rule is configured with `redaction` then replacement chunks are
-    /// added to the buffer based on that information.  If `redaction` is not
-    /// defined an empty redaction chunk is added with the supplied note.
-    fn insert_replacement_chunks(&self, text: &str, output: &mut Vec<Chunk>) {
-        self.spec
-            .redaction
-            .insert_replacement_chunks(self, text, output);
-    }
-
-    /// Produces a new annotated value with replacement data.
-    ///
-    /// This fully replaces the value in the annotated value with the replacement value
-    /// from the config.  If no replacement value is defined (which is likely) then
-    /// then no value is set (null).  In either case the given note is recorded.
-    fn replace_value(&self, annotated: Annotated<Value>) -> Annotated<Value> {
-        self.spec.redaction.replace_value(self, annotated)
-    }
-
     /// Processes the given chunks according to the rule.
     ///
     /// This works the same as `pii_process_chunks` in behavior.  This means that if an
@@ -392,166 +480,62 @@ impl<'a> Rule<'a> {
         chunks: Vec<Chunk>,
         meta: Meta,
         report_rule: Option<&Rule>,
+        redaction_override: Option<&Redaction>,
     ) -> Result<(Vec<Chunk>, Meta), (Vec<Chunk>, Meta)> {
+        let report_rule = report_rule.unwrap_or(self);
+        let redaction = redaction_override.unwrap_or(&self.spec.redaction);
+
+        let mut rv = (chunks, meta);
+        macro_rules! apply_regex {
+            ($regex:expr, $replace_groups:expr) => {{
+                rv = apply_regex_to_chunks(
+                    redaction,
+                    rv.0,
+                    rv.1,
+                    &*$regex,
+                    $replace_groups,
+                    report_rule,
+                    self.cfg,
+                );
+            }};
+        }
+
         match self.spec.ty {
             RuleType::Pattern {
                 ref pattern,
                 ref replace_groups,
-            } => Ok(self.apply_regex_to_chunks(
-                chunks,
-                meta,
-                &pattern.0,
-                replace_groups.as_ref(),
-                report_rule,
-            )),
-            RuleType::Email => Ok(self.apply_regex_to_chunks(
-                chunks,
-                meta,
-                &*detectors::EMAIL_REGEX,
-                None,
-                report_rule,
-            )),
+            } => apply_regex!(&pattern.0, replace_groups.as_ref()),
+            RuleType::Email => apply_regex!(detectors::EMAIL_REGEX, None),
             RuleType::Ip => {
-                let (chunks, meta) = self.apply_regex_to_chunks(
-                    chunks,
-                    meta,
-                    &*detectors::IPV4_REGEX,
-                    None,
-                    report_rule,
-                );
-                let (chunks, meta) = self.apply_regex_to_chunks(
-                    chunks,
-                    meta,
-                    &*detectors::IPV6_REGEX,
-                    None,
-                    report_rule,
-                );
-                Ok((chunks, meta))
+                apply_regex!(detectors::IPV4_REGEX, None);
+                apply_regex!(detectors::IPV6_REGEX, None);
             }
-            RuleType::Creditcard => Ok(self.apply_regex_to_chunks(
-                chunks,
-                meta,
-                &*detectors::CREDITCARD_REGEX,
-                None,
-                report_rule,
-            )),
+            RuleType::Creditcard => apply_regex!(detectors::CREDITCARD_REGEX, None),
             RuleType::Multiple {
                 ref rules,
                 hide_rule,
             } => {
-                let mut item = (chunks, meta);
-                let mut processed = false;
                 for rule_id in rules.iter() {
                     // XXX: log bad rule reference here
                     if let Some(rule) = self.config().lookup_rule(rule_id) {
                         let report_rule = if hide_rule { Some(self) } else { None };
-                        item = match rule.process_chunks(item.0, item.1, report_rule) {
-                            Ok(rv) => {
-                                processed = true;
-                                rv
-                            }
+                        let redaction_override = match self.spec.redaction {
+                            Redaction::Default => None,
+                            ref red => Some(red),
+                        };
+                        rv = match rule.process_chunks(rv.0, rv.1, report_rule, redaction_override)
+                        {
+                            Ok(rv) => rv,
                             Err(rv) => rv,
                         };
                     }
                 }
-                if processed {
-                    Ok(item)
-                } else {
-                    Err(item)
-                }
             }
             // no special handling for strings, falls back to `process_value`
-            RuleType::Remove | RuleType::RemovePair { .. } => Err((chunks, meta)),
-        }
-    }
-
-    /// Applies a regex to chunks and meta.
-    fn apply_regex_to_chunks(
-        &self,
-        chunks: Vec<Chunk>,
-        meta: Meta,
-        regex: &Regex,
-        replace_groups: Option<&BTreeSet<u8>>,
-        report_rule: Option<&Rule>,
-    ) -> (Vec<Chunk>, Meta) {
-        let report_rule = report_rule.unwrap_or(self);
-        let mut search_string = String::new();
-        let mut replacement_chunks = vec![];
-        for chunk in chunks {
-            match chunk {
-                Chunk::Text { ref text } => search_string.push_str(&text.replace("\x00", "")),
-                chunk @ Chunk::Redaction { .. } => {
-                    replacement_chunks.push(chunk);
-                    search_string.push('\x00');
-                }
-            }
-        }
-        replacement_chunks.reverse();
-        let mut rv: Vec<Chunk> = vec![];
-
-        fn process_text(text: &str, rv: &mut Vec<Chunk>, replacement_chunks: &mut Vec<Chunk>) {
-            if text.is_empty() {
-                return;
-            }
-            let mut pos = 0;
-            for piece in NULL_SPLIT_RE.find_iter(text) {
-                rv.push(Chunk::Text {
-                    text: text[pos..piece.start()].to_string().into(),
-                });
-                rv.push(replacement_chunks.pop().unwrap());
-                pos = piece.end();
-            }
-            rv.push(Chunk::Text {
-                text: text[pos..].to_string().into(),
-            });
+            RuleType::Remove | RuleType::RemovePair { .. } => return Err(rv),
         }
 
-        let mut pos = 0;
-        for m in regex.captures_iter(&search_string) {
-            let g0 = m.get(0).unwrap();
-
-            match replace_groups {
-                Some(groups) => {
-                    for (idx, g) in m.iter().enumerate() {
-                        if idx == 0 {
-                            continue;
-                        }
-
-                        if let Some(g) = g {
-                            if groups.contains(&(idx as u8)) {
-                                process_text(
-                                    &search_string[pos..g.start()],
-                                    &mut rv,
-                                    &mut replacement_chunks,
-                                );
-                                report_rule.insert_replacement_chunks(g.as_str(), &mut rv);
-                                pos = g.end();
-                            }
-                        }
-                    }
-                }
-                None => {
-                    process_text(
-                        &search_string[pos..g0.start()],
-                        &mut rv,
-                        &mut replacement_chunks,
-                    );
-                    report_rule.insert_replacement_chunks(g0.as_str(), &mut rv);
-                    pos = g0.end();
-                }
-            }
-
-            process_text(
-                &search_string[pos..g0.end()],
-                &mut rv,
-                &mut replacement_chunks,
-            );
-            pos = g0.end();
-        }
-
-        process_text(&search_string[pos..], &mut rv, &mut replacement_chunks);
-
-        (rv, meta)
+        Ok(rv)
     }
 
     /// Applies the rule to the given value.
@@ -563,15 +547,19 @@ impl<'a> Rule<'a> {
         mut value: Annotated<Value>,
         kind: PiiKind,
         report_rule: Option<&Rule>,
+        redaction_override: Option<&Redaction>,
     ) -> Result<Annotated<Value>, Annotated<Value>> {
         let _kind = kind;
+        let report_rule = report_rule.unwrap_or(self);
+        let redaction = redaction_override.unwrap_or(&self.spec.redaction);
+
         match self.spec.ty {
             // pattern matches are not implemented for non strings
             RuleType::Pattern { .. } | RuleType::Email | RuleType::Ip | RuleType::Creditcard => {
                 Err(value)
             }
             RuleType::Remove => {
-                return Ok(report_rule.unwrap_or(self).replace_value(value));
+                return Ok(redaction.replace_value(report_rule, self.config(), value));
             }
             RuleType::Multiple {
                 ref rules,
@@ -582,7 +570,16 @@ impl<'a> Rule<'a> {
                     // XXX: handle bad references here?
                     if let Some(rule) = self.config().lookup_rule(rule_id) {
                         let report_rule = if hide_rule { Some(self) } else { None };
-                        value = match rule.process_value(value, kind, report_rule) {
+                        let redaction_override = match self.spec.redaction {
+                            Redaction::Default => None,
+                            ref red => Some(red),
+                        };
+                        value = match rule.process_value(
+                            value,
+                            kind,
+                            report_rule,
+                            redaction_override,
+                        ) {
                             Ok(rv) => {
                                 processed = true;
                                 rv
@@ -600,7 +597,7 @@ impl<'a> Rule<'a> {
             RuleType::RemovePair { ref key_pattern } => {
                 if let Some(ref path) = value.meta().path() {
                     if key_pattern.0.is_match(&path.to_string()) {
-                        return Ok(report_rule.unwrap_or(self).replace_value(value));
+                        return Ok(redaction.replace_value(report_rule, self.config(), value));
                     }
                 }
                 Err(value)
@@ -661,7 +658,7 @@ impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
 
         if let Some(rules) = self.applications.get(&pii_kind) {
             for rule in rules {
-                rv = match rule.process_chunks(rv.0, rv.1, None) {
+                rv = match rule.process_chunks(rv.0, rv.1, None, None) {
                     Ok(val) => {
                         replaced = true;
                         val
@@ -681,7 +678,7 @@ impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
     fn pii_process_value(&self, mut value: Annotated<Value>, kind: PiiKind) -> Annotated<Value> {
         if let Some(rules) = self.applications.get(&kind) {
             for rule in rules {
-                value = match rule.process_value(value, kind, None) {
+                value = match rule.process_value(value, kind, None, None) {
                     Ok(value) => return value,
                     Err(value) => value,
                 };
