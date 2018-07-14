@@ -75,6 +75,14 @@ pub(crate) enum RuleType {
         #[serde(default)]
         hide_rule: bool,
     },
+    /// Applies another rule.  Works like a single multiple.
+    Alias {
+        /// A reference to another rule to apply.
+        rule: String,
+        /// When set to true, the outer rule is reported.
+        #[serde(default)]
+        hide_rule: bool,
+    },
     /// When a regex matches a key, a value is removed
     #[serde(rename_all = "camelCase")]
     RemovePair {
@@ -136,7 +144,11 @@ fn default_mask_char() -> char {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "method", rename_all = "camelCase")]
 pub(crate) enum Redaction {
-    /// The default redaction for this operation (normally equivalen to `Remove`)
+    /// The default redaction for this operation (normally equivalen to `Remove`).
+    ///
+    /// The main difference to `Remove` is that if the redaction is explicitly
+    /// set to `Remove` it also applies in situations where a default
+    /// redaction is therwise not passed down (for instance with `Multiple`).
     Default,
     /// Removes the value and puts nothing in its place.
     Remove,
@@ -471,6 +483,24 @@ impl<'a> Rule<'a> {
         self.cfg
     }
 
+    fn lookup_referenced_rule(
+        &'a self,
+        rule_id: &'a str,
+        hide_rule: bool,
+    ) -> Option<(Rule, Option<&'a Rule>, Option<&'a Redaction>)> {
+        if let Some(rule) = self.config().lookup_rule(rule_id) {
+            let report_rule = if hide_rule { Some(self) } else { None };
+            let redaction_override = match self.spec.redaction {
+                Redaction::Default => None,
+                ref red => Some(red),
+            };
+            Some((rule, report_rule, redaction_override))
+        } else {
+            // XXX: handle bad references here?
+            None
+        }
+    }
+
     /// Processes the given chunks according to the rule.
     ///
     /// This works the same as `pii_process_chunks` in behavior.  This means that if an
@@ -511,18 +541,27 @@ impl<'a> Rule<'a> {
                 apply_regex!(detectors::IPV6_REGEX, None);
             }
             RuleType::Creditcard => apply_regex!(detectors::CREDITCARD_REGEX, None),
+            RuleType::Alias {
+                ref rule,
+                hide_rule,
+            } => {
+                if let Some((rule, report_rule, redaction_override)) =
+                    self.lookup_referenced_rule(rule, hide_rule)
+                {
+                    rv = match rule.process_chunks(rv.0, rv.1, report_rule, redaction_override) {
+                        Ok(rv) => rv,
+                        Err(rv) => rv,
+                    };
+                }
+            }
             RuleType::Multiple {
                 ref rules,
                 hide_rule,
             } => {
                 for rule_id in rules.iter() {
-                    // XXX: log bad rule reference here
-                    if let Some(rule) = self.config().lookup_rule(rule_id) {
-                        let report_rule = if hide_rule { Some(self) } else { None };
-                        let redaction_override = match self.spec.redaction {
-                            Redaction::Default => None,
-                            ref red => Some(red),
-                        };
+                    if let Some((rule, report_rule, redaction_override)) =
+                        self.lookup_referenced_rule(rule_id, hide_rule)
+                    {
                         rv = match rule.process_chunks(rv.0, rv.1, report_rule, redaction_override)
                         {
                             Ok(rv) => rv,
@@ -558,8 +597,18 @@ impl<'a> Rule<'a> {
             RuleType::Pattern { .. } | RuleType::Email | RuleType::Ip | RuleType::Creditcard => {
                 Err(value)
             }
-            RuleType::Remove => {
-                return Ok(redaction.replace_value(report_rule, self.config(), value));
+            RuleType::Remove => Ok(redaction.replace_value(report_rule, self.config(), value)),
+            RuleType::Alias {
+                ref rule,
+                hide_rule,
+            } => {
+                if let Some((rule, report_rule, redaction_override)) =
+                    self.lookup_referenced_rule(rule, hide_rule)
+                {
+                    rule.process_value(value, kind, report_rule, redaction_override)
+                } else {
+                    Err(value)
+                }
             }
             RuleType::Multiple {
                 ref rules,
@@ -567,13 +616,9 @@ impl<'a> Rule<'a> {
             } => {
                 let mut processed = false;
                 for rule_id in rules.iter() {
-                    // XXX: handle bad references here?
-                    if let Some(rule) = self.config().lookup_rule(rule_id) {
-                        let report_rule = if hide_rule { Some(self) } else { None };
-                        let redaction_override = match self.spec.redaction {
-                            Redaction::Default => None,
-                            ref red => Some(red),
-                        };
+                    if let Some((rule, report_rule, redaction_override)) =
+                        self.lookup_referenced_rule(rule_id, hide_rule)
+                    {
                         value = match rule.process_value(
                             value,
                             kind,
@@ -703,13 +748,12 @@ macro_rules! declare_well_known_rules {
 }
 
 declare_well_known_rules! {
-    "@ip:mask" => RuleSpec {
-        ty: RuleType::Ip,
-        redaction: Redaction::Mask {
-            mask_char: '*',
-            chars_to_ignore: ".:".into(),
-            range: (None, None),
+    "@ip" => RuleSpec {
+        ty: RuleType::Alias {
+            rule: "@ip:replace".into(),
+            hide_rule: true,
         },
+        redaction: Redaction::Default,
     };
 
     "@ip:replace" => RuleSpec {
@@ -725,6 +769,14 @@ declare_well_known_rules! {
             algorithm: HashAlgorithm::HmacSha1,
             key: None,
         },
+    };
+
+    "@email" => RuleSpec {
+        ty: RuleType::Alias {
+            rule: "@email:replace".into(),
+            hide_rule: true,
+        },
+        redaction: Redaction::Default,
     };
 
     "@email:mask" => RuleSpec {
@@ -749,6 +801,14 @@ declare_well_known_rules! {
             algorithm: HashAlgorithm::HmacSha1,
             key: None,
         },
+    };
+
+    "@creditcard" => RuleSpec {
+        ty: RuleType::Alias {
+            rule: "@creditcard:mask".into(),
+            hide_rule: true,
+        },
+        redaction: Redaction::Default,
     };
 
     "@creditcard:mask" => RuleSpec {
