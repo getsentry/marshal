@@ -245,4 +245,40 @@ mod test {
             ];
         );
     }
+
+    #[test]
+    fn test_email() {
+        assert_rule!(
+            rule = "@email";
+            input = "John Appleseed <john@appleseed.com>";
+            output = "John Appleseed <[email]>";
+            remarks = vec![
+                Remark::with_range(RemarkType::Substituted, "@email:replace", (16, 23)),
+            ];
+        );
+        assert_rule!(
+            rule = "@email:replace";
+            input = "John Appleseed <john@appleseed.com>";
+            output = "John Appleseed <[email]>";
+            remarks = vec![
+                Remark::with_range(RemarkType::Substituted, "@email:replace", (16, 23)),
+            ];
+        );
+        assert_rule!(
+            rule = "@email:mask";
+            input = "John Appleseed <john@appleseed.com>";
+            output = "John Appleseed <****@*********.***>";
+            remarks = vec![
+                Remark::with_range(RemarkType::Masked, "@email:mask", (16, 34)),
+            ];
+        );
+        assert_rule!(
+            rule = "@email:hash";
+            input = "John Appleseed <john@appleseed.com>";
+            output = "John Appleseed <33835528AC0FFF1B46D167C35FEAAA6F08FD3F46>";
+            remarks = vec![
+                Remark::with_range(RemarkType::Pseudonymized, "@email:hash", (16, 56)),
+            ];
+        );
+    }
 }

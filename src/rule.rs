@@ -48,7 +48,11 @@ lazy_static! {
     ).unwrap();
     static ref EMAIL_REGEX: Regex = Regex::new(
         r#"(?x)
-            \b[a-z0-9!#$%&'*+/=?^_`{|}~.-]+@[a-z0-9-]+(\\.[a-z0-9-]+)\b
+            \b
+                [a-zA-Z0-9.!\#$%&'*+/=?^_`{|}~-]+
+                @
+                [a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*
+            \b
     "#
     ).unwrap();
     static ref IPV4_REGEX: Regex = Regex::new(concat!("\\b", ip!(v4a), "\\b")).unwrap();
