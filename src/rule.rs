@@ -21,14 +21,6 @@ lazy_static! {
     static ref NULL_SPLIT_RE: Regex = Regex::new("\x00").unwrap();
 }
 
-/// Indicates that the rule config was invalid after parsing.
-#[derive(Fail, Debug)]
-pub enum BadRuleConfig {
-    /// An invalid reference to a rule was found in the config.
-    #[fail(display = "invalid rule reference ({})", _0)]
-    BadReference(String),
-}
-
 /// A regex pattern for text replacement.
 pub struct Pattern(pub Regex);
 
@@ -409,7 +401,7 @@ impl<'a> Rule<'a> {
                 let mut item = (chunks, meta);
                 let mut processed = false;
                 for rule_id in rules.iter() {
-                    // XXX: handle bad references here?
+                    // XXX: log bad rule reference here
                     if let Some(rule) = self.config().lookup_rule(rule_id) {
                         item = match rule.process_chunks(item.0, item.1) {
                             Ok(rv) => {
@@ -570,25 +562,24 @@ impl<'a> Rule<'a> {
 
 impl<'a> RuleBasedPiiProcessor<'a> {
     /// Creates a new rule based PII processor from a config.
-    pub fn new(cfg: &'a PiiConfig) -> Result<RuleBasedPiiProcessor<'a>, BadRuleConfig> {
+    pub fn new(cfg: &'a PiiConfig) -> RuleBasedPiiProcessor<'a> {
         let mut applications = BTreeMap::new();
 
         for (&pii_kind, cfg_applications) in &cfg.applications {
             let mut rules = vec![];
             for application in cfg_applications {
+                // XXX: log bad rule reference here
                 if let Some(rule) = cfg.lookup_rule(application.as_str()) {
                     rules.push(rule);
-                } else {
-                    return Err(BadRuleConfig::BadReference(application.to_string()));
                 }
             }
             applications.insert(pii_kind, rules);
         }
 
-        Ok(RuleBasedPiiProcessor {
+        RuleBasedPiiProcessor {
             cfg: cfg,
             applications: applications,
-        })
+        }
     }
 
     /// Returns a reference to the config that created the processor.
@@ -822,7 +813,7 @@ fn test_basic_stripping() {
         }
     "#).unwrap();
 
-    let processor = RuleBasedPiiProcessor::new(&cfg).unwrap();
+    let processor = RuleBasedPiiProcessor::new(&cfg);
     let processed_event = processor.process_root_value(event);
     let new_event = processed_event.clone().0.unwrap();
 
@@ -929,7 +920,7 @@ fn test_well_known_stripping() {
     "#,
     ).unwrap();
 
-    let processor = RuleBasedPiiProcessor::new(&cfg).unwrap();
+    let processor = RuleBasedPiiProcessor::new(&cfg);
     let processed_event = processor.process_root_value(event);
     let new_event = processed_event.clone().0.unwrap();
 
