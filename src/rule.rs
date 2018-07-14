@@ -63,7 +63,7 @@ lazy_static! {
     static ref IPV4_REGEX: Regex = Regex::new(concat!("\\b", ip!(v4a), "\\b")).unwrap();
     static ref IPV6_REGEX: Regex = Regex::new(
         concat!(
-            "(?:[\\s]|[[:punct:]]|^)(",
+            "(?i)(?:[\\s]|[[:punct:]]|^)(",
                 "(", ip!(v6s), ":){7}", ip!(v6s), "|",
                 "(", ip!(v6s), ":){1,7}:|",
                 "(", ip!(v6s), ":){1,6}::", ip!(v6s), "|",
