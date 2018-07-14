@@ -132,6 +132,22 @@ declare_builtin_rules! {
             key: None,
         },
     };
+
+    // user path rules
+    "@userpath" => rule_alias!("@userpath:replace");
+    "@userpath:replace" => RuleSpec {
+        ty: RuleType::Userpath,
+        redaction: Redaction::Replace {
+            text: "[user]".into(),
+        },
+    };
+    "@userpath:hash" => RuleSpec {
+        ty: RuleType::Userpath,
+        redaction: Redaction::Hash {
+            algorithm: HashAlgorithm::HmacSha1,
+            key: None,
+        },
+    };
 }
 
 #[cfg(test)]
@@ -374,6 +390,42 @@ mod test {
             output = "John Appleseed 97227DBC2C4F028628CE96E0A3777F97C07BBC84!";
             remarks = vec![
                 Remark::with_range(RemarkType::Pseudonymized, "@creditcard:hash", (15, 55)),
+            ];
+        );
+    }
+
+    #[test]
+    fn test_userpath() {
+        assert_rule!(
+            rule = "@userpath";
+            input = "C:\\Users\\mitsuhiko\\Desktop";
+            output = "C:\\Users\\[user]\\Desktop";
+            remarks = vec![
+                Remark::with_range(RemarkType::Substituted, "@userpath:replace", (9, 15)),
+            ];
+        );
+        assert_rule!(
+            rule = "@userpath";
+            input = "File in /Users/mitsuhiko/Development/sentry-stripping";
+            output = "File in /Users/[user]/Development/sentry-stripping";
+            remarks = vec![
+                Remark::with_range(RemarkType::Substituted, "@userpath:replace", (15, 21)),
+            ];
+        );
+        assert_rule!(
+            rule = "@userpath:replace";
+            input = "C:\\Windows\\Profiles\\Armin\\Temp";
+            output = "C:\\Windows\\Profiles\\[user]\\Temp";
+            remarks = vec![
+                Remark::with_range(RemarkType::Substituted, "@userpath:replace", (20, 26)),
+            ];
+        );
+        assert_rule!(
+            rule = "@userpath:hash";
+            input = "File in /Users/mitsuhiko/Development/sentry-stripping";
+            output = "File in /Users/A8791A1A8D11583E0200CC1B9AB971B4D78B8A69/Development/sentry-stripping";
+            remarks = vec![
+                Remark::with_range(RemarkType::Pseudonymized, "@userpath:hash", (15, 55)),
             ];
         );
     }

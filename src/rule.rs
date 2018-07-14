@@ -84,6 +84,21 @@ lazy_static! {
             \d{4}[- ]?\d{4,6}[- ]?\d{4,5}(?:[- ]?\d{4})
     "#
     ).unwrap();
+    static ref PATH_REGEX: Regex = Regex::new(
+        r#"(?ix)
+            (?:
+                (?:
+                    \b(?:[a-zA-Z]:[\\/])?
+                    (?:users|home|documents and settings|[^/\\]+[/\\]profiles)[\\/]
+                ) | (?:
+                    /(?:home|users)/
+                )
+            )
+            (
+                [^/\\]+
+            )
+        "#
+    ).unwrap();
 }
 
 /// A regex pattern for text replacement.
@@ -134,6 +149,8 @@ pub(crate) enum RuleType {
     Ip,
     /// Matches a creditcard number
     Creditcard,
+    /// Sanitizes a path from user data
+    Userpath,
     /// Unconditionally removes the value
     Remove,
     /// Applies multiple rules.
@@ -623,6 +640,7 @@ impl<'a> Rule<'a> {
                 apply_regex!(IPV6_REGEX, Some(&*GROUP_1));
             }
             RuleType::Creditcard => apply_regex!(CREDITCARD_REGEX, None),
+            RuleType::Userpath => apply_regex!(PATH_REGEX, Some(&*GROUP_1)),
             RuleType::Alias {
                 ref rule,
                 hide_rule,
@@ -681,7 +699,8 @@ impl<'a> Rule<'a> {
             | RuleType::Mac
             | RuleType::Email
             | RuleType::Ip
-            | RuleType::Creditcard => Err(value),
+            | RuleType::Creditcard
+            | RuleType::Userpath => Err(value),
             RuleType::Remove => Ok(redaction.replace_value(report_rule, self.config(), value)),
             RuleType::Alias {
                 ref rule,
