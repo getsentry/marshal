@@ -281,4 +281,40 @@ mod test {
             ];
         );
     }
+
+    #[test]
+    fn test_creditcard() {
+        assert_rule!(
+            rule = "@creditcard";
+            input = "John Appleseed 1234-1234-1234-1234!";
+            output = "John Appleseed ****-****-****-1234!";
+            remarks = vec![
+                Remark::with_range(RemarkType::Masked, "@creditcard:mask", (15, 34)),
+            ];
+        );
+        assert_rule!(
+            rule = "@creditcard:mask";
+            input = "John Appleseed 1234-1234-1234-1234!";
+            output = "John Appleseed ****-****-****-1234!";
+            remarks = vec![
+                Remark::with_range(RemarkType::Masked, "@creditcard:mask", (15, 34)),
+            ];
+        );
+        assert_rule!(
+            rule = "@creditcard:replace";
+            input = "John Appleseed 1234-1234-1234-1234!";
+            output = "John Appleseed [creditcard]!";
+            remarks = vec![
+                Remark::with_range(RemarkType::Substituted, "@creditcard:replace", (15, 27)),
+            ];
+        );
+        assert_rule!(
+            rule = "@creditcard:hash";
+            input = "John Appleseed 1234-1234-1234-1234!";
+            output = "John Appleseed 97227DBC2C4F028628CE96E0A3777F97C07BBC84!";
+            remarks = vec![
+                Remark::with_range(RemarkType::Pseudonymized, "@creditcard:hash", (15, 55)),
+            ];
+        );
+    }
 }
