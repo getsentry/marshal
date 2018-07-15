@@ -104,6 +104,12 @@ lazy_static! {
 /// A regex pattern for text replacement.
 pub(crate) struct Pattern(pub Regex);
 
+impl From<&'static str> for Pattern {
+    fn from(pattern: &'static str) -> Pattern {
+        Pattern(Regex::new(pattern).unwrap())
+    }
+}
+
 impl fmt::Debug for Pattern {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(&self.0, f)
@@ -171,7 +177,7 @@ pub(crate) enum RuleType {
     },
     /// When a regex matches a key, a value is removed
     #[serde(rename_all = "camelCase")]
-    RemovePair {
+    RedactPair {
         /// A pattern to match for keys.
         key_pattern: Pattern,
     },
@@ -671,7 +677,7 @@ impl<'a> Rule<'a> {
                 }
             }
             // no special handling for strings, falls back to `process_value`
-            RuleType::Remove | RuleType::RemovePair { .. } => return Err(rv),
+            RuleType::Remove | RuleType::RedactPair { .. } => return Err(rv),
         }
 
         Ok(rv)
@@ -743,7 +749,7 @@ impl<'a> Rule<'a> {
                     Err(value)
                 }
             }
-            RuleType::RemovePair { ref key_pattern } => {
+            RuleType::RedactPair { ref key_pattern } => {
                 if let Some(ref path) = value.meta().path() {
                     if key_pattern.0.is_match(&path.to_string()) {
                         return Ok(redaction.replace_value(report_rule, self.config(), value));
@@ -877,7 +883,7 @@ fn test_basic_stripping() {
                 }
             },
             "remove_foo": {
-                "type": "removePair",
+                "type": "redactPair",
                 "keyPattern": "foo"
             },
             "remove_ip": {

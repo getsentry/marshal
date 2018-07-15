@@ -148,6 +148,15 @@ declare_builtin_rules! {
             key: None,
         },
     };
+
+    // password field removal
+    "@password" => rule_alias!("@password:remove");
+    "@password:remove" => RuleSpec {
+        ty: RuleType::RedactPair {
+            key_pattern: "(?i)\\b(password|passwd|mysql_pwd|auth|credentials|secret)\\b".into(),
+        },
+        redaction: Redaction::Remove,
+    };
 }
 
 #[cfg(test)]
