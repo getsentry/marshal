@@ -18,7 +18,7 @@ pub type Map<V> = BTreeMap<String, Annotated<V>>;
 pub enum Value {
     /// A null value (None, unit).
     Null,
-    /// A boolean vlaue.
+    /// A boolean value.
     Bool(bool),
     /// An unsigned int 32.
     U32(u32),

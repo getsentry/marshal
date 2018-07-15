@@ -654,10 +654,7 @@ impl<'a> Rule<'a> {
                 if let Some((rule, report_rule, redaction_override)) =
                     self.lookup_referenced_rule(rule, hide_rule)
                 {
-                    rv = match rule.process_chunks(rv.0, rv.1, report_rule, redaction_override) {
-                        Ok(rv) => rv,
-                        Err(rv) => rv,
-                    };
+                    rv = rule.process_chunks(rv.0, rv.1, report_rule, redaction_override)?;
                 }
             }
             RuleType::Multiple {
