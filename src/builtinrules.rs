@@ -498,11 +498,11 @@ mod test {
     fn test_password() {
         assert_databag_rule!(
             rule = "@password";
-            input = valuemap! {
+            input = valuemap!{
                 "password" => Value::from("testing"),
                 "some_other_key" => Value::from(true),
             };
-            output = valuemap! {
+            output = valuemap!{
                 "password" => Annotated::from(Value::from("".to_string()))
                         .with_removed_value(Remark::new(RemarkType::Removed, "@password:remove")),
                 "some_other_key" =>
