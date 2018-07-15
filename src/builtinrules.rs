@@ -161,8 +161,8 @@ declare_builtin_rules! {
 
 #[cfg(test)]
 mod test {
-    use meta::{Annotated, Remark, RemarkType};
     use common::{Map, Value};
+    use meta::{Annotated, Remark, RemarkType};
     use processor::PiiKind;
     use rule::PiiConfig;
     use std::collections::BTreeMap;
@@ -171,6 +171,17 @@ mod test {
     struct FreeformRoot {
         #[process_annotated_value(pii_kind = "freeform")]
         value: Annotated<String>,
+    }
+
+    macro_rules! valuemap {
+        () => { Map::<Value>::new() };
+        ($($key:expr => $value:expr),* $(,)*) => {{
+            let mut __map = Map::<Value>::new();
+            $(
+                __map.insert($key.to_string(), Annotated::from($value));
+            )*
+            __map
+        }}
     }
 
     macro_rules! assert_freeform_rule {
@@ -487,30 +498,15 @@ mod test {
     fn test_password() {
         assert_databag_rule!(
             rule = "@password";
-            input = {
-                let mut map = Map::new();
-                map.insert(
-                    "password".to_string(),
-                    Annotated::from(Value::from("testing"))
-                );
-                map.insert(
-                    "some_other_key".to_string(),
-                    Annotated::from(Value::from(true))
-                );
-                map
+            input = valuemap! {
+                "password" => Value::from("testing"),
+                "some_other_key" => Value::from(true),
             };
-            output = {
-                let mut map = Map::new();
-                map.insert(
-                    "password".to_string(),
-                    Annotated::from(Value::from("".to_string()))
-                        .with_removed_value(Remark::new(RemarkType::Removed, "@password:remove"))
-                );
-                map.insert(
-                    "some_other_key".to_string(),
-                    Annotated::from(Value::from(true))
-                );
-                map
+            output = valuemap! {
+                "password" => Annotated::from(Value::from("".to_string()))
+                        .with_removed_value(Remark::new(RemarkType::Removed, "@password:remove")),
+                "some_other_key" =>
+                    Annotated::from(Value::from(true)),
             };
             remarks = vec![];
         );
