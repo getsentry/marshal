@@ -18,6 +18,9 @@ sha2 = "0.7.1"
 hmac = "0.6.2"
 sha-1 = "0.7.0"
 
+[dev-dependencies]
+difference = "2.0.0"
+
 [patch.crates-io]
 #serde = { path = "../serde/serde" }
 #serde_derive = { path = "../serde/serde_derive" }

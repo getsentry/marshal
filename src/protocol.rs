@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use meta::{self, Annotated, MetaMap, MetaTree};
 use utils::buffer::{Content, ContentDeserializer, ContentRefDeserializer};
+use utils::serde::CustomSerialize;
 use utils::{annotated, serde_chrono};
 
 // we re-export common as part of the protocol
@@ -100,17 +101,6 @@ impl Level {
 
 impl_str_serialization!(Level);
 
-#[cfg(test)]
-mod test_level {
-    use super::*;
-    use serde_json;
-
-    #[test]
-    fn test_log() {
-        assert_eq!(Level::Info, serde_json::from_str("\"log\"").unwrap());
-    }
-}
-
 /// A breadcrumb.
 #[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Breadcrumb {
@@ -146,73 +136,6 @@ pub struct Breadcrumb {
     pub other: Annotated<Map<Value>>,
 }
 
-#[cfg(test)]
-mod test_breadcrumb {
-    use super::*;
-    use serde_json;
-
-    #[test]
-    fn test_roundtrip() {
-        let json = r#"{
-  "timestamp": 42,
-  "type": "mytype",
-  "category": "mycategory",
-  "level": "fatal",
-  "message": "my message",
-  "data": {
-    "a": "b"
-  },
-  "c": "d"
-}"#;
-
-        let breadcrumb = Annotated::from(Breadcrumb {
-            timestamp: serde_chrono::timestamp_to_datetime(42.0).into(),
-            ty: "mytype".to_string().into(),
-            category: Some("mycategory".to_string()).into(),
-            level: Level::Fatal.into(),
-            message: Some("my message".to_string()).into(),
-            data: {
-                let mut map = Map::new();
-                map.insert(
-                    "a".to_string(),
-                    Annotated::from(Value::String("b".to_string())),
-                );
-                Annotated::from(map)
-            },
-            other: {
-                let mut map = Map::new();
-                map.insert(
-                    "c".to_string(),
-                    Annotated::from(Value::String("d".to_string())),
-                );
-                Annotated::from(map)
-            },
-        });
-
-        assert_eq!(breadcrumb, serde_json::from_str(json).unwrap());
-        assert_eq!(json, &serde_json::to_string_pretty(&breadcrumb).unwrap());
-    }
-
-    #[test]
-    fn test_default_values() {
-        let input = r#"{"timestamp":42}"#;
-        let output = r#"{"timestamp":42,"type":"default","level":"info"}"#;
-
-        let breadcrumb = Annotated::from(Breadcrumb {
-            timestamp: serde_chrono::timestamp_to_datetime(42.0).into(),
-            ty: default_breadcrumb_type(),
-            category: None.into(),
-            level: Level::default().into(),
-            message: None.into(),
-            data: Map::new().into(),
-            other: Map::new().into(),
-        });
-
-        assert_eq!(breadcrumb, serde_json::from_str(input).unwrap());
-        assert_eq!(output, &serde_json::to_string(&breadcrumb).unwrap());
-    }
-}
-
 /// Represents a full event for Sentry.
 #[derive(Debug, Default, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Event {
@@ -239,8 +162,6 @@ pub struct Event {
     #[process_annotated_value]
     pub breadcrumbs: Annotated<Values<Breadcrumb>>,
 }
-
-use utils::serde::CustomSerialize;
 
 fn serialize_event_id<S: Serializer>(
     annotated: &Annotated<Option<Uuid>>,
@@ -390,76 +311,4 @@ pub fn serialize_event<S: Serializer>(
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     serialize_with_meta(event, serializer)
-}
-
-#[cfg(test)]
-mod test_event {
-    use super::*;
-    use meta::Meta;
-    use serde_json;
-
-    fn serialize(event: &Annotated<Event>) -> Result<String, serde_json::Error> {
-        let mut serializer = serde_json::Serializer::pretty(Vec::new());
-        serialize_event(event, &mut serializer)?;
-        Ok(String::from_utf8(serializer.into_inner()).unwrap())
-    }
-
-    fn deserialize(string: &str) -> Result<Annotated<Event>, serde_json::Error> {
-        deserialize_event(&mut serde_json::Deserializer::from_str(string))
-    }
-
-    #[test]
-    fn test_roundtrip() {
-        // NOTE: Interfaces will be tested separately.
-        let json = r#"{
-  "event_id": "52df9022835246eeb317dbd739ccd059",
-  "level": "debug",
-  "fingerprint": [
-    "myprint"
-  ],
-  "": {
-    "event_id": {
-      "": {
-        "err": [
-          "some error"
-        ]
-      }
-    }
-  }
-}"#;
-
-        let event = Annotated::from(Event {
-            id: Annotated::new(
-                Some("52df9022-8352-46ee-b317-dbd739ccd059".parse().unwrap()),
-                Meta::from_error("some error"),
-            ),
-            level: Level::Debug.into(),
-            fingerprint: Annotated::from(vec!["myprint".to_string()]),
-            breadcrumbs: Default::default(),
-        });
-
-        assert_eq!(event, deserialize(json).unwrap());
-        assert_eq!(json, serialize(&event).unwrap());
-    }
-
-    #[test]
-    fn test_default_values() {
-        let input = r#"{"event_id":"52df9022-8352-46ee-b317-dbd739ccd059"}"#;
-        let output = r#"{
-  "event_id": "52df9022835246eeb317dbd739ccd059",
-  "level": "error",
-  "fingerprint": [
-    "{{ default }}"
-  ]
-}"#;
-        let event = Annotated::from(Event {
-            id: Some("52df9022-8352-46ee-b317-dbd739ccd059".parse().unwrap()).into(),
-            level: Level::Error.into(),
-            fingerprint: fingerprint::default(),
-            breadcrumbs: Default::default(),
-        });
-
-        assert_eq!(event, serde_json::from_str(input).unwrap());
-        assert_eq!(output, &serde_json::to_string_pretty(&event).unwrap());
-    }
 }
