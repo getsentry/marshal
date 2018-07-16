@@ -87,13 +87,13 @@ fn test_basic_stripping() {
 
     let message = new_event.message.value().unwrap();
     println!("{:#?}", &new_event);
-    assert_eq!(
+    assert_eq_str!(
         message,
         "Hello *****@*****.***.  You signed up with card ****-****-****-1234. \
          Your home folder is C:\\Users\\[username] Look at our compliance \
          from 5A2DF387CD660E9F3E0AB20F9E7805450D56C5DACE9B959FC620C336E2B5D09A"
     );
-    assert_eq!(
+    assert_eq_dbg!(
         new_event.message.meta(),
         &Meta {
             remarks: vec![
@@ -110,7 +110,7 @@ fn test_basic_stripping() {
 
     let foo = new_event.extra.value().unwrap().get("foo").unwrap();
     assert!(foo.value().is_none());
-    assert_eq!(
+    assert_eq_dbg!(
         foo.meta(),
         &Meta {
             remarks: vec![Remark::new(RemarkType::Removed, "remove_foo")],
@@ -122,7 +122,7 @@ fn test_basic_stripping() {
 
     let ip = &new_event.ip;
     assert!(ip.value().is_none());
-    assert_eq!(
+    assert_eq_dbg!(
         ip.meta(),
         &Meta {
             remarks: vec![Remark::new(RemarkType::Removed, "remove_ip")],
@@ -133,7 +133,7 @@ fn test_basic_stripping() {
     );
 
     let value = processed_event.to_string().unwrap();
-    assert_eq!(value, "{\"message\":\"Hello *****@*****.***.  You signed up with card ****-****-****-1234. Your home folder is C:\\\\Users\\\\[username] Look at our compliance from 5A2DF387CD660E9F3E0AB20F9E7805450D56C5DACE9B959FC620C336E2B5D09A\",\"extra\":{\"bar\":true,\"foo\":null},\"ip\":null,\"\":{\"extra\":{\"foo\":{\"\":{\"rem\":[[\"remove_foo\",\"x\"]]}}},\"ip\":{\"\":{\"rem\":[[\"remove_ip\",\"x\"]]}},\"message\":{\"\":{\"len\":142,\"rem\":[[\"email_address\",\"m\",6,21],[\"creditcard_number\",\"m\",48,67],[\"path_username\",\"s\",98,108],[\"hash_ip\",\"p\",137,201]]}}}}");
+    assert_eq_str!(value, "{\"message\":\"Hello *****@*****.***.  You signed up with card ****-****-****-1234. Your home folder is C:\\\\Users\\\\[username] Look at our compliance from 5A2DF387CD660E9F3E0AB20F9E7805450D56C5DACE9B959FC620C336E2B5D09A\",\"extra\":{\"bar\":true,\"foo\":null},\"ip\":null,\"\":{\"extra\":{\"foo\":{\"\":{\"rem\":[[\"remove_foo\",\"x\"]]}}},\"ip\":{\"\":{\"rem\":[[\"remove_ip\",\"x\"]]}},\"message\":{\"\":{\"len\":142,\"rem\":[[\"email_address\",\"m\",6,21],[\"creditcard_number\",\"m\",48,67],[\"path_username\",\"s\",98,108],[\"hash_ip\",\"p\",137,201]]}}}}");
 }
 
 #[test]
@@ -193,8 +193,8 @@ fn test_well_known_stripping() {
 
     let message = new_event.message.value().unwrap();
     println!("{:#?}", &new_event);
-    assert_eq!(message, "[user-id] on [device-id] ([ip]): Hello World!");
-    assert_eq!(
+    assert_eq_str!(message, "[user-id] on [device-id] ([ip]): Hello World!");
+    assert_eq_dbg!(
         new_event.message.meta(),
         &Meta {
             remarks: vec![
@@ -209,7 +209,7 @@ fn test_well_known_stripping() {
     );
 
     let value = processed_event.to_string().unwrap();
-    assert_eq!(value, "{\"message\":\"[user-id] on [device-id] ([ip]): Hello World!\",\"\":{\"message\":{\"\":{\"len\":62,\"rem\":[[\"user_id\",\"s\",0,9],[\"device_id\",\"s\",13,24],[\"@ip:replace\",\"s\",26,30]]}}}}");
+    assert_eq_str!(value, "{\"message\":\"[user-id] on [device-id] ([ip]): Hello World!\",\"\":{\"message\":{\"\":{\"len\":62,\"rem\":[[\"user_id\",\"s\",0,9],[\"device_id\",\"s\",13,24],[\"@ip:replace\",\"s\",26,30]]}}}}");
 }
 
 #[test]
@@ -275,8 +275,8 @@ fn test_well_known_stripping_common_redaction() {
 
     let message = new_event.message.value().unwrap();
     println!("{:#?}", &new_event);
-    assert_eq!(message, "[id] on [id] ([id]): Hello World!");
-    assert_eq!(
+    assert_eq_str!(message, "[id] on [id] ([id]): Hello World!");
+    assert_eq_dbg!(
         new_event.message.meta(),
         &Meta {
             remarks: vec![
@@ -291,5 +291,5 @@ fn test_well_known_stripping_common_redaction() {
     );
 
     let value = processed_event.to_string().unwrap();
-    assert_eq!(value, "{\"message\":\"[id] on [id] ([id]): Hello World!\",\"\":{\"message\":{\"\":{\"len\":62,\"rem\":[[\"ids\",\"s\",0,4],[\"ids\",\"s\",8,12],[\"ids\",\"s\",14,18]]}}}}");
+    assert_eq_str!(value, "{\"message\":\"[id] on [id] ([id]): Hello World!\",\"\":{\"message\":{\"\":{\"len\":62,\"rem\":[[\"ids\",\"s\",0,4],[\"ids\",\"s\",8,12],[\"ids\",\"s\",14,18]]}}}}");
 }

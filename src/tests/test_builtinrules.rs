@@ -5,7 +5,7 @@ use meta::{Annotated, Remark, RemarkType};
 use processor::PiiKind;
 use rule::PiiConfig;
 
-#[derive(ProcessAnnotatedValue, Debug, Deserialize, Serialize, Clone)]
+#[derive(ProcessAnnotatedValue, Debug, Deserialize, Serialize, Clone, PartialEq)]
 struct FreeformRoot {
     #[process_annotated_value(pii_kind = "freeform")]
     value: Annotated<String>,
@@ -34,22 +34,14 @@ macro_rules! assert_freeform_rule {
             },
         };
         let input = $input.to_string();
-        println!();
-        println!("  input: {}", &input);
-        println!("  expected output: {}", $output);
         let processor = config.processor();
         let root = Annotated::from(FreeformRoot {
             value: Annotated::from(input),
         });
         let processed_root = processor.process_root_value(root);
-        println!(
-            "  output: {}",
-            processed_root.value().unwrap().value.value().unwrap()
-        );
-        println!("{:#?}", processed_root);
         let root = processed_root.0.unwrap();
-        assert_eq!(root.value.value().unwrap(), $output);
-        assert_eq!(&root.value.meta().remarks, &$remarks);
+        assert_eq_str!(root.value.value().unwrap(), $output);
+        assert_eq_dbg!(&root.value.meta().remarks, &$remarks);
     }};
 }
 
@@ -72,9 +64,6 @@ macro_rules! assert_databag_rule {
         };
         let input = $input;
         let output = $output;
-        println!();
-        println!("  input: {:?}", &input);
-        println!("  expected output: {:?}", &output);
         let processor = config.processor();
         let root = Annotated::from(DatabagRoot {
             value: Annotated::from(input),
@@ -83,14 +72,9 @@ macro_rules! assert_databag_rule {
         let json_root = root.to_string().unwrap();
         let root = Annotated::<DatabagRoot>::from_str(&json_root).unwrap();
         let processed_root = processor.process_root_value(root);
-        println!(
-            "  output: {:?}",
-            processed_root.value().unwrap().value.value().unwrap()
-        );
-        println!("{:#?}", processed_root);
         let root = processed_root.0.unwrap();
-        assert_eq!(root.value.value().unwrap(), &output);
-        assert_eq!(&root.value.meta().remarks, &$remarks);
+        assert_eq_dbg!(root.value.value().unwrap(), &output);
+        assert_eq_dbg!(&root.value.meta().remarks, &$remarks);
     }};
 }
 

@@ -32,8 +32,7 @@ fn test_basic_processing() {
     let new_event =
         ProcessAnnotatedValue::process_annotated_value(event, &MyProcessor, &ValueInfo::default());
     let id = new_event.0.unwrap().id;
-    assert!(id.value().is_none());
-    assert_eq!(&id.meta().errors[0], "Whatever mate");
+    assert_eq_dbg!(id, Annotated::from_error("Whatever mate"));
 }
 
 #[test]
@@ -80,5 +79,5 @@ fn test_pii_processing() {
     );
     let id = new_event.0.unwrap().id;
     assert!(id.value().is_none());
-    assert_eq!(id.meta().remarks().next().unwrap().rule_id(), "@id-removed");
+    assert_eq_str!(id.meta().remarks().next().unwrap().rule_id(), "@id-removed");
 }

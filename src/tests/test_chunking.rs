@@ -15,7 +15,7 @@ fn test_chunking() {
         },
     );
 
-    assert_eq!(
+    assert_eq_dbg!(
         chunks,
         vec![
             Chunk::Text {
@@ -32,7 +32,7 @@ fn test_chunking() {
         ]
     );
 
-    assert_eq!(
+    assert_eq_dbg!(
         chunks_to_string(chunks, Default::default()),
         (
             "Hello Peter, my email address is ****@*****.com. See you".into(),

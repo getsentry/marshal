@@ -8,7 +8,7 @@ mod test_meta_map {
 
     #[test]
     fn test_empty() {
-        assert_eq!(MetaMap::new(), serde_json::from_str("{}").unwrap());
+        assert_eq_dbg!(MetaMap::new(), serde_json::from_str("{}").unwrap());
     }
 
     #[test]
@@ -20,7 +20,7 @@ mod test_meta_map {
         let mut map = MetaMap::new();
         map.insert(".".to_string(), Meta::from_error("a"));
 
-        assert_eq!(map, serde_json::from_str(json).unwrap());
+        assert_eq_dbg!(map, serde_json::from_str(json).unwrap());
     }
 
     #[test]
@@ -40,7 +40,7 @@ mod test_meta_map {
         map.insert("foo".to_string(), Meta::from_error("b"));
         map.insert("foo.bar".to_string(), Meta::from_error("c"));
 
-        assert_eq!(map, serde_json::from_str(json).unwrap());
+        assert_eq_dbg!(map, serde_json::from_str(json).unwrap());
     }
 }
 
@@ -52,8 +52,8 @@ mod test_remarks {
         let json = r#"["@test","a"]"#;
         let remark = Remark::new(RemarkType::Annotated, "@test");
 
-        assert_eq!(remark, serde_json::from_str(json).unwrap());
-        assert_eq!(json, &serde_json::to_string(&remark).unwrap());
+        assert_eq_dbg!(remark, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, &serde_json::to_string(&remark).unwrap());
     }
 
     #[test]
@@ -61,8 +61,8 @@ mod test_remarks {
         let json = r#"["test","x"]"#;
         let remark = Remark::new(RemarkType::Removed, "test");
 
-        assert_eq!(remark, serde_json::from_str(json).unwrap());
-        assert_eq!(json, &serde_json::to_string(&remark).unwrap());
+        assert_eq_dbg!(remark, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, &serde_json::to_string(&remark).unwrap());
     }
 
     #[test]
@@ -70,8 +70,8 @@ mod test_remarks {
         let json = r#"["@test","s",21,42]"#;
         let remark = Remark::with_range(RemarkType::Substituted, "@test", (21, 42));
 
-        assert_eq!(remark, serde_json::from_str(json).unwrap());
-        assert_eq!(json, &serde_json::to_string(&remark).unwrap());
+        assert_eq_dbg!(remark, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, &serde_json::to_string(&remark).unwrap());
     }
 
     #[test]
@@ -80,8 +80,8 @@ mod test_remarks {
         let output = r#"["test","x",21,42]"#;
         let remark = Remark::with_range(RemarkType::Removed, "test", (21, 42));
 
-        assert_eq!(remark, serde_json::from_str(input).unwrap());
-        assert_eq!(output, &serde_json::to_string(&remark).unwrap());
+        assert_eq_dbg!(remark, serde_json::from_str(input).unwrap());
+        assert_eq_str!(output, &serde_json::to_string(&remark).unwrap());
     }
 }
 
@@ -106,7 +106,7 @@ mod test_serialize_meta {
     #[test]
     fn test_empty() {
         let value = Annotated::<i32>::empty();
-        assert_eq!(serialize(&value).unwrap(), "{}")
+        assert_eq_str!(serialize(&value).unwrap(), "{}")
     }
 
     #[test]
@@ -115,13 +115,13 @@ mod test_serialize_meta {
             answer: Annotated::empty(),
         });
 
-        assert_eq!(serialize(&value).unwrap(), "{}")
+        assert_eq_str!(serialize(&value).unwrap(), "{}")
     }
 
     #[test]
     fn test_basic() {
         let value = Annotated::new(42, Meta::from_error("some error"));
-        assert_eq!(serialize(&value).unwrap(), r#"{"":{"err":["some error"]}}"#);
+        assert_eq_str!(serialize(&value).unwrap(), r#"{"":{"err":["some error"]}}"#);
     }
 
     #[test]
@@ -132,7 +132,7 @@ mod test_serialize_meta {
             },
             Meta::from_error("outer error"),
         );
-        assert_eq!(
+        assert_eq_str!(
             serialize(&value).unwrap(),
             r#"{"":{"err":["outer error"]},"answer":{"":{"err":["inner error"]}}}"#
         );
@@ -144,7 +144,7 @@ mod test_serialize_meta {
             Annotated::new(1, Meta::from_error("a")),
             Annotated::new(2, Meta::from_error("b")),
         ]);
-        assert_eq!(
+        assert_eq_str!(
             serialize(&value).unwrap(),
             r#"{"0":{"":{"err":["a"]}},"1":{"":{"err":["b"]}}}"#
         );

@@ -1,45 +1,14 @@
-use difference::Changeset;
 use serde_json;
 
 use meta::{Annotated, Meta};
 use protocol::*;
-
-macro_rules! assert_eq_str {
-    ($left:expr, $right:expr) => {
-        let left = &$left;
-        let right = &$right;
-
-        assert!(
-            left == right,
-            "`left == right` in line {}:\n{}\n{}",
-            line!(),
-            Changeset::new("- left", "+ right", "\n"),
-            Changeset::new(&left, &right, "\n")
-        )
-    };
-}
-
-macro_rules! assert_eq_dbg {
-    ($left:expr, $right:expr) => {
-        let left = &$left;
-        let right = &$right;
-
-        assert!(
-            left == right,
-            "`left == right` in line {}:\n{}\n{}",
-            line!(),
-            Changeset::new("- left", "+ right", "\n"),
-            Changeset::new(&format!("{:#?}", left), &format!("{:#?}", right), "\n")
-        )
-    };
-}
 
 mod test_level {
     use super::*;
 
     #[test]
     fn test_log() {
-        assert_eq!(Level::Info, serde_json::from_str("\"log\"").unwrap());
+        assert_eq_dbg!(Level::Info, serde_json::from_str("\"log\"").unwrap());
     }
 }
 

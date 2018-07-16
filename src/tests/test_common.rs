@@ -14,8 +14,8 @@ fn test_array() {
         other: Map::new().into(),
     };
 
-    assert_eq!(values, serde_json::from_str("[1,2,3]").unwrap());
-    assert_eq!(
+    assert_eq_dbg!(values, serde_json::from_str("[1,2,3]").unwrap());
+    assert_eq_str!(
         serde_json::to_string(&values).unwrap(),
         "{\"values\":[1,2,3]}"
     );
@@ -32,12 +32,12 @@ fn test_object() {
         other: Map::new().into(),
     };
 
-    assert_eq!(
+    assert_eq_dbg!(
         values,
         serde_json::from_str("{\"values\":[1,2,3]}").unwrap()
     );
 
-    assert_eq!(
+    assert_eq_str!(
         serde_json::to_string(&values).unwrap(),
         "{\"values\":[1,2,3]}"
     );
@@ -58,12 +58,12 @@ fn test_other() {
         },
     };
 
-    assert_eq!(
+    assert_eq_dbg!(
         values,
         serde_json::from_str("{\"values\":[1,2,3],\"foo\":\"bar\"}").unwrap()
     );
 
-    assert_eq!(
+    assert_eq_str!(
         serde_json::to_string(&values).unwrap(),
         "{\"values\":[1,2,3],\"foo\":\"bar\"}"
     );
@@ -71,7 +71,7 @@ fn test_other() {
 
 #[test]
 fn test_option() {
-    assert_eq!(
+    assert_eq_dbg!(
         None,
         serde_json::from_str::<Option<Values<u32>>>("null").unwrap()
     );

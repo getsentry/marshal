@@ -20,7 +20,7 @@ mod test_with_meta {
         meta_map.insert(".".to_string(), Meta::from_error("some prior error"));
 
         let value = Annotated::new(42, Meta::from_error("some prior error"));
-        assert_eq!(value, deserialize_meta(deserializer, meta_map).unwrap());
+        assert_eq_dbg!(value, deserialize_meta(deserializer, meta_map).unwrap());
     }
 
     #[test]
@@ -33,7 +33,7 @@ mod test_with_meta {
             answer: Annotated::new(42, Meta::from_error("some prior error")),
             other: 21,
         });
-        assert_eq!(value, deserialize_meta(deserializer, meta_map).unwrap());
+        assert_eq_dbg!(value, deserialize_meta(deserializer, meta_map).unwrap());
     }
 
     #[test]
@@ -47,7 +47,7 @@ mod test_with_meta {
             Annotated::new(1, Meta::from_error("a")),
             Annotated::new(2, Meta::from_error("b")),
         ]);
-        assert_eq!(value, deserialize_meta(deserializer, meta_map).unwrap());
+        assert_eq_dbg!(value, deserialize_meta(deserializer, meta_map).unwrap());
     }
 
     #[test]
@@ -58,7 +58,7 @@ mod test_with_meta {
 
         // It should accept the "null" (unit) value and use the given error message
         let value = Annotated::<i32>::from_error("some prior error");
-        assert_eq!(value, deserialize_meta(deserializer, meta_map).unwrap());
+        assert_eq_dbg!(value, deserialize_meta(deserializer, meta_map).unwrap());
     }
 
     #[test]
@@ -72,7 +72,7 @@ mod test_with_meta {
             answer: Annotated::from_error("some prior error"),
             other: 21,
         });
-        assert_eq!(value, deserialize_meta(deserializer, meta_map).unwrap());
+        assert_eq_dbg!(value, deserialize_meta(deserializer, meta_map).unwrap());
     }
 
     #[test]
@@ -81,7 +81,7 @@ mod test_with_meta {
 
         // It should reject the "null" value and add an error
         let value = Annotated::<i32>::from_error("invalid type: null, expected i32");
-        assert_eq!(
+        assert_eq_dbg!(
             value,
             deserialize_meta(deserializer, MetaMap::new()).unwrap()
         );
@@ -96,7 +96,7 @@ mod test_with_meta {
             answer: Annotated::from_error("invalid type: null, expected i32"),
             other: 21,
         });
-        assert_eq!(
+        assert_eq_dbg!(
             value,
             deserialize_meta(deserializer, MetaMap::new()).unwrap()
         );
@@ -117,8 +117,8 @@ mod test_without_meta {
         let json = "42";
         let value = Annotated::from(42);
 
-        assert_eq!(value, serde_json::from_str(json).unwrap());
-        assert_eq!(json, &serde_json::to_string(&value).unwrap());
+        assert_eq_dbg!(value, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, &serde_json::to_string(&value).unwrap());
     }
 
     #[test]
@@ -129,15 +129,15 @@ mod test_without_meta {
             other: 21,
         });
 
-        assert_eq!(value, serde_json::from_str(json).unwrap());
-        assert_eq!(json, &serde_json::to_string(&value).unwrap());
+        assert_eq_dbg!(value, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, &serde_json::to_string(&value).unwrap());
     }
 
     #[test]
     fn test_invalid() {
         let value = Annotated::<i32>::from_error("invalid type: map, expected i32");
-        assert_eq!(value, serde_json::from_str(r#"{}"#).unwrap());
-        assert_eq!("null", &serde_json::to_string(&value).unwrap());
+        assert_eq_dbg!(value, serde_json::from_str(r#"{}"#).unwrap());
+        assert_eq_str!("null", &serde_json::to_string(&value).unwrap());
     }
 
     #[test]
@@ -147,11 +147,11 @@ mod test_without_meta {
             other: 21,
         });
 
-        assert_eq!(
+        assert_eq_dbg!(
             value,
             serde_json::from_str(r#"{"answer":"invalid","other":21}"#).unwrap()
         );
-        assert_eq!(
+        assert_eq_str!(
             r#"{"answer":null,"other":21}"#,
             &serde_json::to_string(&value).unwrap()
         )
@@ -187,13 +187,13 @@ mod test_meta_paths {
     #[test]
     fn test_basic() {
         let value: Annotated<i32> = deserialize("42").unwrap();
-        assert_eq!(".", value.meta().path().unwrap().to_string());
+        assert_eq_str!(".", value.meta().path().unwrap().to_string());
     }
 
     #[test]
     fn test_nested() {
         let value: Annotated<Test> = deserialize(r#"{"answer": 42}"#).unwrap();
-        assert_eq!(
+        assert_eq_str!(
             "answer",
             value
                 .value()
