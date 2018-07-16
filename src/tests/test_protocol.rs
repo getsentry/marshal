@@ -78,6 +78,84 @@ mod test_breadcrumb {
     }
 }
 
+mod test_fingerprint {
+    use super::*;
+    use protocol::fingerprint;
+
+    fn deserialize(json: &str) -> Result<Annotated<Vec<String>>, serde_json::Error> {
+        fingerprint::deserialize(&mut serde_json::Deserializer::from_str(json))
+    }
+
+    #[test]
+    fn test_fingerprint_string() {
+        assert_eq_dbg!(
+            Annotated::from(vec!["fingerprint".to_string()]),
+            deserialize("[\"fingerprint\"]").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_fingerprint_bool() {
+        assert_eq_dbg!(
+            Annotated::from(vec!["True".to_string(), "False".to_string()]),
+            deserialize("[true, false]").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_fingerprint_number() {
+        assert_eq_dbg!(
+            Annotated::from(vec!["-22".to_string()]),
+            deserialize("[-22]").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_fingerprint_float() {
+        assert_eq_dbg!(
+            Annotated::from(vec!["3".to_string()]),
+            deserialize("[3.0]").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_fingerprint_float_trunc() {
+        assert_eq_dbg!(
+            Annotated::from(vec!["3".to_string()]),
+            deserialize("[3.5]").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_fingerprint_float_strip() {
+        assert_eq_dbg!(Annotated::from(vec![]), deserialize("[-1e100]").unwrap());
+    }
+
+    #[test]
+    fn test_fingerprint_float_bounds() {
+        assert_eq_dbg!(
+            Annotated::from(vec![]),
+            deserialize("[1.7976931348623157e+308]").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_fingerprint_invalid_fallback() {
+        assert_eq_dbg!(
+            Annotated::new(
+                vec!["{{ default }}".to_string()],
+                Meta::from_error("invalid fingerprint value")
+            ),
+            deserialize("[\"a\", null, \"d\"]").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_fingerprint_empty() {
+        assert_eq_dbg!(Annotated::from(vec![]), deserialize("[]").unwrap());
+    }
+}
+
 mod test_event {
     use super::*;
 

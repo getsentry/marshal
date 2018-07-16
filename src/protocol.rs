@@ -136,60 +136,13 @@ pub struct Breadcrumb {
     pub other: Annotated<Map<Value>>,
 }
 
-/// Represents a full event for Sentry.
-#[derive(Debug, Default, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
-pub struct Event {
-    /// Unique identifier of this event.
-    #[serde(
-        default,
-        rename = "event_id",
-        skip_serializing_if = "annotated::is_none",
-        serialize_with = "serialize_event_id"
-    )]
-    pub id: Annotated<Option<Uuid>>,
-
-    /// Severity level of the event (defaults to "error").
-    #[serde(default = "default_event_level")]
-    pub level: Annotated<Level>,
-
-    /// Manual fingerprint override.
-    // Note this is a `Vec` and not `Array` intentionally
-    #[serde(default = "fingerprint::default", deserialize_with = "fingerprint::deserialize")]
-    pub fingerprint: Annotated<Vec<String>>,
-
-    /// List of breadcrumbs recorded before this event.
-    #[serde(default, skip_serializing_if = "annotated::is_empty_values")]
-    #[process_annotated_value]
-    pub breadcrumbs: Annotated<Values<Breadcrumb>>,
-}
-
-fn serialize_event_id<S: Serializer>(
-    annotated: &Annotated<Option<Uuid>>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    struct EventIdSerialize;
-
-    impl CustomSerialize<Option<Uuid>> for EventIdSerialize {
-        fn serialize<S>(value: &Option<Uuid>, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
-        {
-            match value {
-                Some(uuid) => serializer.serialize_some(&uuid.simple().to_string()),
-                None => serializer.serialize_none(),
-            }
-        }
-    }
-
-    annotated.serialize_with(serializer, EventIdSerialize)
-}
-
 fn default_event_level() -> Annotated<Level> {
     Level::Error.into()
 }
 
-mod fingerprint {
+pub(crate) mod fingerprint {
     use super::*;
+    use utils::buffer::ContentDeserializer;
     use utils::serde::CustomDeserialize;
 
     #[derive(Debug, Deserialize)]
@@ -225,12 +178,12 @@ mod fingerprint {
         where
             D: Deserializer<'de>,
         {
-            // TODO: Normalize to default fingerprint. The old solution used to deserialize into a
-            // buffer to rule out syntax errors and then unwrapped to DEFAULT_FINGERPRINT.
-            Ok(Vec::<Fingerprint>::deserialize(deserializer)?
-                .into_iter()
-                .filter_map(Fingerprint::into)
-                .collect())
+            use serde::de::Error;
+            let content = ContentDeserializer::<D::Error>::new(Content::deserialize(deserializer)?);
+            match Vec::<Fingerprint>::deserialize(content) {
+                Ok(vec) => Ok(vec.into_iter().filter_map(Fingerprint::into).collect()),
+                Err(_) => Err(D::Error::custom("invalid fingerprint value")),
+            }
         }
     }
 
@@ -238,12 +191,65 @@ mod fingerprint {
     where
         D: Deserializer<'de>,
     {
-        Annotated::deserialize_with(deserializer, FingerprintDeserialize)
+        Annotated::deserialize_with(deserializer, FingerprintDeserialize).map(
+            |Annotated(value, meta)| {
+                let value = value.unwrap_or_else(|| vec!["{{ default }}".to_string()]);
+                Annotated::new(value, meta)
+            },
+        )
     }
 
     pub fn default() -> Annotated<Vec<String>> {
         vec!["{{ default }}".to_string()].into()
     }
+}
+
+fn serialize_event_id<S: Serializer>(
+    annotated: &Annotated<Option<Uuid>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    struct EventIdSerialize;
+
+    impl CustomSerialize<Option<Uuid>> for EventIdSerialize {
+        fn serialize<S>(value: &Option<Uuid>, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            match value {
+                Some(uuid) => serializer.serialize_some(&uuid.simple().to_string()),
+                None => serializer.serialize_none(),
+            }
+        }
+    }
+
+    annotated.serialize_with(serializer, EventIdSerialize)
+}
+
+/// Represents a full event for Sentry.
+#[derive(Debug, Default, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct Event {
+    /// Unique identifier of this event.
+    #[serde(
+        default,
+        rename = "event_id",
+        skip_serializing_if = "annotated::is_none",
+        serialize_with = "serialize_event_id"
+    )]
+    pub id: Annotated<Option<Uuid>>,
+
+    /// Severity level of the event (defaults to "error").
+    #[serde(default = "default_event_level")]
+    pub level: Annotated<Level>,
+
+    /// Manual fingerprint override.
+    // Note this is a `Vec` and not `Array` intentionally
+    #[serde(default = "fingerprint::default", deserialize_with = "fingerprint::deserialize")]
+    pub fingerprint: Annotated<Vec<String>>,
+
+    /// List of breadcrumbs recorded before this event.
+    #[serde(default, skip_serializing_if = "annotated::is_empty_values")]
+    #[process_annotated_value]
+    pub breadcrumbs: Annotated<Values<Breadcrumb>>,
 }
 
 #[derive(Debug, Deserialize)]
