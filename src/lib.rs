@@ -23,7 +23,7 @@ extern crate uuid;
 
 #[allow(unused_imports)]
 #[macro_use]
-extern crate sentry_stripping_derive;
+extern crate marshal_derive;
 
 #[cfg(test)]
 extern crate difference;

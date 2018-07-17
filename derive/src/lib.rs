@@ -2,7 +2,7 @@ extern crate syn;
 
 #[macro_use] extern crate synstructure;
 #[macro_use] extern crate quote;
-#[macro_use] extern crate proc_macro2;
+extern crate proc_macro2;
 
 use syn::{Meta, NestedMeta, MetaNameValue, Lit};
 use quote::ToTokens;
