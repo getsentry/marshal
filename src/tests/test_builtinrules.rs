@@ -69,8 +69,8 @@ macro_rules! assert_databag_rule {
             value: Annotated::from(input),
         });
         // we need to go through json so that path information is available
-        let json_root = root.to_string().unwrap();
-        let root = Annotated::<DatabagRoot>::from_str(&json_root).unwrap();
+        let json_root = root.to_json().unwrap();
+        let root = Annotated::<DatabagRoot>::from_json(&json_root).unwrap();
         let processed_root = processor.process_root_value(root);
         let root = processed_root.0.unwrap();
         assert_eq_dbg!(root.value.value().unwrap(), &output);

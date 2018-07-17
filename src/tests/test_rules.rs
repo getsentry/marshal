@@ -4,7 +4,7 @@ use rule::PiiConfig;
 
 #[test]
 fn test_basic_stripping() {
-    let cfg = PiiConfig::from_str(
+    let cfg = PiiConfig::from_json(
         r#"{
         "rules": {
             "path_username": {
@@ -70,7 +70,7 @@ fn test_basic_stripping() {
         ip: Annotated<String>,
     }
 
-    let event = Annotated::<Event>::from_str(r#"
+    let event = Annotated::<Event>::from_json(r#"
         {
             "message": "Hello peter@gmail.com.  You signed up with card 1234-1234-1234-1234. Your home folder is C:\\Users\\peter. Look at our compliance from 127.0.0.1",
             "extra": {
@@ -132,7 +132,7 @@ fn test_basic_stripping() {
         }
     );
 
-    let value = processed_event.to_string().unwrap();
+    let value = processed_event.to_json().unwrap();
     assert_eq_str!(value, "{\"message\":\"Hello *****@*****.***.  You signed up with card ****-****-****-1234. Your home folder is C:\\\\Users\\\\[username] Look at our compliance from 5A2DF387CD660E9F3E0AB20F9E7805450D56C5DACE9B959FC620C336E2B5D09A\",\"extra\":{\"bar\":true,\"foo\":null},\"ip\":null,\"\":{\"extra\":{\"foo\":{\"\":{\"rem\":[[\"remove_foo\",\"x\"]]}}},\"ip\":{\"\":{\"rem\":[[\"remove_ip\",\"x\"]]}},\"message\":{\"\":{\"len\":142,\"rem\":[[\"email_address\",\"m\",6,21],[\"creditcard_number\",\"m\",48,67],[\"path_username\",\"s\",98,108],[\"hash_ip\",\"p\",137,201]]}}}}");
 }
 
@@ -140,7 +140,7 @@ fn test_basic_stripping() {
 fn test_well_known_stripping() {
     use meta::Remark;
 
-    let cfg = PiiConfig::from_str(
+    let cfg = PiiConfig::from_json(
         r#"{
         "rules": {
             "user_id": {
@@ -179,7 +179,7 @@ fn test_well_known_stripping() {
         message: Annotated<String>,
     }
 
-    let event = Annotated::<Event>::from_str(
+    let event = Annotated::<Event>::from_json(
         r#"
         {
             "message": "u/f444e9498e6b on d/db3d6129ca10 (144.132.11.23): Hello World!"
@@ -208,7 +208,7 @@ fn test_well_known_stripping() {
         }
     );
 
-    let value = processed_event.to_string().unwrap();
+    let value = processed_event.to_json().unwrap();
     assert_eq_str!(value, "{\"message\":\"[user-id] on [device-id] ([ip]): Hello World!\",\"\":{\"message\":{\"\":{\"len\":62,\"rem\":[[\"user_id\",\"s\",0,9],[\"device_id\",\"s\",13,24],[\"@ip:replace\",\"s\",26,30]]}}}}");
 }
 
@@ -216,7 +216,7 @@ fn test_well_known_stripping() {
 fn test_well_known_stripping_common_redaction() {
     use meta::Remark;
 
-    let cfg = PiiConfig::from_str(
+    let cfg = PiiConfig::from_json(
         r#"{
         "rules": {
             "user_id": {
@@ -261,7 +261,7 @@ fn test_well_known_stripping_common_redaction() {
         message: Annotated<String>,
     }
 
-    let event = Annotated::<Event>::from_str(
+    let event = Annotated::<Event>::from_json(
         r#"
         {
             "message": "u/f444e9498e6b on d/db3d6129ca10 (144.132.11.23): Hello World!"
@@ -290,6 +290,6 @@ fn test_well_known_stripping_common_redaction() {
         }
     );
 
-    let value = processed_event.to_string().unwrap();
+    let value = processed_event.to_json().unwrap();
     assert_eq_str!(value, "{\"message\":\"[id] on [id] ([id]): Hello World!\",\"\":{\"message\":{\"\":{\"len\":62,\"rem\":[[\"ids\",\"s\",0,4],[\"ids\",\"s\",8,12],[\"ids\",\"s\",14,18]]}}}}");
 }

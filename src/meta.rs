@@ -262,7 +262,7 @@ pub struct Annotated<T>(pub Option<T>, pub Meta);
 
 impl<'de, T: Deserialize<'de>> Annotated<T> {
     /// Deserializes an annotated from a JSON string.
-    pub fn from_str(s: &'de str) -> Result<Annotated<T>, serde_json::Error> {
+    pub fn from_json(s: &'de str) -> Result<Annotated<T>, serde_json::Error> {
         protocol::from_str(s)
     }
 
@@ -281,7 +281,7 @@ impl<T: Serialize> Annotated<T> {
     }
 
     /// Serializes an annotated value into a JSON string.
-    pub fn to_string(&self) -> Result<String, serde_json::Error> {
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
         protocol::to_string(self)
     }
 }

@@ -546,7 +546,7 @@ pub struct RuleBasedPiiProcessor<'a> {
 
 impl PiiConfig {
     /// Loads a PII config from a JSON string.
-    pub fn from_str(s: &str) -> Result<PiiConfig, serde_json::Error> {
+    pub fn from_json(s: &str) -> Result<PiiConfig, serde_json::Error> {
         serde_json::from_str(s)
     }
 
