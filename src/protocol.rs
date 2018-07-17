@@ -288,7 +288,7 @@ pub(crate) fn from_str<'de, T: Deserialize<'de>>(
 struct EventMetaSerializeHelper<'a, T: Serialize + 'a> {
     #[serde(flatten)]
     event: Option<&'a T>,
-    #[serde(rename = "")]
+    #[serde(rename = "", skip_serializing_if = "MetaTree::is_empty")]
     metadata: MetaTree,
 }
 

@@ -68,6 +68,11 @@ impl MetaTree {
         }
     }
 
+    /// Returns `true` if the tree is empty.
+    pub fn is_empty(&self) -> bool {
+        self.meta.is_none() && self.children.is_empty()
+    }
+
     /// Inserts a new child into the
     pub fn insert(&mut self, key: String, value: MetaTree) {
         self.children.insert(key, value);
