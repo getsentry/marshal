@@ -7,13 +7,14 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json;
 use uuid::Uuid;
 
-use meta::{self, Annotated, MetaMap, MetaTree};
+use meta::{self, MetaMap, MetaTree};
 use utils::buffer::{Content, ContentDeserializer, ContentRefDeserializer};
 use utils::serde::CustomSerialize;
 use utils::{annotated, serde_chrono};
 
 // we re-export common as part of the protocol
 pub use common::{Map, Value, Values};
+pub use meta::{Annotated, Meta, Remark, RemarkType};
 
 fn default_breadcrumb_type() -> Annotated<String> {
     "default".to_string().into()
@@ -259,7 +260,8 @@ struct EventMetaDeserializeHelper {
 }
 
 /// Deserializes an annotated event with meta data from the given deserializer.
-pub fn deserialize_event<'de, D: Deserializer<'de>>(
+#[cfg(test)]
+pub(crate) fn deserialize_event<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Annotated<Event>, D::Error> {
     deserialize_with_meta(deserializer)
@@ -312,7 +314,8 @@ pub(crate) fn to_string<T: Serialize>(
 }
 
 /// Serializes an event and its meta data into the given serializer.
-pub fn serialize_event<S: Serializer>(
+#[cfg(test)]
+pub(crate) fn serialize_event<S: Serializer>(
     event: &Annotated<Event>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {

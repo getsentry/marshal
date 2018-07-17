@@ -36,7 +36,6 @@ mod chunk;
 mod common;
 mod meta;
 mod meta_ser;
-mod processor;
 mod rule;
 mod tracked;
 mod utils;
@@ -44,5 +43,5 @@ mod utils;
 #[cfg(test)]
 mod tests;
 
+pub mod processor;
 pub mod protocol;
-pub use {chunk::*, meta::*, processor::*, rule::*};

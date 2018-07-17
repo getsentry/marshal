@@ -5,6 +5,8 @@ use chunk::{self, Chunk};
 use common::{Array, Map, Value, Values};
 use meta::{Annotated, Meta};
 
+pub use rule::*;
+
 /// The type of PII that's contained in the field.
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, Ord, PartialOrd, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]

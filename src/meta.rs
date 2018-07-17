@@ -436,6 +436,7 @@ pub struct MetaMap {
 
 impl MetaMap {
     /// Creates a new `MetaMap`.
+    #[cfg(test)]
     pub fn new() -> Self {
         MetaMap {
             inner: RefCell::new(BTreeMap::new()),
@@ -443,6 +444,7 @@ impl MetaMap {
     }
 
     /// Inserts a new meta entry into the map.
+    #[cfg(test)]
     pub fn insert(&mut self, path: String, meta: Meta) -> Option<Meta> {
         self.inner.borrow_mut().insert(path, meta)
     }
