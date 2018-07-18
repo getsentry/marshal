@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serializer};
 use uuid::Uuid;
 
 use super::buffer::{Content, ContentDeserializer};
-use super::common::{Map, Value, Values};
+use super::common::{Array, Map, Value, Values};
 use super::meta::Annotated;
 use super::serde::CustomSerialize;
 use super::{serde_chrono, utils};
@@ -189,7 +189,7 @@ mod test_breadcrumb {
         });
 
         assert_eq_dbg!(breadcrumb, serde_json::from_str(json).unwrap());
-        assert_eq_str!(json, &serde_json::to_string_pretty(&breadcrumb).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&breadcrumb).unwrap());
     }
 
     #[test]
@@ -209,6 +209,76 @@ mod test_breadcrumb {
 
         assert_eq_dbg!(breadcrumb, serde_json::from_str(input).unwrap());
         assert_eq_str!(output, serde_json::to_string(&breadcrumb).unwrap());
+    }
+
+    #[test]
+    fn test_invalid() {
+        let entry: Annotated<Breadcrumb> = Annotated::from_error("missing field `timestamp`");
+        assert_eq_dbg!(entry, serde_json::from_str("{}").unwrap());
+    }
+}
+
+/// A log entry message.
+///
+/// A log message is similar to the `message` attribute on the event itself but
+/// can additionally hold optional parameters.
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct LogEntry {
+    /// The log message with parameter placeholders.
+    #[process_annotated_value(pii_kind = "freeform", cap = "message")]
+    pub message: Annotated<String>,
+
+    /// Positional parameters to be interpolated into the log message.
+    #[serde(default, skip_serializing_if = "utils::is_empty_array")]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub params: Annotated<Array<Value>>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+#[cfg(test)]
+mod test_logentry {
+    use protocol::*;
+    use serde_json;
+
+    #[test]
+    fn test_roundtrip() {
+        let json = r#"{
+  "message": "Hello, %s %s!",
+  "params": [
+    "World",
+    1
+  ],
+  "other": "value"
+}"#;
+
+        let entry = LogEntry {
+            message: "Hello, %s %s!".to_string().into(),
+            params: vec![
+                Value::String("World".to_string()).into(),
+                Value::U64(1).into(),
+            ].into(),
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        };
+
+        assert_eq_dbg!(entry, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&entry).unwrap());
+    }
+
+    #[test]
+    fn test_invalid() {
+        let entry: Annotated<LogEntry> = Annotated::from_error("missing field `message`");
+        assert_eq_dbg!(entry, serde_json::from_str("{}").unwrap());
     }
 }
 
@@ -397,7 +467,7 @@ mod event {
             let mut culprit = None;
             let mut transaction = None;
             let mut message = None;
-            // let mut logentry = None;
+            let mut logentry = None;
             let mut logger = None;
             let mut modules = None;
             let mut platform = None;
@@ -431,10 +501,10 @@ mod event {
                     "culprit" => culprit = Some(Deserialize::deserialize(deserializer)?),
                     "transaction" => transaction = Some(Deserialize::deserialize(deserializer)?),
                     "message" => message = Some(Deserialize::deserialize(deserializer)?),
-                    // "logentry" => logentry = Some(Deserialize::deserialize(deserializer)?),
-                    // "sentry.interfaces.Message" => if logentry.is_none() {
-                    //     logentry = Some(Deserialize::deserialize(deserializer)?)
-                    // },
+                    "logentry" => logentry = Some(Deserialize::deserialize(deserializer)?),
+                    "sentry.interfaces.Message" => if logentry.is_none() {
+                        logentry = Some(Deserialize::deserialize(deserializer)?)
+                    },
                     "logger" => logger = Some(Deserialize::deserialize(deserializer)?),
                     "modules" => modules = Some(Deserialize::deserialize(deserializer)?),
                     "platform" => platform = Some(Deserialize::deserialize(deserializer)?),
@@ -496,6 +566,7 @@ mod event {
                 culprit: culprit.unwrap_or_default(),
                 transaction: transaction.unwrap_or_default(),
                 message: message.unwrap_or_default(),
+                logentry: logentry.unwrap_or_default(),
                 logger: logger.unwrap_or_default(),
                 modules: modules.unwrap_or_default(),
                 platform: platform.unwrap_or_else(|| default_platform()),
@@ -545,7 +616,11 @@ pub struct Event {
     #[process_annotated_value(pii_kind = "freeform", cap = "message")]
     pub message: Annotated<Option<String>>,
 
-    // TODO: logentry
+    /// Custom parameterized message for this event.
+    #[serde(skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value]
+    pub logentry: Annotated<Option<LogEntry>>,
+
     /// Logger that created the event.
     #[serde(skip_serializing_if = "utils::is_none")]
     pub logger: Annotated<Option<String>>,
@@ -676,6 +751,7 @@ mod test_event {
             culprit: Some("myculprit".to_string()).into(),
             transaction: Some("mytransaction".to_string()).into(),
             message: Some("mymessage".to_string()).into(),
+            logentry: None.into(),
             logger: Some("mylogger".to_string()).into(),
             modules: {
                 let mut map = Map::new();
@@ -734,6 +810,7 @@ mod test_event {
             culprit: None.into(),
             transaction: None.into(),
             message: None.into(),
+            logentry: None.into(),
             logger: None.into(),
             modules: Default::default(),
             platform: "other".to_string().into(),
