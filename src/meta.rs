@@ -13,9 +13,8 @@ use serde::ser::{Serialize, SerializeSeq, Serializer};
 use serde_json;
 
 use meta_ser::{serialize_annotated_meta, MetaSerializer};
-use protocol;
 use tracked::{Path, TrackedDeserializer};
-use utils::buffer::{Content, ContentDeserializer, ContentRepr};
+use utils::buffer::{Content, ContentDeserializer, ContentRefDeserializer, ContentRepr};
 use utils::serde::{CustomDeserialize, CustomSerialize, DefaultDeserialize, DefaultSerialize};
 
 pub(crate) use meta_ser::{MetaError, MetaTree};
@@ -261,28 +260,54 @@ impl Default for Meta {
 pub struct Annotated<T>(pub Option<T>, pub Meta);
 
 impl<'de, T: Deserialize<'de>> Annotated<T> {
-    /// Deserializes an annotated from a JSON string.
-    pub fn from_json(s: &'de str) -> Result<Annotated<T>, serde_json::Error> {
-        protocol::from_str(s)
-    }
-
     /// Deserializes an annotated from a deserializer
     pub fn deserialize_with_meta<D: Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Annotated<T>, D::Error> {
-        protocol::deserialize_with_meta(deserializer)
+        #[derive(Debug, Deserialize)]
+        struct MetaDeserializeHelper {
+            #[serde(rename = "")]
+            metadata: Option<MetaMap>,
+        }
+
+        let content = Content::deserialize(deserializer)?;
+        let helper = MetaDeserializeHelper::deserialize(ContentRefDeserializer::new(&content))?;
+        let meta_map = helper.metadata.unwrap_or_default();
+        deserialize_meta(ContentDeserializer::new(content), meta_map)
+    }
+
+    /// Deserializes an annotated from a JSON string.
+    pub fn from_json(s: &'de str) -> Result<Annotated<T>, serde_json::Error> {
+        use serde_json;
+        Self::deserialize_with_meta(&mut serde_json::Deserializer::from_str(s))
     }
 }
 
 impl<T: Serialize> Annotated<T> {
     /// Serializes an annotated value into a serializer.
     pub fn serialize_with_meta<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        protocol::serialize_with_meta(self, serializer)
+        use serde::ser::Error;
+
+        #[derive(Debug, Serialize)]
+        struct MetaSerializeHelper<'a, T: Serialize + 'a> {
+            #[serde(flatten)]
+            event: Option<&'a T>,
+            #[serde(rename = "", skip_serializing_if = "MetaTree::is_empty")]
+            metadata: MetaTree,
+        }
+
+        MetaSerializeHelper {
+            event: self.value(),
+            metadata: serialize_meta(self).map_err(S::Error::custom)?,
+        }.serialize(serializer)
     }
 
     /// Serializes an annotated value into a JSON string.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        protocol::to_string(self)
+        use serde_json;
+        let mut ser = serde_json::Serializer::new(Vec::with_capacity(128));
+        self.serialize_with_meta(&mut ser)?;
+        Ok(unsafe { String::from_utf8_unchecked(ser.into_inner()) })
     }
 }
 
@@ -430,7 +455,7 @@ impl<T: Serialize> Serialize for Annotated<T> {
 
 /// A map of meta data entries for paths in a model.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct MetaMap {
+pub(crate) struct MetaMap {
     inner: RefCell<BTreeMap<String, Meta>>,
 }
 
@@ -517,7 +542,7 @@ impl<'de> Deserialize<'de> for MetaMap {
 }
 
 /// Deserializes an annotated value with given meta data.
-pub fn deserialize_meta<'de, D, T>(
+pub(crate) fn deserialize_meta<'de, D, T>(
     deserializer: D,
     meta_map: MetaMap,
 ) -> Result<Annotated<T>, D::Error>
@@ -538,7 +563,7 @@ pub(crate) fn should_serialize_meta() -> bool {
 }
 
 /// Serializes meta data of an annotated value into a nested map structure.
-pub fn serialize_meta<T>(value: &Annotated<T>) -> Result<MetaTree, MetaError>
+pub(crate) fn serialize_meta<T>(value: &Annotated<T>) -> Result<MetaTree, MetaError>
 where
     Annotated<T>: Serialize,
 {

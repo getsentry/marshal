@@ -162,12 +162,12 @@ mod test_event {
 
     fn serialize(event: &Annotated<Event>) -> Result<String, serde_json::Error> {
         let mut serializer = serde_json::Serializer::pretty(Vec::new());
-        serialize_event(event, &mut serializer)?;
+        event.serialize_with_meta(&mut serializer)?;
         Ok(String::from_utf8(serializer.into_inner()).unwrap())
     }
 
     fn deserialize(string: &str) -> Result<Annotated<Event>, serde_json::Error> {
-        deserialize_event(&mut serde_json::Deserializer::from_str(string))
+        Annotated::<Event>::from_json(string)
     }
 
     #[test]

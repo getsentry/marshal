@@ -3,18 +3,16 @@
 use std::{fmt, str};
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_json;
+use serde::{Deserialize, Deserializer, Serializer};
 use uuid::Uuid;
 
-use meta::{self, MetaMap, MetaTree};
-use utils::buffer::{Content, ContentDeserializer, ContentRefDeserializer};
+use utils::buffer::{Content, ContentDeserializer};
 use utils::serde::CustomSerialize;
 use utils::{annotated, serde_chrono};
 
 // we re-export common as part of the protocol
-pub use common::{Map, Value, Values};
-pub use meta::{Annotated, Meta, Remark, RemarkType};
+pub use common::*;
+pub use meta::*;
 
 fn default_breadcrumb_type() -> Annotated<String> {
     "default".to_string().into()
@@ -453,73 +451,4 @@ pub struct Event {
     #[serde(flatten)]
     #[process_annotated_value(pii_kind = "databag")]
     pub other: Annotated<Map<Value>>,
-}
-
-#[derive(Debug, Deserialize)]
-struct EventMetaDeserializeHelper {
-    #[serde(rename = "")]
-    metadata: Option<MetaMap>,
-}
-
-/// Deserializes an annotated event with meta data from the given deserializer.
-#[cfg(test)]
-pub(crate) fn deserialize_event<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Annotated<Event>, D::Error> {
-    deserialize_with_meta(deserializer)
-}
-
-/// Deserializes an annotated object with embedded meta data from the given deserializer.
-pub(crate) fn deserialize_with_meta<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
-    deserializer: D,
-) -> Result<Annotated<T>, D::Error> {
-    let content = Content::deserialize(deserializer)?;
-    let helper = EventMetaDeserializeHelper::deserialize(ContentRefDeserializer::new(&content))?;
-    let meta_map = helper.metadata.unwrap_or_default();
-    meta::deserialize_meta(ContentDeserializer::new(content), meta_map)
-}
-
-/// Deserializes an annotated object with embedded meta data from the given deserializer.
-pub(crate) fn from_str<'de, T: Deserialize<'de>>(
-    s: &'de str,
-) -> Result<Annotated<T>, serde_json::Error> {
-    deserialize_with_meta(&mut serde_json::Deserializer::from_str(s))
-}
-
-#[derive(Debug, Serialize)]
-struct EventMetaSerializeHelper<'a, T: Serialize + 'a> {
-    #[serde(flatten)]
-    event: Option<&'a T>,
-    #[serde(rename = "", skip_serializing_if = "MetaTree::is_empty")]
-    metadata: MetaTree,
-}
-
-/// Serializes a annotated value and its meta data into the given serializer.
-pub(crate) fn serialize_with_meta<S: Serializer, T: Serialize>(
-    annotated: &Annotated<T>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    use serde::ser::Error;
-    EventMetaSerializeHelper {
-        event: annotated.value(),
-        metadata: meta::serialize_meta(annotated).map_err(S::Error::custom)?,
-    }.serialize(serializer)
-}
-
-/// Like `serialize_with_meta` but produces a JSON string.
-pub(crate) fn to_string<T: Serialize>(
-    annotated: &Annotated<T>,
-) -> Result<String, serde_json::Error> {
-    let mut ser = serde_json::Serializer::new(Vec::with_capacity(128));
-    serialize_with_meta(annotated, &mut ser)?;
-    Ok(unsafe { String::from_utf8_unchecked(ser.into_inner()) })
-}
-
-/// Serializes an event and its meta data into the given serializer.
-#[cfg(test)]
-pub(crate) fn serialize_event<S: Serializer>(
-    event: &Annotated<Event>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    serialize_with_meta(event, serializer)
 }
