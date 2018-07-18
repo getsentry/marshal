@@ -792,7 +792,6 @@ pub struct Event {
 
     /// Name and versions of installed modules.
     #[serde(skip_serializing_if = "utils::is_empty_map")]
-    #[process_annotated_value(pii_kind = "databag")]
     pub modules: Annotated<Map<String>>,
 
     /// Platform identifier of this event (defaults to "other").
@@ -825,6 +824,7 @@ pub struct Event {
 
     /// Information about the user who triggered this event.
     #[serde(skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value]
     pub user: Annotated<Option<User>>,
 
     // TODO: request
