@@ -367,6 +367,84 @@ mod test_repos {
     }
 }
 
+/// Information about the user who triggered an event.
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct User {
+    /// Unique identifier of the user.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "id")]
+    pub id: Annotated<Option<String>>,
+
+    /// Email address of the user.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "email")]
+    pub email: Annotated<Option<String>>,
+
+    /// Remote IP address of the user. Defaults to "{{auto}}".
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "ip")]
+    pub ip_address: Annotated<Option<String>>,
+
+    /// Human readable name of the user.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "username")]
+    pub username: Annotated<Option<String>>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+#[cfg(test)]
+mod test_user {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_roundtrip() {
+        let json = r#"{
+  "id": "e4e24881-8238-4539-a32b-d3c3ecd40568",
+  "email": "mail@example.org",
+  "ip_address": "{{auto}}",
+  "username": "John Doe",
+  "other": "value"
+}"#;
+        let user = User {
+            id: Some("e4e24881-8238-4539-a32b-d3c3ecd40568".to_string()).into(),
+            email: Some("mail@example.org".to_string()).into(),
+            ip_address: Some("{{auto}}".to_string()).into(),
+            username: Some("John Doe".to_string()).into(),
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        };
+
+        assert_eq_dbg!(user, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&user).unwrap());
+    }
+
+    #[test]
+    fn test_default_values() {
+        let json = "{}";
+        let user = User {
+            id: None.into(),
+            email: None.into(),
+            ip_address: None.into(),
+            username: None.into(),
+            other: Default::default(),
+        };
+
+        assert_eq_dbg!(user, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string(&user).unwrap());
+    }
+}
+
 mod fingerprint {
     use super::super::buffer::ContentDeserializer;
     use super::super::serde::CustomDeserialize;
@@ -562,7 +640,7 @@ mod event {
             let mut dist = None;
             let mut repos = None;
             let mut environment = None;
-            // let mut user = None;
+            let mut user = None;
             // let mut request = None;
             // let mut contexts = None;
             let mut breadcrumbs = None;
@@ -599,10 +677,10 @@ mod event {
                     "dist" => dist = Some(Deserialize::deserialize(deserializer)?),
                     "repos" => repos = Some(Deserialize::deserialize(deserializer)?),
                     "environment" => environment = Some(Deserialize::deserialize(deserializer)?),
-                    // "user" => user = Some(Deserialize::deserialize(deserializer)?),
-                    // "sentry.interfaces.User" => if user.is_none() {
-                    //     user = Some(Deserialize::deserialize(deserializer)?);
-                    // },
+                    "user" => user = Some(Deserialize::deserialize(deserializer)?),
+                    "sentry.interfaces.User" => if user.is_none() {
+                        user = Some(Deserialize::deserialize(deserializer)?);
+                    },
                     // "request" => request = Some(Deserialize::deserialize(deserializer)?),
                     // "sentry.interfaces.Http" => if request.is_none() {
                     //     request = Some(Deserialize::deserialize(deserializer)?);
@@ -661,6 +739,7 @@ mod event {
                 dist: dist.unwrap_or_default(),
                 repos: repos.unwrap_or_default(),
                 environment: environment.unwrap_or_default(),
+                user: user.unwrap_or_default(),
                 breadcrumbs: breadcrumbs.unwrap_or_default(),
                 tags: tags.unwrap_or_default(),
                 extra: extra.unwrap_or_default(),
@@ -737,14 +816,17 @@ pub struct Event {
     pub dist: Annotated<Option<String>>,
 
     /// References to source code repositories.
-    #[serde(default, skip_serializing_if = "utils::is_empty_map")]
+    #[serde(skip_serializing_if = "utils::is_empty_map")]
     pub repos: Annotated<Map<RepoReference>>,
 
     /// Environment the environment was generated in ("production" or "development").
     #[serde(skip_serializing_if = "utils::is_none")]
     pub environment: Annotated<Option<String>>,
 
-    // TODO: user
+    /// Information about the user who triggered this event.
+    #[serde(skip_serializing_if = "utils::is_none")]
+    pub user: Annotated<Option<User>>,
+
     // TODO: request
     // TODO: contexts
     /// List of breadcrumbs recorded before this event.
@@ -854,6 +936,7 @@ mod test_event {
             dist: Some("mydist".to_string()).into(),
             repos: Default::default(),
             environment: Some("myenv".to_string()).into(),
+            user: None.into(),
             breadcrumbs: Default::default(),
             tags: {
                 let mut map = Map::new();
@@ -909,6 +992,7 @@ mod test_event {
             release: None.into(),
             dist: None.into(),
             repos: Default::default(),
+            user: None.into(),
             environment: None.into(),
             breadcrumbs: Default::default(),
             tags: Default::default(),
