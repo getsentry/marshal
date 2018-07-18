@@ -84,6 +84,17 @@ pub mod serde {
             value.serialize(serializer)
         }
     }
+
+    pub struct ForwardSerialize<'a, T: 'a, C>(pub &'a T, pub C);
+
+    impl<'a, T: 'a, C> Serialize for ForwardSerialize<'a, T, C>
+    where
+        C: CustomSerialize<T>,
+    {
+        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            C::serialize(self.0, serializer)
+        }
+    }
 }
 
 /// Serde module for `chrono::DateTime`.
@@ -94,7 +105,7 @@ pub mod serde_chrono {
     use serde::{de, ser};
 
     use meta::Annotated;
-    use utils::serde::{CustomDeserialize, CustomSerialize};
+    use utils::serde::{CustomDeserialize, CustomSerialize, ForwardSerialize};
 
     pub fn timestamp_to_datetime(ts: f64) -> DateTime<Utc> {
         let secs = ts as i64;
@@ -128,16 +139,38 @@ pub mod serde_chrono {
         }
     }
 
-    struct SerdeDateTime;
+    struct De(DateTime<Utc>);
+
+    impl<'de> de::Deserialize<'de> for De {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: de::Deserializer<'de>,
+        {
+            Ok(De(deserializer
+                .deserialize_any(SecondsTimestampVisitor)?
+                .with_timezone(&Utc)))
+        }
+    }
+
+    pub struct SerdeDateTime;
 
     impl<'de> CustomDeserialize<'de, DateTime<Utc>> for SerdeDateTime {
         fn deserialize<D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
         where
             D: de::Deserializer<'de>,
         {
-            Ok(deserializer
-                .deserialize_any(SecondsTimestampVisitor)?
-                .with_timezone(&Utc))
+            use serde::Deserialize;
+            Ok(De::deserialize(deserializer)?.0)
+        }
+    }
+
+    impl<'de> CustomDeserialize<'de, Option<DateTime<Utc>>> for SerdeDateTime {
+        fn deserialize<D>(deserializer: D) -> Result<Option<DateTime<Utc>>, D::Error>
+        where
+            D: de::Deserializer<'de>,
+        {
+            use serde::Deserialize;
+            Ok(Option::<De>::deserialize(deserializer)?.map(|de| de.0))
         }
     }
 
@@ -155,16 +188,30 @@ pub mod serde_chrono {
         }
     }
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Annotated<DateTime<Utc>>, D::Error>
+    impl CustomSerialize<Option<DateTime<Utc>>> for SerdeDateTime {
+        fn serialize<S>(datetime: &Option<DateTime<Utc>>, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: ser::Serializer,
+        {
+            match datetime {
+                Some(d) => serializer.serialize_some(&ForwardSerialize(d, SerdeDateTime)),
+                None => serializer.serialize_none(),
+            }
+        }
+    }
+
+    pub fn deserialize<'de, T, D>(deserializer: D) -> Result<Annotated<T>, D::Error>
     where
         D: de::Deserializer<'de>,
+        SerdeDateTime: CustomDeserialize<'de, T>,
     {
         Annotated::deserialize_with(deserializer, SerdeDateTime)
     }
 
-    pub fn serialize<S>(value: &Annotated<DateTime<Utc>>, serializer: S) -> Result<S::Ok, S::Error>
+    pub fn serialize<T, S>(value: &Annotated<T>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: ser::Serializer,
+        SerdeDateTime: CustomSerialize<T>,
     {
         value.serialize_with(serializer, SerdeDateTime)
     }

@@ -10,7 +10,7 @@ use serde::ser::{
 use serde_json::{to_value, Value};
 
 use meta::Annotated;
-use utils::serde::CustomSerialize;
+use utils::serde::{CustomSerialize, ForwardSerialize};
 
 /// Name of the marker struct used to serialize Annotated meta data.
 const ANNOTATED_STRUCT: &str = "__annotated_struct__";
@@ -36,21 +36,10 @@ where
     }
 
     if let Some(value) = annotated.value() {
-        st.serialize_field(ANNOTATED_VALUE, &StructField(value, serialize))?;
+        st.serialize_field(ANNOTATED_VALUE, &ForwardSerialize(value, serialize))?;
     }
 
     st.end()
-}
-
-struct StructField<'a, T: 'a, C>(pub &'a T, pub C);
-
-impl<'a, T: 'a, C> Serialize for StructField<'a, T, C>
-where
-    C: CustomSerialize<T>,
-{
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        C::serialize(self.0, serializer)
-    }
 }
 
 #[derive(Debug, Default, Clone)]

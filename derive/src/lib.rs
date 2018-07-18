@@ -1,12 +1,14 @@
 extern crate syn;
 
-#[macro_use] extern crate synstructure;
-#[macro_use] extern crate quote;
+#[macro_use]
+extern crate synstructure;
+#[macro_use]
+extern crate quote;
 extern crate proc_macro2;
 
-use syn::{Meta, NestedMeta, MetaNameValue, Lit};
-use quote::ToTokens;
 use proc_macro2::TokenStream;
+use quote::ToTokens;
+use syn::{Lit, Meta, MetaNameValue, NestedMeta};
 
 decl_derive!([ProcessAnnotatedValue, attributes(process_annotated_value)] => process_item_derive);
 
@@ -38,42 +40,44 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
                     for nested_meta in metalist.nested {
                         match nested_meta {
                             NestedMeta::Literal(..) => panic!("unexpected literal attribute"),
-                            NestedMeta::Meta(meta) => {
-                                match meta {
-                                    Meta::NameValue(MetaNameValue { ident, lit, .. }) => {
-                                        if ident == "pii_kind" {
-                                            match lit {
-                                                Lit::Str(litstr) => {
-                                                    pii_kind = Some(pii_kind_to_enum_variant(&litstr.value()));
-                                                }
-                                                _ => {
-                                                    panic!("Got non string literal for pii_kind");
-                                                }
+                            NestedMeta::Meta(meta) => match meta {
+                                Meta::NameValue(MetaNameValue { ident, lit, .. }) => {
+                                    if ident == "pii_kind" {
+                                        match lit {
+                                            Lit::Str(litstr) => {
+                                                pii_kind =
+                                                    Some(pii_kind_to_enum_variant(&litstr.value()));
                                             }
-                                        } else if ident == "cap" {
-                                            match lit {
-                                                Lit::Str(litstr) => {
-                                                    cap = Some(cap_to_enum_variant(&litstr.value()));
-                                                }
-                                                _ => {
-                                                    panic!("Got non string literal for cap");
-                                                }
+                                            _ => {
+                                                panic!("Got non string literal for pii_kind");
+                                            }
+                                        }
+                                    } else if ident == "cap" {
+                                        match lit {
+                                            Lit::Str(litstr) => {
+                                                cap = Some(cap_to_enum_variant(&litstr.value()));
+                                            }
+                                            _ => {
+                                                panic!("Got non string literal for cap");
                                             }
                                         }
                                     }
-                                    other => {
-                                        panic!("Unexpected or bad attribute {}", other.name());
-                                    }
                                 }
-                            }
+                                other => {
+                                    panic!("Unexpected or bad attribute {}", other.name());
+                                }
+                            },
                         }
                     }
                 }
             }
 
             if process_annotated_value {
-                let pii_kind = pii_kind.map(|x| quote!(Some(__processor::#x))).unwrap_or_else(|| quote!(None));
-                let cap = cap.map(|x| quote!(Some(__processor::#x))).unwrap_or_else(|| quote!(None));
+                let pii_kind = pii_kind
+                    .map(|x| quote!(Some(__processor::#x)))
+                    .unwrap_or_else(|| quote!(None));
+                let cap = cap.map(|x| quote!(Some(__processor::#x)))
+                    .unwrap_or_else(|| quote!(None));
                 (quote! {
                     #bi = __processor::ProcessAnnotatedValue::process_annotated_value(
                         #bi, __processor, &__processor::ValueInfo
@@ -130,11 +134,12 @@ fn pii_kind_to_enum_variant(name: &str) -> TokenStream {
         "ip" => quote!(PiiKind::Ip),
         "id" => quote!(PiiKind::Id),
         "username" => quote!(PiiKind::Username),
+        "hostname" => quote!(PiiKind::Hostname),
         "sensitive" => quote!(PiiKind::Sensitive),
         "name" => quote!(PiiKind::Name),
         "email" => quote!(PiiKind::Email),
         "databag" => quote!(PiiKind::Databag),
-        _ => panic!("invalid pii_kind variant '{}'", name)
+        _ => panic!("invalid pii_kind variant '{}'", name),
     }
 }
 
@@ -145,6 +150,6 @@ fn cap_to_enum_variant(name: &str) -> TokenStream {
         "path" => quote!(Cap::Path),
         "short_path" => quote!(Cap::ShortPath),
         "databag" => quote!(Cap::Databag),
-        _ => panic!("invalid cap variant '{}'", name)
+        _ => panic!("invalid cap variant '{}'", name),
     }
 }

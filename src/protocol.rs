@@ -41,7 +41,7 @@ pub enum Level {
 }
 
 impl Default for Level {
-    fn default() -> Level {
+    fn default() -> Self {
         Level::Info
     }
 }
@@ -49,7 +49,7 @@ impl Default for Level {
 impl str::FromStr for Level {
     type Err = ParseLevelError;
 
-    fn from_str(string: &str) -> Result<Level, Self::Err> {
+    fn from_str(string: &str) -> Result<Self, Self::Err> {
         Ok(match string {
             "debug" => Level::Debug,
             "info" | "log" => Level::Info,
@@ -100,7 +100,7 @@ impl Level {
     }
 }
 
-impl_str_serialization!(Level);
+impl_str_serde!(Level);
 
 /// A breadcrumb.
 #[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
@@ -135,10 +135,6 @@ pub struct Breadcrumb {
     #[serde(flatten)]
     #[process_annotated_value(pii_kind = "databag")]
     pub other: Annotated<Map<Value>>,
-}
-
-fn default_event_level() -> Annotated<Level> {
-    Level::Error.into()
 }
 
 pub(crate) mod fingerprint {
@@ -205,52 +201,258 @@ pub(crate) mod fingerprint {
     }
 }
 
-fn serialize_event_id<S: Serializer>(
-    annotated: &Annotated<Option<Uuid>>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    struct EventIdSerialize;
+pub(crate) mod event {
+    use super::*;
+    use std::collections::BTreeMap;
 
-    impl CustomSerialize<Option<Uuid>> for EventIdSerialize {
-        fn serialize<S>(value: &Option<Uuid>, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
-        {
-            match value {
-                Some(uuid) => serializer.serialize_some(&uuid.simple().to_string()),
-                None => serializer.serialize_none(),
+    pub fn serialize_id<S: Serializer>(
+        annotated: &Annotated<Option<Uuid>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        struct EventIdSerialize;
+
+        impl CustomSerialize<Option<Uuid>> for EventIdSerialize {
+            fn serialize<S>(value: &Option<Uuid>, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+            {
+                match value {
+                    Some(uuid) => serializer.serialize_some(&uuid.simple().to_string()),
+                    None => serializer.serialize_none(),
+                }
             }
         }
+
+        annotated.serialize_with(serializer, EventIdSerialize)
     }
 
-    annotated.serialize_with(serializer, EventIdSerialize)
+    pub fn default_level() -> Annotated<Level> {
+        Level::Error.into()
+    }
+
+    pub fn default_platform() -> Annotated<String> {
+        "other".to_string().into()
+    }
+
+    impl<'de> Deserialize<'de> for Event {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            let mut id = None;
+            let mut level = None;
+            let mut fingerprint = None;
+            let mut culprit = None;
+            let mut transaction = None;
+            let mut message = None;
+            // let mut logentry = None;
+            let mut logger = None;
+            let mut modules = None;
+            let mut platform = None;
+            let mut timestamp = None;
+            let mut server_name = None;
+            let mut release = None;
+            let mut dist = None;
+            // let mut repos = None;
+            let mut environment = None;
+            // let mut user = None;
+            // let mut request = None;
+            // let mut contexts = None;
+            let mut breadcrumbs = None;
+            // let mut exceptions = None;
+            // let mut stacktrace = None;
+            // let mut template = None;
+            // let mut threads = None;
+            let mut tags = None;
+            let mut extra = None;
+            // let mut debug_meta = None;
+            // let mut sdk_info = None;
+            let mut other: Map<Value> = Default::default();
+
+            for (key, content) in BTreeMap::<String, Content>::deserialize(deserializer)? {
+                let deserializer = ContentDeserializer::new(content);
+                match key.as_str() {
+                    "" => (),
+                    "event_id" => id = Some(Deserialize::deserialize(deserializer)?),
+                    "level" => level = Some(Deserialize::deserialize(deserializer)?),
+                    "fingerprint" => fingerprint = Some(fingerprint::deserialize(deserializer)?),
+                    "culprit" => culprit = Some(Deserialize::deserialize(deserializer)?),
+                    "transaction" => transaction = Some(Deserialize::deserialize(deserializer)?),
+                    "message" => message = Some(Deserialize::deserialize(deserializer)?),
+                    // "logentry" => logentry = Some(Deserialize::deserialize(deserializer)?),
+                    // "sentry.interfaces.Message" => if logentry.is_none() {
+                    //     logentry = Some(Deserialize::deserialize(deserializer)?)
+                    // },
+                    "logger" => logger = Some(Deserialize::deserialize(deserializer)?),
+                    "modules" => modules = Some(Deserialize::deserialize(deserializer)?),
+                    "platform" => platform = Some(Deserialize::deserialize(deserializer)?),
+                    "timestamp" => timestamp = Some(serde_chrono::deserialize(deserializer)?),
+                    "server_name" => server_name = Some(Deserialize::deserialize(deserializer)?),
+                    "release" => release = Some(Deserialize::deserialize(deserializer)?),
+                    "dist" => dist = Some(Deserialize::deserialize(deserializer)?),
+                    // "repos" => repos = Some(Deserialize::deserialize(deserializer)?),
+                    "environment" => environment = Some(Deserialize::deserialize(deserializer)?),
+                    // "user" => user = Some(Deserialize::deserialize(deserializer)?),
+                    // "sentry.interfaces.User" => if user.is_none() {
+                    //     user = Some(Deserialize::deserialize(deserializer)?);
+                    // },
+                    // "request" => request = Some(Deserialize::deserialize(deserializer)?),
+                    // "sentry.interfaces.Http" => if request.is_none() {
+                    //     request = Some(Deserialize::deserialize(deserializer)?);
+                    // },
+                    // "contexts" => contexts = Some(Deserialize::deserialize(deserializer)?),
+                    // "sentry.interfaces.Contexts" => if contexts.is_none() {
+                    //     contexts = Some(Deserialize::deserialize(deserializer)?);
+                    // },
+                    "breadcrumbs" => breadcrumbs = Some(Deserialize::deserialize(deserializer)?),
+                    "sentry.interfaces.Breadcrumbs" => if breadcrumbs.is_none() {
+                        breadcrumbs = Some(Deserialize::deserialize(deserializer)?);
+                    },
+                    // "exception" => exceptions = Some(Deserialize::deserialize(deserializer)?),
+                    // "sentry.interfaces.Exception" => if exceptions.is_none() {
+                    //     exceptions = Some(Deserialize::deserialize(deserializer)?)
+                    // },
+                    // "stacktrace" => stacktrace = Some(Deserialize::deserialize(deserializer)?),
+                    // "sentry.interfaces.Stacktrace" => if stacktrace.is_none() {
+                    //     stacktrace = Some(Deserialize::deserialize(deserializer)?)
+                    // },
+                    // "template" => template = Some(Deserialize::deserialize(deserializer)?),
+                    // "sentry.interfaces.Template" => if template.is_none() {
+                    //     template = Some(Deserialize::deserialize(deserializer)?)
+                    // },
+                    // "threads" => threads = Some(Deserialize::deserialize(deserializer)?),
+                    // "sentry.interfaces.Threads" => if threads.is_none() {
+                    //     threads = Some(Deserialize::deserialize(deserializer)?)
+                    // },
+                    "tags" => tags = Some(Deserialize::deserialize(deserializer)?),
+                    "extra" => extra = Some(Deserialize::deserialize(deserializer)?),
+                    // "debug_meta" => debug_meta = Some(Deserialize::deserialize(deserializer)?),
+                    // "sentry.interfaces.DebugMeta" => if debug_meta.is_none() {
+                    //     debug_meta = Some(Deserialize::deserialize(deserializer)?)
+                    // },
+                    // "sdk" => sdk_info = Some(Deserialize::deserialize(deserializer)?),
+                    _ => {
+                        other.insert(key, Deserialize::deserialize(deserializer)?);
+                    }
+                }
+            }
+
+            Ok(Event {
+                id: id.unwrap_or_default(),
+                level: level.unwrap_or_else(|| default_level()),
+                fingerprint: fingerprint.unwrap_or_else(|| fingerprint::default()),
+                culprit: culprit.unwrap_or_default(),
+                transaction: transaction.unwrap_or_default(),
+                message: message.unwrap_or_default(),
+                logger: logger.unwrap_or_default(),
+                modules: modules.unwrap_or_default(),
+                platform: platform.unwrap_or_else(|| default_platform()),
+                timestamp: timestamp.unwrap_or_default(),
+                server_name: server_name.unwrap_or_default(),
+                release: release.unwrap_or_default(),
+                dist: dist.unwrap_or_default(),
+                environment: environment.unwrap_or_default(),
+                breadcrumbs: breadcrumbs.unwrap_or_default(),
+                tags: tags.unwrap_or_default(),
+                extra: extra.unwrap_or_default(),
+                other: Annotated::from(other),
+            })
+        }
+    }
 }
 
 /// Represents a full event for Sentry.
-#[derive(Debug, Default, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Default, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Event {
     /// Unique identifier of this event.
     #[serde(
-        default,
         rename = "event_id",
         skip_serializing_if = "annotated::is_none",
-        serialize_with = "serialize_event_id"
+        serialize_with = "event::serialize_id"
     )]
     pub id: Annotated<Option<Uuid>>,
 
     /// Severity level of the event (defaults to "error").
-    #[serde(default = "default_event_level")]
     pub level: Annotated<Level>,
 
     /// Manual fingerprint override.
-    // Note this is a `Vec` and not `Array` intentionally
-    #[serde(default = "fingerprint::default", deserialize_with = "fingerprint::deserialize")]
+    // XXX: This is a `Vec` and not `Array` intentionally
     pub fingerprint: Annotated<Vec<String>>,
 
+    /// Custom culprit of the event.
+    #[serde(skip_serializing_if = "annotated::is_none")]
+    pub culprit: Annotated<Option<String>>,
+
+    /// Transaction name of the event.
+    #[serde(skip_serializing_if = "annotated::is_none")]
+    pub transaction: Annotated<Option<String>>,
+
+    /// Custom message for this event.
+    // TODO: Consider to normalize this right away into logentry
+    #[serde(skip_serializing_if = "annotated::is_none")]
+    #[process_annotated_value(pii_kind = "freeform", cap = "message")]
+    pub message: Annotated<Option<String>>,
+
+    // TODO: logentry
+    /// Logger that created the event.
+    #[serde(skip_serializing_if = "annotated::is_none")]
+    pub logger: Annotated<Option<String>>,
+
+    /// Name and versions of installed modules.
+    #[serde(skip_serializing_if = "annotated::is_empty_map")]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub modules: Annotated<Map<String>>,
+
+    /// Platform identifier of this event (defaults to "other").
+    pub platform: Annotated<String>,
+
+    /// Timestamp when the event was created.
+    #[serde(with = "serde_chrono", skip_serializing_if = "annotated::is_none")]
+    pub timestamp: Annotated<Option<DateTime<Utc>>>,
+
+    /// Server or device name the event was generated on.
+    #[serde(skip_serializing_if = "annotated::is_none")]
+    #[process_annotated_value(pii_kind = "hostname")]
+    pub server_name: Annotated<Option<String>>,
+
+    /// Program's release identifier.
+    #[serde(skip_serializing_if = "annotated::is_none")]
+    pub release: Annotated<Option<String>>,
+
+    /// Program's distribution identifier.
+    #[serde(skip_serializing_if = "annotated::is_none")]
+    pub dist: Annotated<Option<String>>,
+
+    // TODO: repos
+    /// Environment the environment was generated in ("production" or "development").
+    #[serde(skip_serializing_if = "annotated::is_none")]
+    pub environment: Annotated<Option<String>>,
+
+    // TODO: user
+    // TODO: request
+    // TODO: contexts
     /// List of breadcrumbs recorded before this event.
-    #[serde(default, skip_serializing_if = "annotated::is_empty_values")]
+    #[serde(skip_serializing_if = "annotated::is_empty_values")]
     #[process_annotated_value]
     pub breadcrumbs: Annotated<Values<Breadcrumb>>,
+
+    // TODO: exceptions (rename = "exception")
+    // TODO: stacktrace
+    // TODO: template_info (rename = "template")
+    // TODO: threads
+    /// Custom tags for this event.
+    #[serde(skip_serializing_if = "annotated::is_empty_map")]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub tags: Annotated<Map<String>>,
+
+    /// Arbitrary extra information set by the user.
+    #[serde(skip_serializing_if = "annotated::is_empty_map")]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub extra: Annotated<Map<Value>>,
+
+    // TODO: debug_meta
+    // TODO: sdk_info (rename = "sdk")
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
 }
 
 #[derive(Debug, Deserialize)]

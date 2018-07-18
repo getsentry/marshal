@@ -19,6 +19,8 @@ pub enum PiiKind {
     Id,
     /// A username or other user identifier
     Username,
+    /// Hostname of a machine (server, pc or mobile device).
+    Hostname,
     /// Sensitive PII if they ever come up in the protocol (gender, religious orientation etc.)
     Sensitive,
     /// First, last or real name of a person

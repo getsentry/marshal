@@ -158,6 +158,7 @@ mod test_fingerprint {
 
 mod test_event {
     use super::*;
+    use chrono::{TimeZone, Utc};
 
     fn serialize(event: &Annotated<Event>) -> Result<String, serde_json::Error> {
         let mut serializer = serde_json::Serializer::pretty(Vec::new());
@@ -178,6 +179,26 @@ mod test_event {
   "fingerprint": [
     "myprint"
   ],
+  "culprit": "myculprit",
+  "transaction": "mytransaction",
+  "message": "mymessage",
+  "logger": "mylogger",
+  "modules": {
+    "mymodule": "1.0.0"
+  },
+  "platform": "myplatform",
+  "timestamp": 946684800,
+  "server_name": "myhost",
+  "release": "myrelease",
+  "dist": "mydist",
+  "environment": "myenv",
+  "tags": {
+    "tag": "value"
+  },
+  "extra": {
+    "extra": "value"
+  },
+  "other": "value",
   "": {
     "event_id": {
       "": {
@@ -196,7 +217,43 @@ mod test_event {
             ),
             level: Level::Debug.into(),
             fingerprint: Annotated::from(vec!["myprint".to_string()]),
+            culprit: Some("myculprit".to_string()).into(),
+            transaction: Some("mytransaction".to_string()).into(),
+            message: Some("mymessage".to_string()).into(),
+            logger: Some("mylogger".to_string()).into(),
+            modules: {
+                let mut map = Map::new();
+                map.insert("mymodule".to_string(), "1.0.0".to_string().into());
+                Annotated::from(map)
+            },
+            platform: "myplatform".to_string().into(),
+            timestamp: Some(Utc.ymd(2000, 1, 1).and_hms(0, 0, 0)).into(),
+            server_name: Some("myhost".to_string()).into(),
+            release: Some("myrelease".to_string()).into(),
+            dist: Some("mydist".to_string()).into(),
+            environment: Some("myenv".to_string()).into(),
             breadcrumbs: Default::default(),
+            tags: {
+                let mut map = Map::new();
+                map.insert("tag".to_string(), "value".to_string().into());
+                Annotated::from(map)
+            },
+            extra: {
+                let mut map = Map::new();
+                map.insert(
+                    "extra".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
         });
 
         assert_eq_dbg!(event, deserialize(json).unwrap());
@@ -211,13 +268,28 @@ mod test_event {
   "level": "error",
   "fingerprint": [
     "{{ default }}"
-  ]
+  ],
+  "platform": "other"
 }"#;
         let event = Annotated::from(Event {
             id: Some("52df9022-8352-46ee-b317-dbd739ccd059".parse().unwrap()).into(),
             level: Level::Error.into(),
             fingerprint: vec!["{{ default }}".to_string()].into(),
+            culprit: None.into(),
+            transaction: None.into(),
+            message: None.into(),
+            logger: None.into(),
+            modules: Default::default(),
+            platform: "other".to_string().into(),
+            timestamp: None.into(),
+            server_name: None.into(),
+            release: None.into(),
+            dist: None.into(),
+            environment: None.into(),
             breadcrumbs: Default::default(),
+            tags: Default::default(),
+            extra: Default::default(),
+            other: Default::default(),
         });
 
         assert_eq_dbg!(event, serde_json::from_str(input).unwrap());

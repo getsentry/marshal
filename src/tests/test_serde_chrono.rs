@@ -1,4 +1,4 @@
-use chrono::{TimeZone, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use serde_json::Deserializer;
 
 use meta::Annotated;
@@ -26,7 +26,7 @@ fn test_date() {
 fn test_invalid_date() {
     let deserializer = &mut Deserializer::from_str("\"invalid\"");
     assert_eq_dbg!(
-        deserialize(deserializer).unwrap(),
+        deserialize::<DateTime<Utc>, _>(deserializer).unwrap(),
         Annotated::from_error("input contains invalid characters")
     );
 }
@@ -35,7 +35,7 @@ fn test_invalid_date() {
 fn test_invalid_type() {
     let deserializer = &mut Deserializer::from_str("true");
     assert_eq_dbg!(
-        deserialize(deserializer).unwrap(),
+        deserialize::<DateTime<Utc>, _>(deserializer).unwrap(),
         Annotated::from_error("invalid type: boolean `true`, expected a unix timestamp")
     );
 }
