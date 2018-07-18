@@ -445,6 +445,137 @@ mod test_user {
     }
 }
 
+/// Http request information.
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct Request {
+    /// URL of the request.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    // TODO: cap?
+    pub url: Annotated<Option<String>>,
+
+    /// HTTP request method.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub method: Annotated<Option<String>>,
+
+    /// Request data in any format that makes sense.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "databag")]
+    // TODO: cap?
+    pub data: Annotated<Option<Value>>,
+
+    /// URL encoded HTTP query string.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "freeform")]
+    // TODO: cap?
+    pub query_string: Annotated<Option<String>>,
+
+    /// URL encoded contents of the Cookie header.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "freeform")]
+    // TODO: cap?
+    pub cookies: Annotated<Option<String>>,
+
+    /// HTTP request headers.
+    #[serde(default, skip_serializing_if = "utils::is_empty_map")]
+    #[process_annotated_value(pii_kind = "databag")]
+    // TODO: cap?
+    pub headers: Annotated<Map<String>>,
+
+    /// Server environment data, such as CGI/WSGI.
+    #[serde(default, skip_serializing_if = "utils::is_empty_map")]
+    #[process_annotated_value(pii_kind = "databag")]
+    // TODO: cap?
+    pub env: Annotated<Map<String>>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+#[cfg(test)]
+mod test_request {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_roundtrip() {
+        let json = r#"{
+  "url": "https://google.com/search",
+  "method": "GET",
+  "data": {
+    "some": 1
+  },
+  "query_string": "q=foo",
+  "cookies": "GOOGLE=1",
+  "headers": {
+    "Referer": "https://google.com/"
+  },
+  "env": {
+    "REMOTE_ADDR": "213.47.147.207"
+  },
+  "other": "value"
+}"#;
+
+        let request = Request {
+            url: Some("https://google.com/search".to_string()).into(),
+            method: Some("GET".to_string()).into(),
+            data: {
+                let mut map = Map::new();
+                map.insert("some".to_string(), Value::U64(1).into());
+                Annotated::from(Some(Value::Map(map.into())))
+            },
+            query_string: Some("q=foo".to_string()).into(),
+            cookies: Some("GOOGLE=1".to_string()).into(),
+            headers: {
+                let mut map = Map::new();
+                map.insert(
+                    "Referer".to_string(),
+                    "https://google.com/".to_string().into(),
+                );
+                Annotated::from(map)
+            },
+            env: {
+                let mut map = Map::new();
+                map.insert(
+                    "REMOTE_ADDR".to_string(),
+                    "213.47.147.207".to_string().into(),
+                );
+                Annotated::from(map)
+            },
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        };
+
+        assert_eq_dbg!(request, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&request).unwrap());
+    }
+
+    #[test]
+    fn test_default_values() {
+        let json = "{}";
+        let request = Request {
+            url: None.into(),
+            method: None.into(),
+            data: None.into(),
+            query_string: None.into(),
+            cookies: None.into(),
+            headers: Default::default(),
+            env: Default::default(),
+            other: Default::default(),
+        };
+
+        assert_eq_dbg!(request, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string(&request).unwrap());
+    }
+}
+
 mod fingerprint {
     use super::super::buffer::ContentDeserializer;
     use super::super::serde::CustomDeserialize;
@@ -641,7 +772,7 @@ mod event {
             let mut repos = None;
             let mut environment = None;
             let mut user = None;
-            // let mut request = None;
+            let mut request = None;
             // let mut contexts = None;
             let mut breadcrumbs = None;
             // let mut exceptions = None;
@@ -681,10 +812,10 @@ mod event {
                     "sentry.interfaces.User" => if user.is_none() {
                         user = Some(Deserialize::deserialize(deserializer)?);
                     },
-                    // "request" => request = Some(Deserialize::deserialize(deserializer)?),
-                    // "sentry.interfaces.Http" => if request.is_none() {
-                    //     request = Some(Deserialize::deserialize(deserializer)?);
-                    // },
+                    "request" => request = Some(Deserialize::deserialize(deserializer)?),
+                    "sentry.interfaces.Http" => if request.is_none() {
+                        request = Some(Deserialize::deserialize(deserializer)?);
+                    },
                     // "contexts" => contexts = Some(Deserialize::deserialize(deserializer)?),
                     // "sentry.interfaces.Contexts" => if contexts.is_none() {
                     //     contexts = Some(Deserialize::deserialize(deserializer)?);
@@ -740,6 +871,7 @@ mod event {
                 repos: repos.unwrap_or_default(),
                 environment: environment.unwrap_or_default(),
                 user: user.unwrap_or_default(),
+                request: request.unwrap_or_default(),
                 breadcrumbs: breadcrumbs.unwrap_or_default(),
                 tags: tags.unwrap_or_default(),
                 extra: extra.unwrap_or_default(),
@@ -827,7 +959,11 @@ pub struct Event {
     #[process_annotated_value]
     pub user: Annotated<Option<User>>,
 
-    // TODO: request
+    /// Information about a web request that occurred during the event.
+    #[serde(skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value]
+    pub request: Annotated<Option<Request>>,
+
     // TODO: contexts
     /// List of breadcrumbs recorded before this event.
     #[serde(skip_serializing_if = "utils::is_empty_values")]
@@ -937,6 +1073,7 @@ mod test_event {
             repos: Default::default(),
             environment: Some("myenv".to_string()).into(),
             user: None.into(),
+            request: None.into(),
             breadcrumbs: Default::default(),
             tags: {
                 let mut map = Map::new();
@@ -993,6 +1130,7 @@ mod test_event {
             dist: None.into(),
             repos: Default::default(),
             user: None.into(),
+            request: None.into(),
             environment: None.into(),
             breadcrumbs: Default::default(),
             tags: Default::default(),
