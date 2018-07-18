@@ -27,13 +27,3 @@ macro_rules! assert_eq_dbg {
         )
     }};
 }
-
-mod test_annotated;
-mod test_builtinrules;
-mod test_chunking;
-mod test_common;
-mod test_meta;
-mod test_processor;
-mod test_protocol;
-mod test_rules;
-mod test_serde_chrono;

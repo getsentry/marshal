@@ -28,20 +28,9 @@ extern crate marshal_derive;
 #[cfg(test)]
 extern crate difference;
 
-#[macro_use]
-mod macros;
-
-mod builtinrules;
-mod chunk;
-mod common;
-mod meta;
-mod meta_ser;
-mod rule;
-mod tracked;
-mod utils;
-
 #[cfg(test)]
-mod tests;
+#[macro_use]
+mod testutils;
 
 pub mod processor;
 pub mod protocol;

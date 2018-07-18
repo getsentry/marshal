@@ -1,3 +1,5 @@
+//! Defines `TrackedSerializer`, a Serializer implementation that tracks paths.
+
 use serde::de::{self, DeserializeSeed, Deserializer, Error, State, Visitor};
 use std::fmt;
 use std::rc::Rc;

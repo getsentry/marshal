@@ -9,8 +9,8 @@ use serde::ser::{
 };
 use serde_json::{to_value, Value};
 
-use meta::Annotated;
-use utils::serde::{CustomSerialize, ForwardSerialize};
+use super::meta::Annotated;
+use super::serde::{CustomSerialize, ForwardSerialize};
 
 /// Name of the marker struct used to serialize Annotated meta data.
 const ANNOTATED_STRUCT: &str = "__annotated_struct__";

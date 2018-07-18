@@ -102,24 +102,24 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
         let assemble_pat = variant.pat();
 
         (quote! {
-            __meta::Annotated(Some(#pat), __meta) => {
+            __protocol::Annotated(Some(#pat), __protocol) => {
                 #variant_body
-                __meta::Annotated(Some(#assemble_pat), __meta)
+                __protocol::Annotated(Some(#assemble_pat), __protocol)
             }
-            __annotated @ __meta::Annotated(..) => __annotated
+            __annotated @ __protocol::Annotated(..) => __annotated
         }).to_tokens(&mut body);
     }
 
     s.gen_impl(quote! {
         use processor as __processor;
-        use meta as __meta;
+        use protocol as __protocol;
 
         gen impl __processor::ProcessAnnotatedValue for @Self {
             fn process_annotated_value(
-                __annotated: __meta::Annotated<Self>,
+                __annotated: __protocol::Annotated<Self>,
                 __processor: &__processor::Processor,
                 __info: &__processor::ValueInfo
-            ) -> __meta::Annotated<Self> {
+            ) -> __protocol::Annotated<Self> {
                 match __annotated {
                     #body
                 }

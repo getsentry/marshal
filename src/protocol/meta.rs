@@ -12,12 +12,10 @@ use serde::de::{self, Deserialize, Deserializer, IgnoredAny};
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 use serde_json;
 
-use meta_ser::{serialize_annotated_meta, MetaSerializer};
-use tracked::{Path, TrackedDeserializer};
-use utils::buffer::{Content, ContentDeserializer, ContentRefDeserializer, ContentRepr};
-use utils::serde::{CustomDeserialize, CustomSerialize, DefaultDeserialize, DefaultSerialize};
-
-pub(crate) use meta_ser::{MetaError, MetaTree};
+use super::buffer::{Content, ContentDeserializer, ContentRefDeserializer, ContentRepr};
+use super::meta_ser::{serialize_annotated_meta, MetaError, MetaSerializer, MetaTree};
+use super::serde::{CustomDeserialize, CustomSerialize, DefaultDeserialize, DefaultSerialize};
+use super::tracked::{Path, TrackedDeserializer};
 
 /// Internal synchronization for meta data serialization.
 thread_local!(static SERIALIZE_META: AtomicBool = AtomicBool::new(false));
@@ -278,7 +276,6 @@ impl<'de, T: Deserialize<'de>> Annotated<T> {
 
     /// Deserializes an annotated from a JSON string.
     pub fn from_json(s: &'de str) -> Result<Annotated<T>, serde_json::Error> {
-        use serde_json;
         Self::deserialize_with_meta(&mut serde_json::Deserializer::from_str(s))
     }
 }
@@ -304,7 +301,6 @@ impl<T: Serialize> Annotated<T> {
 
     /// Serializes an annotated value into a JSON string.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        use serde_json;
         let mut ser = serde_json::Serializer::new(Vec::with_capacity(128));
         self.serialize_with_meta(&mut ser)?;
         Ok(unsafe { String::from_utf8_unchecked(ser.into_inner()) })
@@ -455,7 +451,7 @@ impl<T: Serialize> Serialize for Annotated<T> {
 
 /// A map of meta data entries for paths in a model.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct MetaMap {
+struct MetaMap {
     inner: RefCell<BTreeMap<String, Meta>>,
 }
 
@@ -542,10 +538,7 @@ impl<'de> Deserialize<'de> for MetaMap {
 }
 
 /// Deserializes an annotated value with given meta data.
-pub(crate) fn deserialize_meta<'de, D, T>(
-    deserializer: D,
-    meta_map: MetaMap,
-) -> Result<Annotated<T>, D::Error>
+fn deserialize_meta<'de, D, T>(deserializer: D, meta_map: MetaMap) -> Result<Annotated<T>, D::Error>
 where
     D: Deserializer<'de>,
     T: Deserialize<'de>,
@@ -563,7 +556,7 @@ pub(crate) fn should_serialize_meta() -> bool {
 }
 
 /// Serializes meta data of an annotated value into a nested map structure.
-pub(crate) fn serialize_meta<T>(value: &Annotated<T>) -> Result<MetaTree, MetaError>
+fn serialize_meta<T>(value: &Annotated<T>) -> Result<MetaTree, MetaError>
 where
     Annotated<T>: Serialize,
 {
@@ -571,4 +564,362 @@ where
     let tree = value.serialize(MetaSerializer)?;
     SERIALIZE_META.with(|b| b.store(false, Ordering::Relaxed));
     Ok(tree.unwrap_or_default())
+}
+
+#[cfg(test)]
+mod test_annotated_with_meta {
+    use super::*;
+    use serde_json::Deserializer;
+
+    #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+    struct Test {
+        answer: Annotated<i32>,
+        other: i32,
+    }
+
+    #[test]
+    fn test_valid() {
+        let deserializer = &mut Deserializer::from_str("42");
+        let mut meta_map = MetaMap::new();
+        meta_map.insert(".".to_string(), Meta::from_error("some prior error"));
+
+        let value = Annotated::new(42, Meta::from_error("some prior error"));
+        assert_eq_dbg!(value, deserialize_meta(deserializer, meta_map).unwrap());
+    }
+
+    #[test]
+    fn test_valid_nested() {
+        let deserializer = &mut Deserializer::from_str(r#"{"answer":42,"other":21}"#);
+        let mut meta_map = MetaMap::new();
+        meta_map.insert("answer".to_string(), Meta::from_error("some prior error"));
+
+        let value = Annotated::from(Test {
+            answer: Annotated::new(42, Meta::from_error("some prior error")),
+            other: 21,
+        });
+        assert_eq_dbg!(value, deserialize_meta(deserializer, meta_map).unwrap());
+    }
+
+    #[test]
+    fn test_valid_array() {
+        let deserializer = &mut Deserializer::from_str(r#"[1,2]"#);
+        let mut meta_map = MetaMap::new();
+        meta_map.insert("0".to_string(), Meta::from_error("a"));
+        meta_map.insert("1".to_string(), Meta::from_error("b"));
+
+        let value = Annotated::from(vec![
+            Annotated::new(1, Meta::from_error("a")),
+            Annotated::new(2, Meta::from_error("b")),
+        ]);
+        assert_eq_dbg!(value, deserialize_meta(deserializer, meta_map).unwrap());
+    }
+
+    #[test]
+    fn test_invalid() {
+        let deserializer = &mut Deserializer::from_str("null");
+        let mut meta_map = MetaMap::new();
+        meta_map.insert(".".to_string(), Meta::from_error("some prior error"));
+
+        // It should accept the "null" (unit) value and use the given error message
+        let value = Annotated::<i32>::from_error("some prior error");
+        assert_eq_dbg!(value, deserialize_meta(deserializer, meta_map).unwrap());
+    }
+
+    #[test]
+    fn test_invalid_nested() {
+        let deserializer = &mut Deserializer::from_str(r#"{"answer":null, "other":21}"#);
+        let mut meta_map = MetaMap::new();
+        meta_map.insert("answer".to_string(), Meta::from_error("some prior error"));
+
+        // It should accept the "null" (unit) value and use the given error message
+        let value = Annotated::from(Test {
+            answer: Annotated::from_error("some prior error"),
+            other: 21,
+        });
+        assert_eq_dbg!(value, deserialize_meta(deserializer, meta_map).unwrap());
+    }
+
+    #[test]
+    fn test_missing() {
+        let deserializer = &mut Deserializer::from_str("null");
+
+        // It should reject the "null" value and add an error
+        let value = Annotated::<i32>::from_error("invalid type: null, expected i32");
+        assert_eq_dbg!(
+            value,
+            deserialize_meta(deserializer, MetaMap::new()).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_missing_nested() {
+        let deserializer = &mut Deserializer::from_str(r#"{"answer":null, "other":21}"#);
+
+        // It should reject the "null" value and add an error
+        let value = Annotated::from(Test {
+            answer: Annotated::from_error("invalid type: null, expected i32"),
+            other: 21,
+        });
+        assert_eq_dbg!(
+            value,
+            deserialize_meta(deserializer, MetaMap::new()).unwrap()
+        );
+    }
+}
+
+#[cfg(test)]
+mod test_annotated_without_meta {
+    use super::*;
+
+    #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+    struct Test {
+        answer: Annotated<i32>,
+        other: i32,
+    }
+
+    #[test]
+    fn test_valid() {
+        let json = "42";
+        let value = Annotated::from(42);
+
+        assert_eq_dbg!(value, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, &serde_json::to_string(&value).unwrap());
+    }
+
+    #[test]
+    fn test_valid_nested() {
+        let json = r#"{"answer":42,"other":21}"#;
+        let value = Annotated::from(Test {
+            answer: Annotated::from(42),
+            other: 21,
+        });
+
+        assert_eq_dbg!(value, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, &serde_json::to_string(&value).unwrap());
+    }
+
+    #[test]
+    fn test_invalid() {
+        let value = Annotated::<i32>::from_error("invalid type: map, expected i32");
+        assert_eq_dbg!(value, serde_json::from_str(r#"{}"#).unwrap());
+        assert_eq_str!("null", &serde_json::to_string(&value).unwrap());
+    }
+
+    #[test]
+    fn test_invalid_nested() {
+        let value = Annotated::from(Test {
+            answer: Annotated::from_error("invalid type: string \"invalid\", expected i32"),
+            other: 21,
+        });
+
+        assert_eq_dbg!(
+            value,
+            serde_json::from_str(r#"{"answer":"invalid","other":21}"#).unwrap()
+        );
+        assert_eq_str!(
+            r#"{"answer":null,"other":21}"#,
+            &serde_json::to_string(&value).unwrap()
+        )
+    }
+
+    #[test]
+    fn test_syntax_error() {
+        assert!(serde_json::from_str::<i32>("nul").is_err());
+    }
+
+    #[test]
+    fn test_syntax_error_nested() {
+        assert!(serde_json::from_str::<Test>(r#"{"answer": nul}"#).is_err());
+    }
+}
+
+#[cfg(test)]
+mod test_meta_paths {
+    use super::*;
+    use serde::Deserialize;
+
+    #[derive(Debug, Deserialize)]
+    struct Test {
+        answer: Annotated<i32>,
+    }
+
+    fn deserialize<'de, T: Deserialize<'de>>(string: &'de str) -> Result<T, serde_json::Error> {
+        T::deserialize(TrackedDeserializer::new(
+            &mut serde_json::Deserializer::from_str(string),
+            Default::default(),
+        ))
+    }
+
+    #[test]
+    fn test_basic() {
+        let value: Annotated<i32> = deserialize("42").unwrap();
+        assert_eq_str!(".", value.meta().path().unwrap().to_string());
+    }
+
+    #[test]
+    fn test_nested() {
+        let value: Annotated<Test> = deserialize(r#"{"answer": 42}"#).unwrap();
+        assert_eq_str!(
+            "answer",
+            value
+                .value()
+                .unwrap()
+                .answer
+                .meta()
+                .path()
+                .unwrap()
+                .to_string()
+        );
+    }
+}
+
+#[cfg(test)]
+mod test_meta_map {
+    use super::*;
+
+    #[test]
+    fn test_empty() {
+        assert_eq_dbg!(MetaMap::new(), serde_json::from_str("{}").unwrap());
+    }
+
+    #[test]
+    fn test_root() {
+        let json = r#"{
+            "": {"err": ["a"]}
+        }"#;
+
+        let mut map = MetaMap::new();
+        map.insert(".".to_string(), Meta::from_error("a"));
+
+        assert_eq_dbg!(map, serde_json::from_str(json).unwrap());
+    }
+
+    #[test]
+    fn test_nested() {
+        let json = r#"{
+            "": {"err": ["a"]},
+            "foo": {
+                "": {"err": ["b"]},
+                "bar": {
+                    "": {"err": ["c"]}
+                }
+            }
+        }"#;
+
+        let mut map = MetaMap::new();
+        map.insert(".".to_string(), Meta::from_error("a"));
+        map.insert("foo".to_string(), Meta::from_error("b"));
+        map.insert("foo.bar".to_string(), Meta::from_error("c"));
+
+        assert_eq_dbg!(map, serde_json::from_str(json).unwrap());
+    }
+}
+
+#[cfg(test)]
+mod test_remarks {
+    use super::*;
+
+    #[test]
+    fn test_rule_only() {
+        let json = r#"["@test","a"]"#;
+        let remark = Remark::new(RemarkType::Annotated, "@test");
+
+        assert_eq_dbg!(remark, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, &serde_json::to_string(&remark).unwrap());
+    }
+
+    #[test]
+    fn test_with_description() {
+        let json = r#"["test","x"]"#;
+        let remark = Remark::new(RemarkType::Removed, "test");
+
+        assert_eq_dbg!(remark, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, &serde_json::to_string(&remark).unwrap());
+    }
+
+    #[test]
+    fn test_with_range() {
+        let json = r#"["@test","s",21,42]"#;
+        let remark = Remark::with_range(RemarkType::Substituted, "@test", (21, 42));
+
+        assert_eq_dbg!(remark, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, &serde_json::to_string(&remark).unwrap());
+    }
+
+    #[test]
+    fn test_with_additional() {
+        let input = r#"["test","x",21,42,null]"#;
+        let output = r#"["test","x",21,42]"#;
+        let remark = Remark::with_range(RemarkType::Removed, "test", (21, 42));
+
+        assert_eq_dbg!(remark, serde_json::from_str(input).unwrap());
+        assert_eq_str!(output, &serde_json::to_string(&remark).unwrap());
+    }
+}
+
+#[cfg(test)]
+mod test_serialize_meta {
+    use super::*;
+
+    #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+    struct Test {
+        answer: Annotated<i32>,
+    }
+
+    fn serialize<T: Serialize>(value: &Annotated<T>) -> Result<String, serde_json::Error> {
+        use serde::ser::Error;
+        let tree = serialize_meta(value).map_err(serde_json::Error::custom)?;
+
+        let mut serializer = serde_json::Serializer::new(Vec::new());
+        tree.serialize(&mut serializer)?;
+
+        Ok(String::from_utf8(serializer.into_inner()).unwrap())
+    }
+
+    #[test]
+    fn test_empty() {
+        let value = Annotated::<i32>::empty();
+        assert_eq_str!(serialize(&value).unwrap(), "{}")
+    }
+
+    #[test]
+    fn test_empty_nested() {
+        let value = Annotated::from(Test {
+            answer: Annotated::empty(),
+        });
+
+        assert_eq_str!(serialize(&value).unwrap(), "{}")
+    }
+
+    #[test]
+    fn test_basic() {
+        let value = Annotated::new(42, Meta::from_error("some error"));
+        assert_eq_str!(serialize(&value).unwrap(), r#"{"":{"err":["some error"]}}"#);
+    }
+
+    #[test]
+    fn test_nested() {
+        let value = Annotated::new(
+            Test {
+                answer: Annotated::new(42, Meta::from_error("inner error")),
+            },
+            Meta::from_error("outer error"),
+        );
+        assert_eq_str!(
+            serialize(&value).unwrap(),
+            r#"{"":{"err":["outer error"]},"answer":{"":{"err":["inner error"]}}}"#
+        );
+    }
+
+    #[test]
+    fn test_array() {
+        let value = Annotated::from(vec![
+            Annotated::new(1, Meta::from_error("a")),
+            Annotated::new(2, Meta::from_error("b")),
+        ]);
+        assert_eq_str!(
+            serialize(&value).unwrap(),
+            r#"{"0":{"":{"err":["a"]}},"1":{"":{"err":["b"]}}}"#
+        );
+    }
 }
