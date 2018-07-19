@@ -576,11 +576,295 @@ mod test_breadcrumb {
     }
 }
 
-/// Represents a register value.
+/// A register value.
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub struct RegVal(pub u64);
 
 impl_hex_serde!(RegVal, u64);
+
+/// A memory address.
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash)]
+pub struct Addr(pub u64);
+
+impl_hex_serde!(Addr, u64);
+
+/// Single frame in a stack trace.
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct Frame {
+    /// Name of the frame's function. This might include the name of a class.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub function: Annotated<Option<String>>,
+
+    /// Potentially mangled name of the symbol as it appears in an executable.
+    ///
+    /// This is different from a function name by generally being the mangled
+    /// name that appears natively in the binary.  This is relevant for languages
+    /// like Swift, C++ or Rust.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub symbol: Annotated<Option<String>>,
+
+    /// Name of the module the frame is contained in.
+    ///
+    /// Note that this might also include a class name if that is something the
+    /// language natively considers to be part of the stack (for instance in Java).
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "freeform")]
+    // TODO: Cap? This can be a FS path or a dotted path
+    pub module: Annotated<Option<String>>,
+
+    /// Name of the package that contains the frame.
+    ///
+    /// For instance this can be a dylib for native languages, the name of the jar
+    /// or .NET assembly.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "freeform")]
+    // TODO: Cap? This can be a FS path or a dotted path
+    pub package: Annotated<Option<String>>,
+
+    /// The source file name (basename only).
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "freeform", cap = "short_path")]
+    pub filename: Annotated<Option<String>>,
+
+    /// Absolute path to the source file.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "freeform", cap = "path")]
+    pub abs_path: Annotated<Option<String>>,
+
+    /// Line number within the source file.
+    #[serde(default, rename = "lineno", skip_serializing_if = "utils::is_none")]
+    pub line: Annotated<Option<u64>>,
+
+    /// Column number within the source file.
+    #[serde(default, rename = "colno", skip_serializing_if = "utils::is_none")]
+    pub column: Annotated<Option<u64>>,
+
+    /// Source code leading up to the current line.
+    #[serde(default, rename = "pre_context", skip_serializing_if = "utils::is_empty_array")]
+    pub pre_lines: Annotated<Array<String>>,
+
+    /// Source code of the current line.
+    #[serde(default, rename = "context_line", skip_serializing_if = "utils::is_none")]
+    pub current_line: Annotated<Option<String>>,
+
+    /// Source code of the lines after the current line.
+    #[serde(default, rename = "post_context", skip_serializing_if = "utils::is_empty_array")]
+    pub post_lines: Annotated<Array<String>>,
+
+    /// Override whether this frame should be considered in-app.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub in_app: Annotated<Option<bool>>,
+
+    /// Local variables in a convenient format.
+    #[serde(default, skip_serializing_if = "utils::is_empty_map")]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub vars: Annotated<Map<Value>>,
+
+    /// Start address of the containing code module (image).
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub image_addr: Annotated<Option<Addr>>,
+
+    /// Absolute address of the frame's CPU instruction.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub instruction_addr: Annotated<Option<Addr>>,
+
+    /// Start address of the frame's function.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub symbol_addr: Annotated<Option<Addr>>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+#[cfg(test)]
+mod test_frame {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_roundtrip() {
+        let json = r#"{
+  "function": "main",
+  "symbol": "_main",
+  "module": "app",
+  "package": "/my/app",
+  "filename": "myfile.rs",
+  "abs_path": "/path/to",
+  "lineno": 2,
+  "colno": 42,
+  "pre_context": [
+    "fn main() {"
+  ],
+  "context_line": "unimplemented!()",
+  "post_context": [
+    "}"
+  ],
+  "in_app": true,
+  "vars": {
+    "variable": "value"
+  },
+  "image_addr": "0x400",
+  "instruction_addr": "0x404",
+  "symbol_addr": "0x404",
+  "other": "value"
+}"#;
+        let frame = Frame {
+            function: Some("main".to_string()).into(),
+            symbol: Some("_main".to_string()).into(),
+            module: Some("app".to_string()).into(),
+            package: Some("/my/app".to_string()).into(),
+            filename: Some("myfile.rs".to_string()).into(),
+            abs_path: Some("/path/to".to_string()).into(),
+            line: Some(2).into(),
+            column: Some(42).into(),
+            pre_lines: vec!["fn main() {".to_string().into()].into(),
+            current_line: Some("unimplemented!()".to_string()).into(),
+            post_lines: vec!["}".to_string().into()].into(),
+            in_app: Some(true).into(),
+            vars: {
+                let mut map = Map::new();
+                map.insert(
+                    "variable".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+            image_addr: Some(Addr(0x400)).into(),
+            instruction_addr: Some(Addr(0x404)).into(),
+            symbol_addr: Some(Addr(0x404)).into(),
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        };
+
+        assert_eq_dbg!(frame, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&frame).unwrap());
+    }
+
+    #[test]
+    fn test_default_values() {
+        let json = "{}";
+        let frame = Frame {
+            function: None.into(),
+            symbol: None.into(),
+            module: None.into(),
+            package: None.into(),
+            filename: None.into(),
+            abs_path: None.into(),
+            line: None.into(),
+            column: None.into(),
+            pre_lines: Default::default(),
+            current_line: None.into(),
+            post_lines: Default::default(),
+            in_app: None.into(),
+            vars: Default::default(),
+            image_addr: None.into(),
+            instruction_addr: None.into(),
+            symbol_addr: None.into(),
+            other: Default::default(),
+        };
+
+        assert_eq_dbg!(frame, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string(&frame).unwrap());
+    }
+}
+
+/// Stack trace containing a thread's frames.
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct Stacktrace {
+    /// List of frames in this stack trace (required).
+    #[process_annotated_value]
+    pub frames: Annotated<Array<Frame>>,
+
+    /// Omitted segment of frames (start, end).
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub frames_omitted: Annotated<Option<(u64, u64)>>,
+
+    /// Register values of the thread (top frame).
+    #[serde(default, skip_serializing_if = "utils::is_empty_map")]
+    pub registers: Annotated<Map<RegVal>>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+#[cfg(test)]
+mod test_stacktrace {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_roundtrip() {
+        let json = r#"{
+  "frames": [],
+  "frames_omitted": [
+    0,
+    2
+  ],
+  "registers": {
+    "cspr": "0x20000000",
+    "lr": "0x18a31aadc",
+    "pc": "0x18a310ea4",
+    "sp": "0x16fd75060"
+  },
+  "other": "value"
+}"#;
+        let stack = Stacktrace {
+            frames: Array::new().into(),
+            frames_omitted: Some((0, 2)).into(),
+            registers: {
+                let mut map = Map::new();
+                map.insert("cspr".to_string(), RegVal(0x20000000).into());
+                map.insert("lr".to_string(), RegVal(0x18a31aadc).into());
+                map.insert("pc".to_string(), RegVal(0x18a310ea4).into());
+                map.insert("sp".to_string(), RegVal(0x16fd75060).into());
+                Annotated::from(map)
+            },
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        };
+
+        assert_eq_dbg!(stack, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&stack).unwrap());
+    }
+
+    #[test]
+    fn test_default_values() {
+        let json = r#"{"frames":[]}"#;
+        let stack = Stacktrace {
+            frames: Array::new().into(),
+            frames_omitted: None.into(),
+            registers: Map::new().into(),
+            other: Default::default(),
+        };
+
+        assert_eq_dbg!(stack, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string(&stack).unwrap());
+    }
+
+    #[test]
+    fn test_invalid() {
+        assert_eq_dbg!(
+            Annotated::<Stacktrace>::from_error("missing field `frames`"),
+            serde_json::from_str("{}").unwrap()
+        );
+    }
+}
 
 /// Template debug information.
 #[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
@@ -910,7 +1194,7 @@ mod event {
             // let mut contexts = None;
             let mut breadcrumbs = None;
             // let mut exceptions = None;
-            // let mut stacktrace = None;
+            let mut stacktrace = None;
             let mut template_info = None;
             // let mut threads = None;
             let mut tags = None;
@@ -962,10 +1246,10 @@ mod event {
                     // "sentry.interfaces.Exception" => if exceptions.is_none() {
                     //     exceptions = Some(Deserialize::deserialize(deserializer)?)
                     // },
-                    // "stacktrace" => stacktrace = Some(Deserialize::deserialize(deserializer)?),
-                    // "sentry.interfaces.Stacktrace" => if stacktrace.is_none() {
-                    //     stacktrace = Some(Deserialize::deserialize(deserializer)?)
-                    // },
+                    "stacktrace" => stacktrace = Some(Deserialize::deserialize(deserializer)?),
+                    "sentry.interfaces.Stacktrace" => if stacktrace.is_none() {
+                        stacktrace = Some(Deserialize::deserialize(deserializer)?)
+                    },
                     "template" => template_info = Some(Deserialize::deserialize(deserializer)?),
                     "sentry.interfaces.Template" => if template_info.is_none() {
                         template_info = Some(Deserialize::deserialize(deserializer)?)
@@ -1007,6 +1291,7 @@ mod event {
                 user: user.unwrap_or_default(),
                 request: request.unwrap_or_default(),
                 breadcrumbs: breadcrumbs.unwrap_or_default(),
+                stacktrace: stacktrace.unwrap_or_default(),
                 template_info: template_info.unwrap_or_default(),
                 tags: tags.unwrap_or_default(),
                 extra: extra.unwrap_or_default(),
@@ -1106,7 +1391,11 @@ pub struct Event {
     pub breadcrumbs: Annotated<Values<Breadcrumb>>,
 
     // TODO: exceptions (rename = "exception")
-    // TODO: stacktrace
+    /// Deprecated event stacktrace.
+    #[serde(skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value]
+    pub stacktrace: Annotated<Option<Stacktrace>>,
+
     /// Simplified template error location information.
     #[serde(rename = "template", skip_serializing_if = "utils::is_none")]
     #[process_annotated_value]
@@ -1214,6 +1503,7 @@ mod test_event {
             user: None.into(),
             request: None.into(),
             breadcrumbs: Default::default(),
+            stacktrace: None.into(),
             template_info: None.into(),
             tags: {
                 let mut map = Map::new();
@@ -1273,6 +1563,7 @@ mod test_event {
             request: None.into(),
             environment: None.into(),
             breadcrumbs: Default::default(),
+            stacktrace: None.into(),
             template_info: None.into(),
             tags: Default::default(),
             extra: Default::default(),
