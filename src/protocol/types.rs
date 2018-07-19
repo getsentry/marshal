@@ -684,33 +684,61 @@ mod test_template_info {
 }
 
 mod fingerprint {
+    use serde::de;
+
     use super::super::buffer::ContentDeserializer;
     use super::super::serde::CustomDeserialize;
     use super::*;
 
-    #[derive(Debug, Deserialize)]
-    #[serde(untagged)]
-    enum Fingerprint {
-        Bool(bool),
-        Signed(i64),
-        Unsigned(u64),
-        Float(f64),
-        String(String),
+    struct Fingerprint(Option<String>);
+
+    struct FingerprintVisitor;
+
+    impl<'de> de::Visitor<'de> for FingerprintVisitor {
+        type Value = Fingerprint;
+
+        fn expecting(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+            write!(f, "a fingerprint value")
+        }
+
+        fn visit_bool<E: de::Error>(self, v: bool) -> Result<Self::Value, E> {
+            Ok(Fingerprint(Some(
+                if v { "True" } else { "False" }.to_string(),
+            )))
+        }
+
+        fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+            Ok(Fingerprint(Some(v.to_string())))
+        }
+
+        fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
+            Ok(Fingerprint(Some(v.to_string())))
+        }
+
+        fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
+            Ok(Fingerprint(if v.abs() < (1i64 << 53) as f64 {
+                Some(v.trunc().to_string())
+            } else {
+                None
+            }))
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            Ok(Fingerprint(Some(v.to_string())))
+        }
+
+        fn visit_borrowed_str<E: de::Error>(self, v: &'de str) -> Result<Self::Value, E> {
+            Ok(Fingerprint(Some(v.to_string())))
+        }
+
+        fn visit_string<E: de::Error>(self, v: String) -> Result<Self::Value, E> {
+            Ok(Fingerprint(Some(v)))
+        }
     }
 
-    impl Into<Option<String>> for Fingerprint {
-        fn into(self) -> Option<String> {
-            match self {
-                Fingerprint::Bool(b) => Some(if b { "True" } else { "False" }.to_string()),
-                Fingerprint::Signed(s) => Some(s.to_string()),
-                Fingerprint::Unsigned(u) => Some(u.to_string()),
-                Fingerprint::Float(f) => if f.abs() < (1i64 << 53) as f64 {
-                    Some(f.trunc().to_string())
-                } else {
-                    None
-                },
-                Fingerprint::String(s) => Some(s),
-            }
+    impl<'de> Deserialize<'de> for Fingerprint {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            deserializer.deserialize_any(FingerprintVisitor)
         }
     }
 
@@ -721,12 +749,11 @@ mod fingerprint {
         where
             D: Deserializer<'de>,
         {
-            use serde::de::Error;
-            let content = ContentDeserializer::<D::Error>::new(Content::deserialize(deserializer)?);
-            match Vec::<Fingerprint>::deserialize(content) {
-                Ok(vec) => Ok(vec.into_iter().filter_map(Fingerprint::into).collect()),
-                Err(_) => Err(D::Error::custom("invalid fingerprint value")),
-            }
+            let content = ContentDeserializer::new(Content::deserialize(deserializer)?);
+            Ok(Vec::<Fingerprint>::deserialize(content)?
+                .into_iter()
+                .filter_map(|f| f.0)
+                .collect())
         }
     }
 
@@ -815,7 +842,7 @@ mod test_fingerprint {
         assert_eq_dbg!(
             Annotated::new(
                 vec!["{{ default }}".to_string()],
-                Meta::from_error("invalid fingerprint value")
+                Meta::from_error("invalid type: null, expected a fingerprint value")
             ),
             deserialize("[\"a\", null, \"d\"]").unwrap()
         );
