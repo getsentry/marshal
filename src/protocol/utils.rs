@@ -11,6 +11,10 @@ where
     !should_serialize_meta() && annotated.value().map_or(false, predicate)
 }
 
+pub fn is_false(annotated: &Annotated<bool>) -> bool {
+    skip_if(annotated, |b| !b)
+}
+
 pub fn is_none<T>(annotated: &Annotated<Option<T>>) -> bool {
     skip_if(annotated, Option::is_none)
 }

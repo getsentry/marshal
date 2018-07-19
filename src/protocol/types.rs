@@ -1538,6 +1538,96 @@ mod test_template_info {
     }
 }
 
+/// A process thread of an event.
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct Thread {
+    /// Identifier of this thread within the process (usually an integer).
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub id: Annotated<Option<ThreadId>>,
+
+    /// Display name of this thread.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(cap = "summary")]
+    pub name: Annotated<Option<String>>,
+
+    /// Stack trace containing frames of this exception.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value]
+    pub stacktrace: Annotated<Option<Stacktrace>>,
+
+    /// Optional unprocessed stack trace.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value]
+    pub raw_stacktrace: Annotated<Option<Stacktrace>>,
+
+    /// Indicates that this thread requested the event (usually by crashing).
+    #[serde(default, skip_serializing_if = "utils::is_false")]
+    pub crashed: Annotated<bool>,
+
+    /// Indicates that the thread was not suspended when the event was created.
+    #[serde(default, skip_serializing_if = "utils::is_false")]
+    pub current: Annotated<bool>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+#[cfg(test)]
+mod thread {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_roundtrip() {
+        // stack traces are tested separately
+        let json = r#"{
+  "id": 42,
+  "name": "myname",
+  "crashed": true,
+  "current": true,
+  "other": "value"
+}"#;
+        let thread = Thread {
+            id: Some(ThreadId::Int(42)).into(),
+            name: Some("myname".to_string()).into(),
+            stacktrace: None.into(),
+            raw_stacktrace: None.into(),
+            crashed: true.into(),
+            current: true.into(),
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        };
+
+        assert_eq_dbg!(thread, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&thread).unwrap());
+    }
+
+    #[test]
+    fn test_default_values() {
+        let json = "{}";
+        let thread = Thread {
+            id: None.into(),
+            name: None.into(),
+            stacktrace: None.into(),
+            raw_stacktrace: None.into(),
+            crashed: false.into(),
+            current: false.into(),
+            other: Default::default(),
+        };
+
+        assert_eq_dbg!(thread, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string(&thread).unwrap());
+    }
+}
+
 mod fingerprint {
     use serde::de;
 
@@ -1767,7 +1857,7 @@ mod event {
             let mut exceptions = None;
             let mut stacktrace = None;
             let mut template_info = None;
-            // let mut threads = None;
+            let mut threads = None;
             let mut tags = None;
             let mut extra = None;
             // let mut debug_meta = None;
@@ -1825,10 +1915,10 @@ mod event {
                     "sentry.interfaces.Template" => if template_info.is_none() {
                         template_info = Some(Deserialize::deserialize(deserializer)?)
                     },
-                    // "threads" => threads = Some(Deserialize::deserialize(deserializer)?),
-                    // "sentry.interfaces.Threads" => if threads.is_none() {
-                    //     threads = Some(Deserialize::deserialize(deserializer)?)
-                    // },
+                    "threads" => threads = Some(Deserialize::deserialize(deserializer)?),
+                    "sentry.interfaces.Threads" => if threads.is_none() {
+                        threads = Some(Deserialize::deserialize(deserializer)?)
+                    },
                     "tags" => tags = Some(Deserialize::deserialize(deserializer)?),
                     "extra" => extra = Some(Deserialize::deserialize(deserializer)?),
                     // "debug_meta" => debug_meta = Some(Deserialize::deserialize(deserializer)?),
@@ -1865,6 +1955,7 @@ mod event {
                 exceptions: exceptions.unwrap_or_default(),
                 stacktrace: stacktrace.unwrap_or_default(),
                 template_info: template_info.unwrap_or_default(),
+                threads: threads.unwrap_or_default(),
                 tags: tags.unwrap_or_default(),
                 extra: extra.unwrap_or_default(),
                 other: Annotated::from(other),
@@ -1976,7 +2067,11 @@ pub struct Event {
     #[process_annotated_value]
     pub template_info: Annotated<Option<TemplateInfo>>,
 
-    // TODO: threads
+    /// Threads that were active when the event occurred.
+    #[serde(default, skip_serializing_if = "utils::is_empty_values")]
+    #[process_annotated_value]
+    pub threads: Annotated<Values<Thread>>,
+
     /// Custom tags for this event.
     #[serde(skip_serializing_if = "utils::is_empty_map")]
     #[process_annotated_value(pii_kind = "databag")]
@@ -2081,6 +2176,7 @@ mod test_event {
             exceptions: Default::default(),
             stacktrace: None.into(),
             template_info: None.into(),
+            threads: Default::default(),
             tags: {
                 let mut map = Map::new();
                 map.insert("tag".to_string(), "value".to_string().into());
@@ -2142,6 +2238,7 @@ mod test_event {
             exceptions: Default::default(),
             stacktrace: None.into(),
             template_info: None.into(),
+            threads: Default::default(),
             tags: Default::default(),
             extra: Default::default(),
             other: Default::default(),
