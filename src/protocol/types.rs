@@ -1628,6 +1628,82 @@ mod thread {
     }
 }
 
+/// Information about the Sentry SDK.
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
+pub struct ClientSdkInfo {
+    /// Unique SDK name.
+    pub name: Annotated<String>,
+
+    /// SDK version.
+    pub version: Annotated<String>,
+
+    /// List of integrations that are enabled in the SDK.
+    #[serde(default, skip_serializing_if = "utils::is_empty_array")]
+    pub integrations: Annotated<Array<String>>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    pub other: Annotated<Map<Value>>,
+}
+
+#[cfg(test)]
+mod test_client_sdk {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_roundtrip() {
+        let json = r#"{
+  "name": "sentry.rust",
+  "version": "1.0.0",
+  "integrations": [
+    "actix"
+  ],
+  "other": "value"
+}"#;
+        let sdk = ClientSdkInfo {
+            name: "sentry.rust".to_string().into(),
+            version: "1.0.0".to_string().into(),
+            integrations: vec!["actix".to_string().into()].into(),
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        };
+
+        assert_eq_dbg!(sdk, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&sdk).unwrap());
+    }
+
+    #[test]
+    fn test_default_values() {
+        let json = r#"{
+  "name": "sentry.rust",
+  "version": "1.0.0"
+}"#;
+        let sdk = ClientSdkInfo {
+            name: "sentry.rust".to_string().into(),
+            version: "1.0.0".to_string().into(),
+            integrations: Array::new().into(),
+            other: Default::default(),
+        };
+
+        assert_eq_dbg!(sdk, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&sdk).unwrap());
+    }
+
+    #[test]
+    fn test_invalid() {
+        let json = r#"{"name":"sentry.rust"}"#;
+        let entry: Annotated<ClientSdkInfo> = Annotated::from_error("missing field `version`");
+        assert_eq_dbg!(entry, serde_json::from_str(json).unwrap());
+    }
+}
+
 mod fingerprint {
     use serde::de;
 
@@ -1861,7 +1937,7 @@ mod event {
             let mut tags = None;
             let mut extra = None;
             // let mut debug_meta = None;
-            // let mut sdk_info = None;
+            let mut client_sdk = None;
             let mut other: Map<Value> = Default::default();
 
             for (key, content) in BTreeMap::<String, Content>::deserialize(deserializer)? {
@@ -1925,7 +2001,7 @@ mod event {
                     // "sentry.interfaces.DebugMeta" => if debug_meta.is_none() {
                     //     debug_meta = Some(Deserialize::deserialize(deserializer)?)
                     // },
-                    // "sdk" => sdk_info = Some(Deserialize::deserialize(deserializer)?),
+                    "sdk" => client_sdk = Some(Deserialize::deserialize(deserializer)?),
                     _ => {
                         other.insert(key, Deserialize::deserialize(deserializer)?);
                     }
@@ -1958,6 +2034,7 @@ mod event {
                 threads: threads.unwrap_or_default(),
                 tags: tags.unwrap_or_default(),
                 extra: extra.unwrap_or_default(),
+                client_sdk: client_sdk.unwrap_or_default(),
                 other: Annotated::from(other),
             })
         }
@@ -2082,8 +2159,10 @@ pub struct Event {
     #[process_annotated_value(pii_kind = "databag")]
     pub extra: Annotated<Map<Value>>,
 
-    // TODO: debug_meta
-    // TODO: sdk_info (rename = "sdk")
+    /// Information about the Sentry SDK that generated this event.
+    #[serde(rename = "sdk", skip_serializing_if = "utils::is_none")]
+    pub client_sdk: Annotated<Option<ClientSdkInfo>>,
+
     /// Additional arbitrary fields for forwards compatibility.
     #[serde(flatten)]
     #[process_annotated_value(pii_kind = "databag")]
@@ -2190,6 +2269,7 @@ mod test_event {
                 );
                 Annotated::from(map)
             },
+            client_sdk: None.into(),
             other: {
                 let mut map = Map::new();
                 map.insert(
@@ -2241,6 +2321,7 @@ mod test_event {
             threads: Default::default(),
             tags: Default::default(),
             extra: Default::default(),
+            client_sdk: None.into(),
             other: Default::default(),
         });
 
