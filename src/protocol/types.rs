@@ -12,10 +12,6 @@ use super::meta::Annotated;
 use super::serde::CustomSerialize;
 use super::{serde_chrono, utils};
 
-fn default_breadcrumb_type() -> Annotated<String> {
-    "default".to_string().into()
-}
-
 /// An error used when parsing `Level`.
 #[derive(Debug, Fail)]
 #[fail(display = "invalid level")]
@@ -106,115 +102,6 @@ mod test_level {
     #[test]
     fn test_log() {
         assert_eq_dbg!(Level::Info, serde_json::from_str("\"log\"").unwrap());
-    }
-}
-
-/// A breadcrumb.
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
-pub struct Breadcrumb {
-    /// The timestamp of the breadcrumb (required).
-    #[serde(with = "serde_chrono")]
-    pub timestamp: Annotated<DateTime<Utc>>,
-
-    /// The type of the breadcrumb.
-    #[serde(default = "default_breadcrumb_type", rename = "type")]
-    pub ty: Annotated<String>,
-
-    /// The optional category of the breadcrumb.
-    #[serde(default, skip_serializing_if = "utils::is_none")]
-    pub category: Annotated<Option<String>>,
-
-    /// Severity level of the breadcrumb (required).
-    #[serde(default)]
-    pub level: Annotated<Level>,
-
-    /// Human readable message for the breadcrumb.
-    #[serde(default, skip_serializing_if = "utils::is_none")]
-    #[process_annotated_value(pii_kind = "freeform", cap = "message")]
-    pub message: Annotated<Option<String>>,
-
-    /// Custom user-defined data of this breadcrumb.
-    #[serde(default, skip_serializing_if = "utils::is_empty_map")]
-    #[process_annotated_value(pii_kind = "databag")]
-    pub data: Annotated<Map<Value>>,
-
-    /// Additional arbitrary fields for forwards compatibility.
-    #[serde(flatten)]
-    #[process_annotated_value(pii_kind = "databag")]
-    pub other: Annotated<Map<Value>>,
-}
-
-#[cfg(test)]
-mod test_breadcrumb {
-    use chrono::{TimeZone, Utc};
-    use protocol::*;
-    use serde_json;
-
-    #[test]
-    fn test_roundtrip() {
-        let json = r#"{
-  "timestamp": 946684800,
-  "type": "mytype",
-  "category": "mycategory",
-  "level": "fatal",
-  "message": "my message",
-  "data": {
-    "a": "b"
-  },
-  "c": "d"
-}"#;
-
-        let breadcrumb = Annotated::from(Breadcrumb {
-            timestamp: Utc.ymd(2000, 1, 1).and_hms(0, 0, 0).into(),
-            ty: "mytype".to_string().into(),
-            category: Some("mycategory".to_string()).into(),
-            level: Level::Fatal.into(),
-            message: Some("my message".to_string()).into(),
-            data: {
-                let mut map = Map::new();
-                map.insert(
-                    "a".to_string(),
-                    Annotated::from(Value::String("b".to_string())),
-                );
-                Annotated::from(map)
-            },
-            other: {
-                let mut map = Map::new();
-                map.insert(
-                    "c".to_string(),
-                    Annotated::from(Value::String("d".to_string())),
-                );
-                Annotated::from(map)
-            },
-        });
-
-        assert_eq_dbg!(breadcrumb, serde_json::from_str(json).unwrap());
-        assert_eq_str!(json, serde_json::to_string_pretty(&breadcrumb).unwrap());
-    }
-
-    #[test]
-    fn test_default_values() {
-        let input = r#"{"timestamp":946684800}"#;
-        let output = r#"{"timestamp":946684800,"type":"default","level":"info"}"#;
-
-        let breadcrumb = Annotated::from(Breadcrumb {
-            timestamp: Utc.ymd(2000, 1, 1).and_hms(0, 0, 0).into(),
-            ty: "default".to_string().into(),
-            category: None.into(),
-            level: Level::default().into(),
-            message: None.into(),
-            data: Map::new().into(),
-            other: Map::new().into(),
-        });
-
-        assert_eq_dbg!(breadcrumb, serde_json::from_str(input).unwrap());
-        assert_eq_str!(output, serde_json::to_string(&breadcrumb).unwrap());
-    }
-
-    #[test]
-    fn test_invalid() {
-        let entry: Annotated<Breadcrumb> = Annotated::from_error("missing field `timestamp`");
-        assert_eq_dbg!(entry, serde_json::from_str("{}").unwrap());
     }
 }
 
@@ -576,6 +463,220 @@ mod test_request {
     }
 }
 
+fn default_breadcrumb_type() -> Annotated<String> {
+    "default".to_string().into()
+}
+
+/// A breadcrumb.
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct Breadcrumb {
+    /// The timestamp of the breadcrumb (required).
+    #[serde(with = "serde_chrono")]
+    pub timestamp: Annotated<DateTime<Utc>>,
+
+    /// The type of the breadcrumb.
+    #[serde(default = "default_breadcrumb_type", rename = "type")]
+    pub ty: Annotated<String>,
+
+    /// The optional category of the breadcrumb.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub category: Annotated<Option<String>>,
+
+    /// Severity level of the breadcrumb (required).
+    #[serde(default)]
+    pub level: Annotated<Level>,
+
+    /// Human readable message for the breadcrumb.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "freeform", cap = "message")]
+    pub message: Annotated<Option<String>>,
+
+    /// Custom user-defined data of this breadcrumb.
+    #[serde(default, skip_serializing_if = "utils::is_empty_map")]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub data: Annotated<Map<Value>>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+#[cfg(test)]
+mod test_breadcrumb {
+    use chrono::{TimeZone, Utc};
+    use protocol::*;
+    use serde_json;
+
+    #[test]
+    fn test_roundtrip() {
+        let json = r#"{
+  "timestamp": 946684800,
+  "type": "mytype",
+  "category": "mycategory",
+  "level": "fatal",
+  "message": "my message",
+  "data": {
+    "a": "b"
+  },
+  "c": "d"
+}"#;
+
+        let breadcrumb = Annotated::from(Breadcrumb {
+            timestamp: Utc.ymd(2000, 1, 1).and_hms(0, 0, 0).into(),
+            ty: "mytype".to_string().into(),
+            category: Some("mycategory".to_string()).into(),
+            level: Level::Fatal.into(),
+            message: Some("my message".to_string()).into(),
+            data: {
+                let mut map = Map::new();
+                map.insert(
+                    "a".to_string(),
+                    Annotated::from(Value::String("b".to_string())),
+                );
+                Annotated::from(map)
+            },
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "c".to_string(),
+                    Annotated::from(Value::String("d".to_string())),
+                );
+                Annotated::from(map)
+            },
+        });
+
+        assert_eq_dbg!(breadcrumb, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&breadcrumb).unwrap());
+    }
+
+    #[test]
+    fn test_default_values() {
+        let input = r#"{"timestamp":946684800}"#;
+        let output = r#"{"timestamp":946684800,"type":"default","level":"info"}"#;
+
+        let breadcrumb = Annotated::from(Breadcrumb {
+            timestamp: Utc.ymd(2000, 1, 1).and_hms(0, 0, 0).into(),
+            ty: "default".to_string().into(),
+            category: None.into(),
+            level: Level::default().into(),
+            message: None.into(),
+            data: Map::new().into(),
+            other: Map::new().into(),
+        });
+
+        assert_eq_dbg!(breadcrumb, serde_json::from_str(input).unwrap());
+        assert_eq_str!(output, serde_json::to_string(&breadcrumb).unwrap());
+    }
+
+    #[test]
+    fn test_invalid() {
+        let entry: Annotated<Breadcrumb> = Annotated::from_error("missing field `timestamp`");
+        assert_eq_dbg!(entry, serde_json::from_str("{}").unwrap());
+    }
+}
+
+/// Template debug information.
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct TemplateInfo {
+    /// The file name (basename only).
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "freeform", cap = "short_path")]
+    pub filename: Annotated<Option<String>>,
+
+    /// Absolute path to the file.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "freeform", cap = "path")]
+    pub abs_path: Annotated<Option<String>>,
+
+    /// Line number within the source file.
+    #[serde(default, rename = "lineno", skip_serializing_if = "utils::is_none")]
+    pub line: Annotated<Option<u64>>,
+
+    /// Column number within the source file.
+    #[serde(default, rename = "colno", skip_serializing_if = "utils::is_none")]
+    pub column: Annotated<Option<u64>>,
+
+    /// Source code leading up to the current line.
+    #[serde(default, rename = "pre_context", skip_serializing_if = "utils::is_empty_array")]
+    pub pre_lines: Annotated<Array<String>>,
+
+    /// Source code of the current line.
+    #[serde(default, rename = "context_line", skip_serializing_if = "utils::is_none")]
+    pub current_line: Annotated<Option<String>>,
+
+    /// Source code of the lines after the current line.
+    #[serde(default, rename = "post_context", skip_serializing_if = "utils::is_empty_array")]
+    pub post_lines: Annotated<Array<String>>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+#[cfg(test)]
+mod test_template_info {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_roundtrip() {
+        let json = r#"{
+  "filename": "myfile.rs",
+  "abs_path": "/path/to",
+  "lineno": 2,
+  "colno": 42,
+  "pre_context": [
+    "fn main() {"
+  ],
+  "context_line": "unimplemented!()",
+  "post_context": [
+    "}"
+  ],
+  "other": "value"
+}"#;
+        let template_info = TemplateInfo {
+            filename: Some("myfile.rs".to_string()).into(),
+            abs_path: Some("/path/to".to_string()).into(),
+            line: Some(2).into(),
+            column: Some(42).into(),
+            pre_lines: vec!["fn main() {".to_string().into()].into(),
+            current_line: Some("unimplemented!()".to_string()).into(),
+            post_lines: vec!["}".to_string().into()].into(),
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        };
+
+        assert_eq_dbg!(template_info, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&template_info).unwrap());
+    }
+
+    #[test]
+    fn test_default_values() {
+        let json = "{}";
+        let template_info = TemplateInfo {
+            filename: None.into(),
+            abs_path: None.into(),
+            line: None.into(),
+            column: None.into(),
+            pre_lines: Default::default(),
+            current_line: None.into(),
+            post_lines: Default::default(),
+            other: Default::default(),
+        };
+
+        assert_eq_dbg!(template_info, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string(&template_info).unwrap());
+    }
+}
+
 mod fingerprint {
     use super::super::buffer::ContentDeserializer;
     use super::super::serde::CustomDeserialize;
@@ -777,7 +878,7 @@ mod event {
             let mut breadcrumbs = None;
             // let mut exceptions = None;
             // let mut stacktrace = None;
-            // let mut template = None;
+            let mut template_info = None;
             // let mut threads = None;
             let mut tags = None;
             let mut extra = None;
@@ -832,10 +933,10 @@ mod event {
                     // "sentry.interfaces.Stacktrace" => if stacktrace.is_none() {
                     //     stacktrace = Some(Deserialize::deserialize(deserializer)?)
                     // },
-                    // "template" => template = Some(Deserialize::deserialize(deserializer)?),
-                    // "sentry.interfaces.Template" => if template.is_none() {
-                    //     template = Some(Deserialize::deserialize(deserializer)?)
-                    // },
+                    "template" => template_info = Some(Deserialize::deserialize(deserializer)?),
+                    "sentry.interfaces.Template" => if template_info.is_none() {
+                        template_info = Some(Deserialize::deserialize(deserializer)?)
+                    },
                     // "threads" => threads = Some(Deserialize::deserialize(deserializer)?),
                     // "sentry.interfaces.Threads" => if threads.is_none() {
                     //     threads = Some(Deserialize::deserialize(deserializer)?)
@@ -873,6 +974,7 @@ mod event {
                 user: user.unwrap_or_default(),
                 request: request.unwrap_or_default(),
                 breadcrumbs: breadcrumbs.unwrap_or_default(),
+                template_info: template_info.unwrap_or_default(),
                 tags: tags.unwrap_or_default(),
                 extra: extra.unwrap_or_default(),
                 other: Annotated::from(other),
@@ -972,7 +1074,11 @@ pub struct Event {
 
     // TODO: exceptions (rename = "exception")
     // TODO: stacktrace
-    // TODO: template_info (rename = "template")
+    /// Simplified template error location information.
+    #[serde(rename = "template", skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value]
+    pub template_info: Annotated<Option<TemplateInfo>>,
+
     // TODO: threads
     /// Custom tags for this event.
     #[serde(skip_serializing_if = "utils::is_empty_map")]
@@ -1075,6 +1181,7 @@ mod test_event {
             user: None.into(),
             request: None.into(),
             breadcrumbs: Default::default(),
+            template_info: None.into(),
             tags: {
                 let mut map = Map::new();
                 map.insert("tag".to_string(), "value".to_string().into());
@@ -1133,6 +1240,7 @@ mod test_event {
             request: None.into(),
             environment: None.into(),
             breadcrumbs: Default::default(),
+            template_info: None.into(),
             tags: Default::default(),
             extra: Default::default(),
             other: Default::default(),
