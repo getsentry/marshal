@@ -571,8 +571,8 @@ mod test_breadcrumb {
 
     #[test]
     fn test_invalid() {
-        let entry: Annotated<Breadcrumb> = Annotated::from_error("missing field `timestamp`");
-        assert_eq_dbg!(entry, serde_json::from_str("{}").unwrap());
+        let breadcrumb: Annotated<Breadcrumb> = Annotated::from_error("missing field `timestamp`");
+        assert_eq_dbg!(breadcrumb, serde_json::from_str("{}").unwrap());
     }
 }
 
@@ -859,10 +859,581 @@ mod test_stacktrace {
 
     #[test]
     fn test_invalid() {
-        assert_eq_dbg!(
-            Annotated::<Stacktrace>::from_error("missing field `frames`"),
-            serde_json::from_str("{}").unwrap()
-        );
+        let stack: Annotated<Stacktrace> = Annotated::from_error("missing field `frames`");
+        assert_eq_dbg!(stack, serde_json::from_str("{}").unwrap());
+    }
+}
+
+/// POSIX signal with optional extended data.
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
+pub struct CError {
+    /// The error code as specified by ISO C99, POSIX.1-2001 or POSIX.1-2008.
+    pub number: Annotated<i32>,
+
+    /// Optional name of the errno constant.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub name: Annotated<Option<String>>,
+}
+
+/// Mach exception information.
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
+pub struct MachException {
+    /// The mach exception type.
+    #[serde(rename = "exception")]
+    pub ty: Annotated<i32>,
+
+    /// The mach exception code.
+    pub code: Annotated<u64>,
+
+    /// The mach exception subcode.
+    pub subcode: Annotated<u64>,
+
+    /// Optional name of the mach exception.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub name: Annotated<Option<String>>,
+}
+
+/// POSIX signal with optional extended data.
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
+pub struct PosixSignal {
+    /// The POSIX signal number.
+    pub number: Annotated<i32>,
+
+    /// An optional signal code present on Apple systems.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub code: Annotated<Option<i32>>,
+
+    /// Optional name of the errno constant.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub name: Annotated<Option<String>>,
+
+    /// Optional name of the errno constant.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub code_name: Annotated<Option<String>>,
+}
+
+/// Operating system or runtime meta information to an exception mechanism.
+#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct MechanismMeta {
+    /// Optional ISO C standard error code.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub errno: Annotated<Option<CError>>,
+
+    /// Optional POSIX signal number.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub signal: Annotated<Option<PosixSignal>>,
+
+    /// Optional mach exception information.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub mach_exception: Annotated<Option<MachException>>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    pub other: Annotated<Map<Value>>,
+}
+
+impl MechanismMeta {
+    fn is_empty(&self) -> bool {
+        utils::is_none(&self.errno)
+            && utils::is_none(&self.signal)
+            && utils::is_none(&self.mach_exception)
+            && utils::is_empty_map(&self.other)
+    }
+
+    fn is_empty_annotated(annotated: &Annotated<Self>) -> bool {
+        utils::skip_if(annotated, MechanismMeta::is_empty)
+    }
+}
+
+/// The mechanism by which an exception was generated and handled.
+#[derive(Debug, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct Mechanism {
+    /// Mechanism type (required).
+    #[serde(rename = "type")]
+    pub ty: Annotated<String>,
+
+    /// Human readable detail description.
+    #[serde(skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "freeform", cap = "message")]
+    pub description: Annotated<Option<String>>,
+
+    /// Link to online resources describing this error.
+    #[serde(skip_serializing_if = "utils::is_none")]
+    pub help_link: Annotated<Option<String>>,
+
+    /// Flag indicating whether this exception was handled.
+    #[serde(skip_serializing_if = "utils::is_none")]
+    pub handled: Annotated<Option<bool>>,
+
+    /// Additional attributes depending on the mechanism type.
+    #[serde(skip_serializing_if = "utils::is_empty_map")]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub data: Annotated<Map<Value>>,
+
+    /// Operating system or runtime meta information.
+    #[serde(skip_serializing_if = "MechanismMeta::is_empty_annotated")]
+    pub meta: Annotated<MechanismMeta>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+mod mechanism {
+    use super::*;
+    use serde::de::Error;
+    use std::collections::BTreeMap;
+
+    fn deserialize<E: Error>(map: BTreeMap<String, Content>) -> Result<Mechanism, E> {
+        let mut ty = None;
+        let mut description = None;
+        let mut help_link = None;
+        let mut handled = None;
+        let mut data = None;
+        let mut meta = None;
+        let mut other: Map<Value> = Default::default();
+
+        for (key, content) in map {
+            let deserializer = ContentDeserializer::new(content);
+            match key.as_str() {
+                "type" => ty = Some(Deserialize::deserialize(deserializer)?),
+                "description" => description = Some(Deserialize::deserialize(deserializer)?),
+                "help_link" => help_link = Some(Deserialize::deserialize(deserializer)?),
+                "handled" => handled = Some(Deserialize::deserialize(deserializer)?),
+                "data" => data = Some(Deserialize::deserialize(deserializer)?),
+                "meta" => meta = Some(Deserialize::deserialize(deserializer)?),
+                _ => {
+                    other.insert(key, Deserialize::deserialize(deserializer)?);
+                }
+            }
+        }
+
+        Ok(Mechanism {
+            ty: ty.ok_or_else(|| E::custom("missing field `type`"))?,
+            description: description.unwrap_or_default(),
+            help_link: help_link.unwrap_or_default(),
+            handled: handled.unwrap_or_default(),
+            data: data.unwrap_or_default(),
+            meta: meta.unwrap_or_default(),
+            other: Annotated::from(other),
+        })
+    }
+
+    #[derive(Deserialize)]
+    pub struct LegacyMachException {
+        pub exception: Annotated<i32>,
+        pub code: Annotated<u64>,
+        pub subcode: Annotated<u64>,
+        #[serde(default)]
+        pub exception_name: Annotated<Option<String>>,
+    }
+
+    impl LegacyMachException {
+        fn convert(self) -> Option<MachException> {
+            Some(MachException {
+                ty: self.exception,
+                code: self.code,
+                subcode: self.subcode,
+                name: self.exception_name,
+            })
+        }
+    }
+
+    #[derive(Deserialize)]
+    pub struct LegacyPosixSignal {
+        pub signal: Annotated<i32>,
+        #[serde(default)]
+        pub code: Annotated<Option<i32>>,
+        #[serde(default)]
+        pub name: Annotated<Option<String>>,
+        #[serde(default)]
+        pub code_name: Annotated<Option<String>>,
+    }
+
+    impl LegacyPosixSignal {
+        fn convert(self) -> Option<PosixSignal> {
+            Some(PosixSignal {
+                number: self.signal,
+                code: self.code,
+                name: self.name,
+                code_name: self.code_name,
+            })
+        }
+    }
+
+    fn deserialize_legacy<E: Error>(map: BTreeMap<String, Content>) -> Result<Mechanism, E> {
+        let mut data = Map::<Value>::new();
+        let mut meta = MechanismMeta::default();
+
+        for (key, content) in map {
+            let deserializer = ContentDeserializer::new(content);
+            match key.as_str() {
+                "posix_signal" => {
+                    let de = Annotated::<LegacyPosixSignal>::deserialize(deserializer)?;
+                    meta.signal = de.map(LegacyPosixSignal::convert);
+                }
+                "mach_exception" => {
+                    let de = Annotated::<LegacyMachException>::deserialize(deserializer)?;
+                    meta.mach_exception = de.map(LegacyMachException::convert)
+                }
+                _ => {
+                    data.insert(key, Deserialize::deserialize(deserializer)?);
+                }
+            }
+        }
+
+        Ok(Mechanism {
+            ty: "generic".to_string().into(),
+            description: None.into(),
+            help_link: None.into(),
+            handled: None.into(),
+            data: data.into(),
+            meta: meta.into(),
+            other: Default::default(),
+        })
+    }
+
+    impl<'de> Deserialize<'de> for Mechanism {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            let map = BTreeMap::deserialize(deserializer)?;
+            if !map.is_empty() && !map.contains_key("type") {
+                deserialize_legacy(map)
+            } else {
+                deserialize(map)
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod test_mechanism {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_roundtrip() {
+        let json = r#"{
+  "type": "mytype",
+  "description": "mydescription",
+  "help_link": "https://developer.apple.com/library/content/qa/qa1367/_index.html",
+  "handled": false,
+  "data": {
+    "relevant_address": "0x1"
+  },
+  "meta": {
+    "errno": {
+      "number": 2,
+      "name": "ENOENT"
+    },
+    "signal": {
+      "number": 11,
+      "code": 0,
+      "name": "SIGSEGV",
+      "code_name": "SEGV_NOOP"
+    },
+    "mach_exception": {
+      "exception": 1,
+      "code": 1,
+      "subcode": 8,
+      "name": "EXC_BAD_ACCESS"
+    },
+    "other": "value"
+  },
+  "other": "value"
+}"#;
+        let mechanism = Mechanism {
+            ty: "mytype".to_string().into(),
+            description: Some("mydescription".to_string()).into(),
+            help_link: Some(
+                "https://developer.apple.com/library/content/qa/qa1367/_index.html".to_string(),
+            ).into(),
+            handled: Some(false).into(),
+            data: {
+                let mut map = Map::new();
+                map.insert(
+                    "relevant_address".to_string(),
+                    Value::String("0x1".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+            meta: MechanismMeta {
+                errno: Some(CError {
+                    number: 2.into(),
+                    name: Some("ENOENT".to_string()).into(),
+                }).into(),
+                mach_exception: Some(MachException {
+                    ty: 1.into(),
+                    code: 1.into(),
+                    subcode: 8.into(),
+                    name: Some("EXC_BAD_ACCESS".to_string()).into(),
+                }).into(),
+                signal: Some(PosixSignal {
+                    number: 11.into(),
+                    code: Some(0).into(),
+                    name: Some("SIGSEGV".to_string()).into(),
+                    code_name: Some("SEGV_NOOP".to_string()).into(),
+                }).into(),
+                other: {
+                    let mut map = Map::new();
+                    map.insert(
+                        "other".to_string(),
+                        Value::String("value".to_string()).into(),
+                    );
+                    Annotated::from(map)
+                },
+            }.into(),
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        };
+
+        assert_eq_dbg!(mechanism, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&mechanism).unwrap());
+    }
+
+    #[test]
+    fn test_default_values() {
+        let json = r#"{"type":"mytype"}"#;
+        let mechanism = Mechanism {
+            ty: "mytype".to_string().into(),
+            description: None.into(),
+            help_link: None.into(),
+            handled: None.into(),
+            data: Map::new().into(),
+            meta: MechanismMeta::default().into(),
+            other: Default::default(),
+        };
+
+        assert_eq_dbg!(mechanism, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string(&mechanism).unwrap());
+    }
+
+    #[test]
+    fn test_invalid() {
+        let mechanism: Annotated<Mechanism> = Annotated::from_error("missing field `type`");
+        assert_eq_dbg!(mechanism, serde_json::from_str("{}").unwrap());
+    }
+
+    #[test]
+    fn test_invalid_mechanisms() {
+        let json = r#"{
+  "type":"mytype",
+  "meta": {
+    "errno": {},
+    "mach_exception": {},
+    "signal": {}
+  }
+}"#;
+        let mechanism = Mechanism {
+            ty: "mytype".to_string().into(),
+            description: None.into(),
+            help_link: None.into(),
+            handled: None.into(),
+            data: Map::new().into(),
+            meta: MechanismMeta {
+                errno: Annotated::from_error("missing field `number`"),
+                mach_exception: Annotated::from_error("missing field `exception`"),
+                signal: Annotated::from_error("missing field `number`"),
+                other: Default::default(),
+            }.into(),
+            other: Default::default(),
+        };
+
+        assert_eq_dbg!(mechanism, serde_json::from_str(json).unwrap());
+    }
+
+    #[test]
+    fn test_legacy_conversion() {
+        let input = r#"{
+  "posix_signal": {
+    "name": "SIGSEGV",
+    "code_name": "SEGV_NOOP",
+    "signal": 11,
+    "code": 0
+  },
+  "relevant_address": "0x1",
+  "mach_exception": {
+    "exception": 1,
+    "exception_name": "EXC_BAD_ACCESS",
+    "subcode": 8,
+    "code": 1
+  }
+}"#;
+
+        let output = r#"{
+  "type": "generic",
+  "data": {
+    "relevant_address": "0x1"
+  },
+  "meta": {
+    "signal": {
+      "number": 11,
+      "code": 0,
+      "name": "SIGSEGV",
+      "code_name": "SEGV_NOOP"
+    },
+    "mach_exception": {
+      "exception": 1,
+      "code": 1,
+      "subcode": 8,
+      "name": "EXC_BAD_ACCESS"
+    }
+  }
+}"#;
+        let mechanism = Mechanism {
+            ty: "generic".to_string().into(),
+            description: None.into(),
+            help_link: None.into(),
+            handled: None.into(),
+            data: {
+                let mut map = Map::new();
+                map.insert(
+                    "relevant_address".to_string(),
+                    Value::String("0x1".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+            meta: MechanismMeta {
+                errno: None.into(),
+                mach_exception: Some(MachException {
+                    ty: 1.into(),
+                    code: 1.into(),
+                    subcode: 8.into(),
+                    name: Some("EXC_BAD_ACCESS".to_string()).into(),
+                }).into(),
+                signal: Some(PosixSignal {
+                    number: 11.into(),
+                    code: Some(0).into(),
+                    name: Some("SIGSEGV".to_string()).into(),
+                    code_name: Some("SEGV_NOOP".to_string()).into(),
+                }).into(),
+                other: Default::default(),
+            }.into(),
+            other: Default::default(),
+        };
+
+        assert_eq_dbg!(mechanism, serde_json::from_str(input).unwrap());
+        assert_eq_str!(output, serde_json::to_string_pretty(&mechanism).unwrap());
+    }
+}
+
+/// Identifier of a thread within an event.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
+#[serde(untagged)]
+pub enum ThreadId {
+    /// Integer representation of the thread id.
+    Int(u64),
+    /// String representation of the thread id.
+    String(String),
+}
+
+/// An exception (error).
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct Exception {
+    /// Exception type (required).
+    #[serde(rename = "type")]
+    pub ty: Annotated<String>,
+
+    /// Human readable display value.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "freeform", cap = "message")]
+    pub value: Annotated<Option<String>>,
+
+    /// Module name of this exception.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "freeform")]
+    pub module: Annotated<Option<String>>,
+
+    /// Stack trace containing frames of this exception.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value]
+    pub stacktrace: Annotated<Option<Stacktrace>>,
+
+    /// Optional unprocessed stack trace.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value]
+    pub raw_stacktrace: Annotated<Option<Stacktrace>>,
+
+    /// Identifier of the thread this exception occurred in.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub thread_id: Annotated<Option<ThreadId>>,
+
+    /// Mechanism by which this exception was generated and handled.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value]
+    pub mechanism: Annotated<Option<Mechanism>>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+#[cfg(test)]
+mod test_exception {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_roundtrip() {
+        // stack traces and mechanism are tested separately
+        let json = r#"{
+  "type": "mytype",
+  "value": "myvalue",
+  "module": "mymodule",
+  "thread_id": 42,
+  "other": "value"
+}"#;
+        let exception = Exception {
+            ty: "mytype".to_string().into(),
+            value: Some("myvalue".to_string()).into(),
+            module: Some("mymodule".to_string()).into(),
+            stacktrace: None.into(),
+            raw_stacktrace: None.into(),
+            thread_id: Some(ThreadId::Int(42)).into(),
+            mechanism: None.into(),
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        };
+
+        assert_eq_dbg!(exception, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&exception).unwrap());
+    }
+
+    #[test]
+    fn test_default_values() {
+        let json = r#"{"type":"mytype"}"#;
+        let exception = Exception {
+            ty: "mytype".to_string().into(),
+            value: None.into(),
+            module: None.into(),
+            stacktrace: None.into(),
+            raw_stacktrace: None.into(),
+            thread_id: None.into(),
+            mechanism: None.into(),
+            other: Default::default(),
+        };
+
+        assert_eq_dbg!(exception, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string(&exception).unwrap());
+    }
+
+    #[test]
+    fn test_invalid() {
+        let exception: Annotated<Exception> = Annotated::from_error("missing field `type`");
+        assert_eq_dbg!(exception, serde_json::from_str("{}").unwrap());
     }
 }
 
@@ -1193,7 +1764,7 @@ mod event {
             let mut request = None;
             // let mut contexts = None;
             let mut breadcrumbs = None;
-            // let mut exceptions = None;
+            let mut exceptions = None;
             let mut stacktrace = None;
             let mut template_info = None;
             // let mut threads = None;
@@ -1242,10 +1813,10 @@ mod event {
                     "sentry.interfaces.Breadcrumbs" => if breadcrumbs.is_none() {
                         breadcrumbs = Some(Deserialize::deserialize(deserializer)?);
                     },
-                    // "exception" => exceptions = Some(Deserialize::deserialize(deserializer)?),
-                    // "sentry.interfaces.Exception" => if exceptions.is_none() {
-                    //     exceptions = Some(Deserialize::deserialize(deserializer)?)
-                    // },
+                    "exception" => exceptions = Some(Deserialize::deserialize(deserializer)?),
+                    "sentry.interfaces.Exception" => if exceptions.is_none() {
+                        exceptions = Some(Deserialize::deserialize(deserializer)?)
+                    },
                     "stacktrace" => stacktrace = Some(Deserialize::deserialize(deserializer)?),
                     "sentry.interfaces.Stacktrace" => if stacktrace.is_none() {
                         stacktrace = Some(Deserialize::deserialize(deserializer)?)
@@ -1291,6 +1862,7 @@ mod event {
                 user: user.unwrap_or_default(),
                 request: request.unwrap_or_default(),
                 breadcrumbs: breadcrumbs.unwrap_or_default(),
+                exceptions: exceptions.unwrap_or_default(),
                 stacktrace: stacktrace.unwrap_or_default(),
                 template_info: template_info.unwrap_or_default(),
                 tags: tags.unwrap_or_default(),
@@ -1390,7 +1962,10 @@ pub struct Event {
     #[process_annotated_value]
     pub breadcrumbs: Annotated<Values<Breadcrumb>>,
 
-    // TODO: exceptions (rename = "exception")
+    /// One or multiple chained (nested) exceptions.
+    #[serde(rename = "exception", skip_serializing_if = "utils::is_empty_values")]
+    pub exceptions: Annotated<Values<Exception>>,
+
     /// Deprecated event stacktrace.
     #[serde(skip_serializing_if = "utils::is_none")]
     #[process_annotated_value]
@@ -1503,6 +2078,7 @@ mod test_event {
             user: None.into(),
             request: None.into(),
             breadcrumbs: Default::default(),
+            exceptions: Default::default(),
             stacktrace: None.into(),
             template_info: None.into(),
             tags: {
@@ -1563,6 +2139,7 @@ mod test_event {
             request: None.into(),
             environment: None.into(),
             breadcrumbs: Default::default(),
+            exceptions: Default::default(),
             stacktrace: None.into(),
             template_info: None.into(),
             tags: Default::default(),

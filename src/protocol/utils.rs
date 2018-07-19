@@ -3,7 +3,7 @@
 use super::common::{Array, Map, Values};
 use super::meta::{should_serialize_meta, Annotated};
 
-fn skip_if<T, F>(annotated: &Annotated<T>, predicate: F) -> bool
+pub fn skip_if<T, F>(annotated: &Annotated<T>, predicate: F) -> bool
 where
     F: FnOnce(&T) -> bool,
 {

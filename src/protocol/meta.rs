@@ -410,9 +410,8 @@ impl<T> Annotated<T> {
     }
 
     /// Transforms the value if it's set.
-    pub fn map<F: FnOnce(T) -> T>(mut self, f: F) -> Self {
-        self.0 = self.0.map(f);
-        self
+    pub fn map<U, F: FnOnce(T) -> U>(self, f: F) -> Annotated<U> {
+        Annotated(self.0.map(f), self.1)
     }
 
     /// Removes a value and writes a well known remark.
