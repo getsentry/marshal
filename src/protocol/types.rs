@@ -576,6 +576,12 @@ mod test_breadcrumb {
     }
 }
 
+/// Represents a register value.
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash)]
+pub struct RegVal(pub u64);
+
+impl_hex_serde!(RegVal, u64);
+
 /// Template debug information.
 #[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct TemplateInfo {
