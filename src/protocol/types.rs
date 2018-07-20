@@ -3,7 +3,8 @@
 use std::{fmt, str};
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Deserializer, Serializer};
+use debugid::DebugId;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
 use super::buffer::{Content, ContentDeserializer};
@@ -348,30 +349,35 @@ pub struct Request {
     #[serde(default, skip_serializing_if = "utils::is_none")]
     #[process_annotated_value(pii_kind = "databag")]
     // TODO: cap?
+    // TODO: Custom logic + info
     pub data: Annotated<Option<Value>>,
 
     /// URL encoded HTTP query string.
     #[serde(default, skip_serializing_if = "utils::is_none")]
     #[process_annotated_value(pii_kind = "freeform")]
     // TODO: cap?
+    // TODO: normalize to dict
     pub query_string: Annotated<Option<String>>,
 
     /// URL encoded contents of the Cookie header.
     #[serde(default, skip_serializing_if = "utils::is_none")]
     #[process_annotated_value(pii_kind = "freeform")]
     // TODO: cap?
+    // TODO: normalize to dict
     pub cookies: Annotated<Option<String>>,
 
     /// HTTP request headers.
     #[serde(default, skip_serializing_if = "utils::is_empty_map")]
     #[process_annotated_value(pii_kind = "databag")]
     // TODO: cap?
+    // TODO: normalize to capital case
     pub headers: Annotated<Map<String>>,
 
     /// Server environment data, such as CGI/WSGI.
     #[serde(default, skip_serializing_if = "utils::is_empty_map")]
     #[process_annotated_value(pii_kind = "databag")]
     // TODO: cap?
+    // TODO: Map<Value>
     pub env: Annotated<Map<String>>,
 
     /// Additional arbitrary fields for forwards compatibility.
@@ -1628,6 +1634,419 @@ mod thread {
     }
 }
 
+/// Holds information about the system SDK.
+///
+/// This is relevant for iOS and other platforms that have a system
+/// SDK.  Not to be confused with the client SDK.
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct SystemSdkInfo {
+    /// The internal name of the SDK.
+    pub sdk_name: Annotated<String>,
+
+    /// The major version of the SDK as integer or 0.
+    pub version_major: Annotated<u32>,
+
+    /// The minor version of the SDK as integer or 0.
+    pub version_minor: Annotated<u32>,
+
+    /// The patch version of the SDK as integer or 0.
+    pub version_patchlevel: Annotated<u32>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+/// Apple debug image in
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct AppleDebugImage {
+    /// Path and name of the debug image (required).
+    pub name: Annotated<String>,
+
+    /// CPU architecture target.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub arch: Annotated<Option<String>>,
+
+    /// MachO CPU type identifier.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub cpu_type: Annotated<Option<u32>>,
+
+    /// MachO CPU subtype identifier.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub cpu_subtype: Annotated<Option<u32>>,
+
+    /// Starting memory address of the image (required).
+    pub image_addr: Annotated<Addr>,
+
+    /// Size of the image in bytes (required).
+    pub image_size: Annotated<u64>,
+
+    /// Loading address in virtual memory.
+    #[serde(default = "debug_image::default_vmaddr")]
+    pub image_vmaddr: Annotated<Addr>,
+
+    /// The unique UUID of the image.
+    pub uuid: Annotated<Uuid>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+/// Any debug information file supported by symbolic.
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct SymbolicDebugImage {
+    /// Path and name of the debug image (required).
+    pub name: Annotated<String>,
+
+    /// CPU architecture target.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub arch: Annotated<Option<String>>,
+
+    /// Starting memory address of the image (required).
+    pub image_addr: Annotated<Addr>,
+
+    /// Size of the image in bytes (required).
+    pub image_size: Annotated<u64>,
+
+    /// Loading address in virtual memory.
+    #[serde(default = "debug_image::default_vmaddr")]
+    pub image_vmaddr: Annotated<Addr>,
+
+    /// Unique debug identifier of the image.
+    pub id: Annotated<DebugId>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+/// Proguard mapping file.
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct ProguardDebugImage {
+    /// UUID computed from the file contents.
+    pub uuid: Annotated<Uuid>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+/// A debug information file (debug image).
+#[derive(Debug, PartialEq)]
+pub enum DebugImage {
+    /// Apple debug images (machos).  This is currently also used for non apple platforms with
+    /// similar debug setups.
+    Apple(AppleDebugImage),
+    /// Symbolic (new style) debug infos.
+    Symbolic(SymbolicDebugImage),
+    /// A reference to a proguard debug file.
+    Proguard(ProguardDebugImage),
+    /// A debug image that is unknown to this protocol specification.
+    Other(String, Map<Value>),
+}
+
+mod debug_image {
+    use processor::{ProcessAnnotatedValue, Processor, ValueInfo};
+    use std::borrow::Cow;
+
+    use super::super::buffer::Content;
+    use super::*;
+
+    pub fn default_vmaddr() -> Annotated<Addr> {
+        Addr(0).into()
+    }
+
+    impl<'de> Deserialize<'de> for DebugImage {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            #[derive(Deserialize)]
+            struct D<'a> {
+                #[serde(rename = "type")]
+                t: Cow<'a, str>,
+                #[serde(flatten, borrow)]
+                content: Content<'a>,
+            };
+
+            let D { t, content } = D::deserialize(deserializer)?;
+            let deserializer = ContentDeserializer::new(content);
+
+            Ok(match t.as_ref() {
+                "apple" => DebugImage::Apple(Deserialize::deserialize(deserializer)?),
+                "symbolic" => DebugImage::Symbolic(Deserialize::deserialize(deserializer)?),
+                "proguard" => DebugImage::Proguard(Deserialize::deserialize(deserializer)?),
+                _ => DebugImage::Other(t.into_owned(), Deserialize::deserialize(deserializer)?),
+            })
+        }
+    }
+
+    impl Serialize for DebugImage {
+        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            #[derive(Serialize)]
+            struct S<'a, T: Serialize> {
+                #[serde(rename = "type")]
+                t: &'a str,
+                #[serde(flatten)]
+                image: T,
+            }
+
+            match self {
+                DebugImage::Apple(ref apple) => S {
+                    t: "apple",
+                    image: apple,
+                }.serialize(serializer),
+                DebugImage::Symbolic(ref symbolic) => S {
+                    t: "symbolic",
+                    image: symbolic,
+                }.serialize(serializer),
+                DebugImage::Proguard(ref proguard) => S {
+                    t: "proguard",
+                    image: proguard,
+                }.serialize(serializer),
+                DebugImage::Other(ref name, ref other) => S {
+                    t: name,
+                    image: other,
+                }.serialize(serializer),
+            }
+        }
+    }
+
+    impl ProcessAnnotatedValue for DebugImage {
+        fn process_annotated_value(
+            annotated: Annotated<Self>,
+            processor: &Processor,
+            info: &ValueInfo,
+        ) -> Annotated<Self> {
+            match annotated {
+                Annotated(Some(DebugImage::Apple(image)), meta) => {
+                    ProcessAnnotatedValue::process_annotated_value(
+                        Annotated::new(image, meta),
+                        processor,
+                        info,
+                    ).map(DebugImage::Apple)
+                }
+                Annotated(Some(DebugImage::Symbolic(image)), meta) => {
+                    ProcessAnnotatedValue::process_annotated_value(
+                        Annotated::new(image, meta),
+                        processor,
+                        info,
+                    ).map(DebugImage::Symbolic)
+                }
+                Annotated(Some(DebugImage::Proguard(image)), meta) => {
+                    ProcessAnnotatedValue::process_annotated_value(
+                        Annotated::new(image, meta),
+                        processor,
+                        info,
+                    ).map(DebugImage::Proguard)
+                }
+                Annotated(Some(DebugImage::Other(name, image)), meta) => {
+                    let Annotated(image, meta) = ProcessAnnotatedValue::process_annotated_value(
+                        Annotated::new(image, meta),
+                        processor,
+                        info,
+                    );
+                    Annotated::new(DebugImage::Other(name, image.unwrap_or_default()), meta)
+                }
+                other @ Annotated(None, _) => other,
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod test_debug_image {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_proguard_roundtrip() {
+        let json = r#"{
+  "type": "proguard",
+  "uuid": "395835f4-03e0-4436-80d3-136f0749a893",
+  "other": "value"
+}"#;
+        let image = DebugImage::Proguard(ProguardDebugImage {
+            uuid: "395835f4-03e0-4436-80d3-136f0749a893"
+                .parse::<Uuid>()
+                .unwrap()
+                .into(),
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        });
+
+        assert_eq_dbg!(image, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&image).unwrap());
+    }
+
+    #[test]
+    fn test_apple_roundtrip() {
+        let json = r#"{
+  "type": "apple",
+  "name": "CoreFoundation",
+  "arch": "arm64",
+  "cpu_type": 1233,
+  "cpu_subtype": 3,
+  "image_addr": "0x0",
+  "image_size": 4096,
+  "image_vmaddr": "0x8000",
+  "uuid": "494f3aea-88fa-4296-9644-fa8ef5d139b6",
+  "other": "value"
+}"#;
+
+        let image = DebugImage::Apple(AppleDebugImage {
+            name: "CoreFoundation".to_string().into(),
+            arch: Some("arm64".to_string()).into(),
+            cpu_type: Some(1233).into(),
+            cpu_subtype: Some(3).into(),
+            image_addr: Addr(0).into(),
+            image_size: 4096.into(),
+            image_vmaddr: Addr(32768).into(),
+            uuid: "494f3aea-88fa-4296-9644-fa8ef5d139b6"
+                .parse::<Uuid>()
+                .unwrap()
+                .into(),
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        });
+
+        assert_eq_dbg!(image, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&image).unwrap());
+    }
+
+    #[test]
+    fn test_symbolic_roundtrip() {
+        let json = r#"{
+  "type": "symbolic",
+  "name": "CoreFoundation",
+  "arch": "arm64",
+  "image_addr": "0x0",
+  "image_size": 4096,
+  "image_vmaddr": "0x8000",
+  "id": "494f3aea-88fa-4296-9644-fa8ef5d139b6-1234",
+  "other": "value"
+}"#;
+
+        let image = DebugImage::Symbolic(SymbolicDebugImage {
+            name: "CoreFoundation".to_string().into(),
+            arch: Some("arm64".to_string()).into(),
+            image_addr: Addr(0).into(),
+            image_size: 4096.into(),
+            image_vmaddr: Addr(32768).into(),
+            id: "494f3aea-88fa-4296-9644-fa8ef5d139b6-1234"
+                .parse::<DebugId>()
+                .unwrap()
+                .into(),
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        });
+
+        assert_eq_dbg!(image, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&image).unwrap());
+    }
+}
+
+/// Debugging and processing meta information.
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct DebugMeta {
+    /// Information about the system SDK (e.g. iOS SDK).
+    #[serde(default, rename = "sdk_info", skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value]
+    pub system_sdk: Annotated<Option<SystemSdkInfo>>,
+
+    /// List of debug information files (debug images).
+    #[serde(default, skip_serializing_if = "utils::is_empty_array")]
+    #[process_annotated_value]
+    pub images: Annotated<Array<DebugImage>>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+#[cfg(test)]
+mod test_debug_meta {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_roundtrip() {
+        // NOTE: images are tested separately
+        let json = r#"{
+  "sdk_info": {
+    "sdk_name": "iOS",
+    "version_major": 10,
+    "version_minor": 3,
+    "version_patchlevel": 0,
+    "other": "value"
+  },
+  "other": "value"
+}"#;
+        let meta = DebugMeta {
+            system_sdk: Some(SystemSdkInfo {
+                sdk_name: "iOS".to_string().into(),
+                version_major: 10.into(),
+                version_minor: 3.into(),
+                version_patchlevel: 0.into(),
+                other: {
+                    let mut map = Map::new();
+                    map.insert(
+                        "other".to_string(),
+                        Value::String("value".to_string()).into(),
+                    );
+                    Annotated::from(map)
+                },
+            }).into(),
+            images: Array::new().into(),
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        };
+
+        assert_eq_dbg!(meta, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&meta).unwrap());
+    }
+
+    #[test]
+    fn test_default_values() {
+        let json = "{}";
+        let meta = DebugMeta {
+            system_sdk: None.into(),
+            images: Array::new().into(),
+            other: Default::default(),
+        };
+
+        assert_eq_dbg!(meta, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string(&meta).unwrap());
+    }
+}
+
 /// Information about the Sentry SDK.
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct ClientSdkInfo {
@@ -1936,7 +2355,7 @@ mod event {
             let mut threads = None;
             let mut tags = None;
             let mut extra = None;
-            // let mut debug_meta = None;
+            let mut debug_meta = None;
             let mut client_sdk = None;
             let mut other: Map<Value> = Default::default();
 
@@ -1997,10 +2416,10 @@ mod event {
                     },
                     "tags" => tags = Some(Deserialize::deserialize(deserializer)?),
                     "extra" => extra = Some(Deserialize::deserialize(deserializer)?),
-                    // "debug_meta" => debug_meta = Some(Deserialize::deserialize(deserializer)?),
-                    // "sentry.interfaces.DebugMeta" => if debug_meta.is_none() {
-                    //     debug_meta = Some(Deserialize::deserialize(deserializer)?)
-                    // },
+                    "debug_meta" => debug_meta = Some(Deserialize::deserialize(deserializer)?),
+                    "sentry.interfaces.DebugMeta" => if debug_meta.is_none() {
+                        debug_meta = Some(Deserialize::deserialize(deserializer)?)
+                    },
                     "sdk" => client_sdk = Some(Deserialize::deserialize(deserializer)?),
                     _ => {
                         other.insert(key, Deserialize::deserialize(deserializer)?);
@@ -2034,6 +2453,7 @@ mod event {
                 threads: threads.unwrap_or_default(),
                 tags: tags.unwrap_or_default(),
                 extra: extra.unwrap_or_default(),
+                debug_meta: debug_meta.unwrap_or_default(),
                 client_sdk: client_sdk.unwrap_or_default(),
                 other: Annotated::from(other),
             })
@@ -2159,6 +2579,10 @@ pub struct Event {
     #[process_annotated_value(pii_kind = "databag")]
     pub extra: Annotated<Map<Value>>,
 
+    /// Meta data for event processing and debugging.
+    #[serde(skip_serializing_if = "utils::is_none")]
+    pub debug_meta: Annotated<Option<DebugMeta>>,
+
     /// Information about the Sentry SDK that generated this event.
     #[serde(rename = "sdk", skip_serializing_if = "utils::is_none")]
     pub client_sdk: Annotated<Option<ClientSdkInfo>>,
@@ -2269,6 +2693,7 @@ mod test_event {
                 );
                 Annotated::from(map)
             },
+            debug_meta: None.into(),
             client_sdk: None.into(),
             other: {
                 let mut map = Map::new();
@@ -2321,6 +2746,7 @@ mod test_event {
             threads: Default::default(),
             tags: Default::default(),
             extra: Default::default(),
+            debug_meta: None.into(),
             client_sdk: None.into(),
             other: Default::default(),
         });

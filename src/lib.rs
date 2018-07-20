@@ -6,6 +6,7 @@
 #![warn(missing_docs)]
 
 extern crate chrono;
+extern crate debugid;
 extern crate failure;
 #[macro_use]
 extern crate failure_derive;
