@@ -3235,6 +3235,24 @@ mod event {
     }
 }
 
+fn is_default_fingerprint(value: &Annotated<Vec<String>>) -> bool {
+    match value {
+        Annotated(Some(ref value), ref meta) => {
+            meta.is_empty()
+                && value.len() == 1
+                && (value[0] == "{{default}}" || value[0] == "{{ default }}")
+        }
+        _ => false,
+    }
+}
+
+fn is_default_platform(value: &Annotated<String>) -> bool {
+    match value {
+        Annotated(Some(ref value), ref meta) => meta.is_empty() && value == "other",
+        _ => false,
+    }
+}
+
 /// Represents a full event for Sentry.
 #[derive(Debug, Default, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Event {
@@ -3251,6 +3269,7 @@ pub struct Event {
 
     /// Manual fingerprint override.
     // XXX: This is a `Vec` and not `Array` intentionally
+    #[serde(skip_serializing_if = "is_default_fingerprint")]
     pub fingerprint: Annotated<Vec<String>>,
 
     /// Custom culprit of the event.
@@ -3281,6 +3300,7 @@ pub struct Event {
     pub modules: Annotated<Map<String>>,
 
     /// Platform identifier of this event (defaults to "other").
+    #[serde(skip_serializing_if = "is_default_platform")]
     pub platform: Annotated<String>,
 
     /// Timestamp when the event was created.
