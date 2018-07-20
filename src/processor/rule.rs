@@ -550,6 +550,16 @@ impl PiiConfig {
         serde_json::from_str(s)
     }
 
+    /// Serializes an annotated value into a JSON string.
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(&self)
+    }
+
+    /// Serializes an annotated value into a pretty JSON string.
+    pub fn to_json_pretty(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(&self)
+    }
+
     /// Creates a PII processor from the config.
     pub fn processor(&self) -> RuleBasedPiiProcessor {
         RuleBasedPiiProcessor::new(self)

@@ -1,0 +1,15 @@
+{
+  "rules": {
+    "device_id": {
+      "type": "pattern",
+      "pattern": "d/[a-f0-9]{12}",
+      "redaction": {
+        "method": "hash",
+        "text": "[device-id]"
+      }
+    }
+  },
+  "applications": {
+    "freeform": ["@ip", "@creditcard", "@email", "device_id"]
+  }
+}
