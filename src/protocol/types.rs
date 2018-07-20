@@ -2611,6 +2611,36 @@ mod test_debug_image {
     }
 
     #[test]
+    fn test_apple_default_values() {
+        let json = r#"{
+  "type": "apple",
+  "name": "CoreFoundation",
+  "image_addr": "0x0",
+  "image_size": 4096,
+  "image_vmaddr": "0x8000",
+  "uuid": "494f3aea-88fa-4296-9644-fa8ef5d139b6"
+}"#;
+
+        let image = DebugImage::Apple(AppleDebugImage {
+            name: "CoreFoundation".to_string().into(),
+            arch: None.into(),
+            cpu_type: None.into(),
+            cpu_subtype: None.into(),
+            image_addr: Addr(0).into(),
+            image_size: 4096.into(),
+            image_vmaddr: Addr(32768).into(),
+            uuid: "494f3aea-88fa-4296-9644-fa8ef5d139b6"
+                .parse::<Uuid>()
+                .unwrap()
+                .into(),
+            other: Default::default(),
+        });
+
+        assert_eq_dbg!(image, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&image).unwrap());
+    }
+
+    #[test]
     fn test_symbolic_roundtrip() {
         let json = r#"{
   "type": "symbolic",
@@ -2641,6 +2671,34 @@ mod test_debug_image {
                 );
                 Annotated::from(map)
             },
+        });
+
+        assert_eq_dbg!(image, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&image).unwrap());
+    }
+
+    #[test]
+    fn test_symbolic_default_values() {
+        let json = r#"{
+  "type": "symbolic",
+  "name": "CoreFoundation",
+  "image_addr": "0x0",
+  "image_size": 4096,
+  "image_vmaddr": "0x8000",
+  "id": "494f3aea-88fa-4296-9644-fa8ef5d139b6-1234"
+}"#;
+
+        let image = DebugImage::Symbolic(SymbolicDebugImage {
+            name: "CoreFoundation".to_string().into(),
+            arch: None.into(),
+            image_addr: Addr(0).into(),
+            image_size: 4096.into(),
+            image_vmaddr: Addr(32768).into(),
+            id: "494f3aea-88fa-4296-9644-fa8ef5d139b6-1234"
+                .parse::<DebugId>()
+                .unwrap()
+                .into(),
+            other: Default::default(),
         });
 
         assert_eq_dbg!(image, serde_json::from_str(json).unwrap());
