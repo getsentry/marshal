@@ -305,6 +305,13 @@ impl<T: Serialize> Annotated<T> {
         self.serialize_with_meta(&mut ser)?;
         Ok(unsafe { String::from_utf8_unchecked(ser.into_inner()) })
     }
+
+    /// Serializes an annotated value into a pretty JSON string.
+    pub fn to_json_pretty(&self) -> Result<String, serde_json::Error> {
+        let mut ser = serde_json::Serializer::pretty(Vec::with_capacity(128));
+        self.serialize_with_meta(&mut ser)?;
+        Ok(unsafe { String::from_utf8_unchecked(ser.into_inner()) })
+    }
 }
 
 impl<T> Annotated<T> {

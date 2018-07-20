@@ -20,7 +20,11 @@ fn run() -> Result<(), Error> {
     let processor = config.processor();
     let json_event = fs::read_to_string(&args[2])?;
     let event = Annotated::<Event>::from_json(&json_event)?;
+    println!("INPUT:");
+    println!("{}", event.to_json_pretty()?);
     let result = processor.process_root_value(event);
-    println!("{}", result.to_json()?);
+    println!("");
+    println!("OUTPUT:");
+    println!("{}", result.to_json_pretty()?);
     Ok(())
 }
