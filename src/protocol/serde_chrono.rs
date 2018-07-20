@@ -83,7 +83,7 @@ impl CustomSerialize<DateTime<Utc>> for SerdeDateTime {
         if datetime.timestamp_subsec_nanos() == 0 {
             serializer.serialize_i64(datetime.timestamp())
         } else {
-            let micros = datetime.timestamp_subsec_micros() as f64 / 1_000_000f64;
+            let micros = f64::from(datetime.timestamp_subsec_micros()) / 1_000_000f64;
             serializer.serialize_f64(datetime.timestamp() as f64 + micros)
         }
     }

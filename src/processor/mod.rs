@@ -2,8 +2,8 @@
 
 mod builtin;
 mod chunk;
-mod processor;
+mod pii;
 mod rule;
 
-pub use self::processor::*;
+pub use self::pii::*;
 pub use self::rule::*;

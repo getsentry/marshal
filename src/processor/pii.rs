@@ -132,14 +132,14 @@ pub trait Processor {
             }
             Annotated(Some(Value::Array(val)), meta) => {
                 let mut rv = Vec::with_capacity(val.len());
-                for item in val.into_iter() {
+                for item in val {
                     rv.push(self.process_value(item, &info.derive()));
                 }
                 Annotated(Some(Value::Array(rv)), meta)
             }
             Annotated(Some(Value::Map(val)), meta) => {
                 let mut rv = BTreeMap::new();
-                for (key, value) in val.into_iter() {
+                for (key, value) in val {
                     let value = self.process_value(value, &info.derive());
                     rv.insert(key, value);
                 }
@@ -291,6 +291,23 @@ impl<T: ProcessAnnotatedValue> ProcessAnnotatedValue for Option<T> {
                 info,
             ).map(Some),
             other @ Annotated(Some(None), _) => other,
+            other @ Annotated(None, _) => other,
+        }
+    }
+}
+
+impl<T: ProcessAnnotatedValue> ProcessAnnotatedValue for Box<T> {
+    fn process_annotated_value(
+        annotated: Annotated<Self>,
+        processor: &Processor,
+        info: &ValueInfo,
+    ) -> Annotated<Self> {
+        match annotated {
+            Annotated(Some(value), meta) => ProcessAnnotatedValue::process_annotated_value(
+                Annotated::new(*value, meta),
+                processor,
+                info,
+            ).map(Box::new),
             other @ Annotated(None, _) => other,
         }
     }

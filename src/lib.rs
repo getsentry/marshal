@@ -22,7 +22,6 @@ extern crate sha1;
 extern crate sha2;
 extern crate uuid;
 
-#[allow(unused_imports)]
 #[macro_use]
 extern crate marshal_derive;
 

@@ -703,10 +703,8 @@ impl SerializeStruct for SerializeStructMeta {
                     return Err(Error::custom("invalid annotated serialization field"));
                 }
             }
-        } else {
-            if let Some(tree) = value.serialize(MetaSerializer)? {
-                self.map.insert(key.to_string(), tree);
-            }
+        } else if let Some(tree) = value.serialize(MetaSerializer)? {
+            self.map.insert(key.to_string(), tree);
         }
 
         Ok(())
