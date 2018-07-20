@@ -285,11 +285,12 @@ impl<T: ProcessAnnotatedValue> ProcessAnnotatedValue for Option<T> {
         info: &ValueInfo,
     ) -> Annotated<Self> {
         match annotated {
-            Annotated(Some(value), meta) => ProcessAnnotatedValue::process_annotated_value(
+            Annotated(Some(Some(value)), meta) => ProcessAnnotatedValue::process_annotated_value(
                 Annotated::new(value, meta),
                 processor,
                 info,
-            ),
+            ).map(Some),
+            other @ Annotated(Some(None), _) => other,
             other @ Annotated(None, _) => other,
         }
     }
