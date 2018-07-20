@@ -4,10 +4,12 @@
       "type": "pattern",
       "pattern": "d/[a-f0-9]{12}",
       "redaction": {
-        "method": "hash",
-        "text": "[device-id]"
+        "method": "hash"
       }
     }
+  },
+  "vars": {
+    "hashKey": "a secret key"
   },
   "applications": {
     "freeform": ["@ip", "@creditcard", "@email", "device_id"]
