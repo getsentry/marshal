@@ -1757,6 +1757,10 @@ mod debug_image {
     use super::super::buffer::Content;
     use super::*;
 
+    fn default_type() -> Cow<'static, str> {
+        Cow::Borrowed("unknown")
+    }
+
     pub fn default_vmaddr() -> Annotated<Addr> {
         Addr(0).into()
     }
@@ -1765,7 +1769,7 @@ mod debug_image {
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
             #[derive(Deserialize)]
             struct D<'a> {
-                #[serde(rename = "type")]
+                #[serde(default = "default_type", rename = "type")]
                 t: Cow<'a, str>,
                 #[serde(flatten, borrow)]
                 content: Content<'a>,
@@ -1963,6 +1967,39 @@ mod test_debug_image {
 
         assert_eq_dbg!(image, serde_json::from_str(json).unwrap());
         assert_eq_str!(json, serde_json::to_string_pretty(&image).unwrap());
+    }
+
+    #[test]
+    fn test_other_roundtrip() {
+        let json = r#"{"type":"mytype","other":"value"}"#;
+        let image = DebugImage::Other("mytype".to_string(), {
+            let mut map = Map::new();
+            map.insert(
+                "other".to_string(),
+                Value::String("value".to_string()).into(),
+            );
+            map
+        });
+
+        assert_eq_dbg!(image, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string(&image).unwrap());
+    }
+
+    #[test]
+    fn test_untagged_roundtrip() {
+        let input = r#"{"other":"value"}"#;
+        let output = r#"{"type":"unknown","other":"value"}"#;
+        let image = DebugImage::Other("unknown".to_string(), {
+            let mut map = Map::new();
+            map.insert(
+                "other".to_string(),
+                Value::String("value".to_string()).into(),
+            );
+            map
+        });
+
+        assert_eq_dbg!(image, serde_json::from_str(input).unwrap());
+        assert_eq_str!(output, serde_json::to_string(&image).unwrap());
     }
 }
 
