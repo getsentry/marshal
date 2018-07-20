@@ -3068,8 +3068,10 @@ mod test_fingerprint {
 }
 
 mod event {
-    use super::*;
     use std::collections::BTreeMap;
+
+    use super::super::utils;
+    use super::*;
 
     pub fn serialize_id<S: Serializer>(
         annotated: &Annotated<Option<Uuid>>,
@@ -3092,12 +3094,18 @@ mod event {
         annotated.serialize_with(serializer, EventIdSerialize)
     }
 
-    pub fn default_level() -> Annotated<Level> {
-        Level::Error.into()
-    }
-
     pub fn default_platform() -> Annotated<String> {
         "other".to_string().into()
+    }
+
+    pub fn is_default_fingerprint(annotated: &Annotated<Vec<String>>) -> bool {
+        utils::skip_if(annotated, |f| {
+            f.len() == 1 && (f[0] == "{{default}}" || f[0] == "{{ default }}")
+        })
+    }
+
+    pub fn is_default_platform(annotated: &Annotated<String>) -> bool {
+        utils::skip_if(annotated, |p| p == "other")
     }
 
     impl<'de> Deserialize<'de> for Event {
@@ -3202,7 +3210,7 @@ mod event {
 
             Ok(Event {
                 id: id.unwrap_or_default(),
-                level: level.unwrap_or_else(|| default_level()),
+                level: level.unwrap_or_default(),
                 fingerprint: fingerprint.unwrap_or_else(|| fingerprint::default()),
                 culprit: culprit.unwrap_or_default(),
                 transaction: transaction.unwrap_or_default(),
@@ -3235,24 +3243,6 @@ mod event {
     }
 }
 
-fn is_default_fingerprint(value: &Annotated<Vec<String>>) -> bool {
-    match value {
-        Annotated(Some(ref value), ref meta) => {
-            meta.is_empty()
-                && value.len() == 1
-                && (value[0] == "{{default}}" || value[0] == "{{ default }}")
-        }
-        _ => false,
-    }
-}
-
-fn is_default_platform(value: &Annotated<String>) -> bool {
-    match value {
-        Annotated(Some(ref value), ref meta) => meta.is_empty() && value == "other",
-        _ => false,
-    }
-}
-
 /// Represents a full event for Sentry.
 #[derive(Debug, Default, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Event {
@@ -3264,12 +3254,13 @@ pub struct Event {
     )]
     pub id: Annotated<Option<Uuid>>,
 
-    /// Severity level of the event (defaults to "error").
-    pub level: Annotated<Level>,
+    /// Severity level of the event.
+    #[serde(skip_serializing_if = "utils::is_none")]
+    pub level: Annotated<Option<Level>>,
 
     /// Manual fingerprint override.
     // XXX: This is a `Vec` and not `Array` intentionally
-    #[serde(skip_serializing_if = "is_default_fingerprint")]
+    #[serde(skip_serializing_if = "event::is_default_fingerprint")]
     pub fingerprint: Annotated<Vec<String>>,
 
     /// Custom culprit of the event.
@@ -3300,7 +3291,7 @@ pub struct Event {
     pub modules: Annotated<Map<String>>,
 
     /// Platform identifier of this event (defaults to "other").
-    #[serde(skip_serializing_if = "is_default_platform")]
+    #[serde(skip_serializing_if = "event::is_default_platform")]
     pub platform: Annotated<String>,
 
     /// Timestamp when the event was created.
@@ -3454,7 +3445,7 @@ mod test_event {
                 Some("52df9022-8352-46ee-b317-dbd739ccd059".parse().unwrap()),
                 Meta::from_error("some error"),
             ),
-            level: Level::Debug.into(),
+            level: Some(Level::Debug).into(),
             fingerprint: Annotated::from(vec!["myprint".to_string()]),
             culprit: Some("myculprit".to_string()).into(),
             transaction: Some("mytransaction".to_string()).into(),
@@ -3512,18 +3503,10 @@ mod test_event {
 
     #[test]
     fn test_default_values() {
-        let input = r#"{"event_id":"52df9022-8352-46ee-b317-dbd739ccd059"}"#;
-        let output = r#"{
-  "event_id": "52df9022835246eeb317dbd739ccd059",
-  "level": "error",
-  "fingerprint": [
-    "{{ default }}"
-  ],
-  "platform": "other"
-}"#;
+        let json = "{}";
         let event = Annotated::from(Event {
-            id: Some("52df9022-8352-46ee-b317-dbd739ccd059".parse().unwrap()).into(),
-            level: Level::Error.into(),
+            id: None.into(),
+            level: None.into(),
             fingerprint: vec!["{{ default }}".to_string()].into(),
             culprit: None.into(),
             transaction: None.into(),
@@ -3553,7 +3536,7 @@ mod test_event {
             other: Default::default(),
         });
 
-        assert_eq_dbg!(event, serde_json::from_str(input).unwrap());
-        assert_eq_str!(output, serde_json::to_string_pretty(&event).unwrap());
+        assert_eq_dbg!(event, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&event).unwrap());
     }
 }
