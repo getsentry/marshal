@@ -469,6 +469,684 @@ mod test_request {
     }
 }
 
+/// Device information.
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct DeviceContext {
+    /// Name of the device.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(cap = "summary")]
+    pub name: Annotated<Option<String>>,
+
+    /// Family of the device model.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub family: Annotated<Option<String>>,
+
+    /// Device model (human readable).
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub model: Annotated<Option<String>>,
+
+    /// Device model (internal identifier).
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub model_id: Annotated<Option<String>>,
+
+    /// Native cpu architecture of the device.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub arch: Annotated<Option<String>>,
+
+    /// Current battery level (0-100).
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub battery_level: Annotated<Option<f32>>,
+
+    /// Current screen orientation.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub orientation: Annotated<Option<String>>,
+
+    /// Simulator/prod indicator.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub simulator: Annotated<Option<bool>>,
+
+    /// Total memory available in bytes.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub memory_size: Annotated<Option<u64>>,
+
+    /// How much memory is still available in bytes.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub free_memory: Annotated<Option<u64>>,
+
+    /// How much memory is usable for the app in bytes.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub usable_memory: Annotated<Option<u64>>,
+
+    /// Total storage size of the device in bytes.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub storage_size: Annotated<Option<u64>>,
+
+    /// How much storage is free in bytes.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub free_storage: Annotated<Option<u64>>,
+
+    /// Total size of the attached external storage in bytes (eg: android SDK card).
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub external_storage_size: Annotated<Option<u64>>,
+
+    /// Free size of the attached external storage in bytes (eg: android SDK card).
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub external_free_storage: Annotated<Option<u64>>,
+
+    /// Indicator when the device was booted.
+    #[serde(default, with = "serde_chrono", skip_serializing_if = "utils::is_none")]
+    pub boot_time: Annotated<Option<DateTime<Utc>>>,
+
+    /// Timezone of the device.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub timezone: Annotated<Option<String>>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+/// Operating system information.
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct OsContext {
+    /// Name of the operating system.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(cap = "summary")]
+    pub name: Annotated<Option<String>>,
+
+    /// Version of the operating system.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(cap = "summary")]
+    pub version: Annotated<Option<String>>,
+
+    /// Internal build number of the operating system.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(cap = "summary")]
+    pub build: Annotated<Option<String>>,
+
+    /// Current kernel version.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(cap = "summary")]
+    pub kernel_version: Annotated<Option<String>>,
+
+    /// Indicator if the OS is rooted (mobile mostly).
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub rooted: Annotated<Option<bool>>,
+
+    /// Unprocessed operating system info.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(cap = "summary")]
+    pub raw_description: Annotated<Option<String>>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+/// Runtime information.
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct RuntimeContext {
+    /// Runtime name.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(cap = "summary")]
+    pub name: Annotated<Option<String>>,
+
+    /// Runtime version.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(cap = "summary")]
+    pub version: Annotated<Option<String>>,
+
+    /// Unprocessed runtime info.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(cap = "summary")]
+    pub raw_description: Annotated<Option<String>>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+/// Application information.
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct AppContext {
+    /// Start time of the app.
+    #[serde(default, with = "serde_chrono", skip_serializing_if = "utils::is_none")]
+    pub app_start_time: Annotated<Option<DateTime<Utc>>>,
+
+    /// Device app hash (app specific device ID)
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "id", cap = "summary")]
+    pub device_app_hash: Annotated<Option<String>>,
+
+    /// Build identicator.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(cap = "summary")]
+    pub build_type: Annotated<Option<String>>,
+
+    /// App identifier (dotted bundle id).
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub app_identifier: Annotated<Option<String>>,
+
+    /// Application name as it appears on the platform.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub app_name: Annotated<Option<String>>,
+
+    /// Application version as it appears on the platform.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    pub app_version: Annotated<Option<String>>,
+
+    /// Internal build ID as it appears on the platform.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(cap = "summary")]
+    pub app_build: Annotated<Option<String>>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+/// Web browser information.
+#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct BrowserContext {
+    /// Runtime name.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(cap = "summary")]
+    pub name: Annotated<Option<String>>,
+
+    /// Runtime version.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(cap = "summary")]
+    pub version: Annotated<Option<String>>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+/// Contexts describing the environment (e.g. device, os or browser).
+#[derive(Debug, PartialEq)]
+pub enum Context {
+    /// Device information.
+    Device(DeviceContext),
+    /// Operating system information.
+    Os(OsContext),
+    /// Runtime information.
+    Runtime(RuntimeContext),
+    /// Application information.
+    App(AppContext),
+    /// Web browser information.
+    Browser(BrowserContext),
+    /// A context type that is unknown to this protocol specification.
+    Other(String, Map<Value>),
+}
+
+mod context {
+    use processor::{ProcessAnnotatedValue, Processor, ValueInfo};
+    use std::rc::Rc;
+
+    use super::super::buffer::{Content, ContentDeserializer};
+    use super::super::tracked::Path;
+    use super::*;
+
+    impl<'de> Deserialize<'de> for Context {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            #[derive(Deserialize)]
+            struct D<'a> {
+                #[serde(default, rename = "type")]
+                t: Option<String>,
+                #[serde(flatten, borrow)]
+                content: Content<'a>,
+            };
+
+            let key = deserializer.state().get::<Rc<Path>>().map(|p| p.key());
+            let D { t, content } = D::deserialize(deserializer)?;
+            let deserializer = ContentDeserializer::new(content);
+
+            // The context type is either declared explicitly or inferred from the map key via
+            // deserializer state. If the deserializer does not support state, we default to
+            // "unknown".
+            let ty = t.or(key).unwrap_or_else(|| "unknown".to_string());
+
+            Ok(match ty.as_ref() {
+                "device" => Context::Device(Deserialize::deserialize(deserializer)?),
+                "os" => Context::Os(Deserialize::deserialize(deserializer)?),
+                "runtime" => Context::Runtime(Deserialize::deserialize(deserializer)?),
+                "app" => Context::App(Deserialize::deserialize(deserializer)?),
+                "browser" => Context::Browser(Deserialize::deserialize(deserializer)?),
+                _ => Context::Other(ty, Deserialize::deserialize(deserializer)?),
+            })
+        }
+    }
+
+    impl Serialize for Context {
+        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            #[derive(Serialize)]
+            struct S<'a, T: Serialize> {
+                #[serde(rename = "type")]
+                t: &'a str,
+                #[serde(flatten)]
+                context: T,
+            }
+
+            match self {
+                Context::Device(ref device) => S {
+                    t: "device",
+                    context: device,
+                }.serialize(serializer),
+                Context::Os(ref os) => S {
+                    t: "os",
+                    context: os,
+                }.serialize(serializer),
+                Context::Runtime(ref runtime) => S {
+                    t: "runtime",
+                    context: runtime,
+                }.serialize(serializer),
+                Context::App(ref app) => S {
+                    t: "app",
+                    context: app,
+                }.serialize(serializer),
+                Context::Browser(ref browser) => S {
+                    t: "browser",
+                    context: browser,
+                }.serialize(serializer),
+                Context::Other(ref ty, ref other) => S {
+                    t: ty,
+                    context: other,
+                }.serialize(serializer),
+            }
+        }
+    }
+
+    impl ProcessAnnotatedValue for Context {
+        fn process_annotated_value(
+            annotated: Annotated<Self>,
+            processor: &Processor,
+            info: &ValueInfo,
+        ) -> Annotated<Self> {
+            match annotated {
+                Annotated(Some(Context::Device(context)), meta) => {
+                    ProcessAnnotatedValue::process_annotated_value(
+                        Annotated::new(context, meta),
+                        processor,
+                        info,
+                    ).map(Context::Device)
+                }
+                Annotated(Some(Context::Os(context)), meta) => {
+                    ProcessAnnotatedValue::process_annotated_value(
+                        Annotated::new(context, meta),
+                        processor,
+                        info,
+                    ).map(Context::Os)
+                }
+                Annotated(Some(Context::Runtime(context)), meta) => {
+                    ProcessAnnotatedValue::process_annotated_value(
+                        Annotated::new(context, meta),
+                        processor,
+                        info,
+                    ).map(Context::Runtime)
+                }
+                Annotated(Some(Context::App(context)), meta) => {
+                    ProcessAnnotatedValue::process_annotated_value(
+                        Annotated::new(context, meta),
+                        processor,
+                        info,
+                    ).map(Context::App)
+                }
+                Annotated(Some(Context::Browser(context)), meta) => {
+                    ProcessAnnotatedValue::process_annotated_value(
+                        Annotated::new(context, meta),
+                        processor,
+                        info,
+                    ).map(Context::Browser)
+                }
+                Annotated(Some(Context::Other(name, context)), meta) => {
+                    let Annotated(context, meta) = ProcessAnnotatedValue::process_annotated_value(
+                        Annotated::new(context, meta),
+                        processor,
+                        info,
+                    );
+                    Annotated::new(Context::Other(name, context.unwrap_or_default()), meta)
+                }
+                other @ Annotated(None, _) => other,
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod test_contexts {
+    use super::super::tracked::TrackedDeserializer;
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_device_roundtrip() {
+        let json = r#"{
+  "type": "device",
+  "name": "iphone",
+  "family": "iphone",
+  "model": "iphone7,3",
+  "model_id": "AH223",
+  "arch": "arm64",
+  "battery_level": 58.5,
+  "orientation": "landscape",
+  "simulator": true,
+  "memory_size": 3137978368,
+  "free_memory": 322781184,
+  "usable_memory": 2843525120,
+  "storage_size": 63989469184,
+  "free_storage": 31994734592,
+  "external_storage_size": 2097152,
+  "external_free_storage": 2097152,
+  "boot_time": 1518094332,
+  "timezone": "Europe/Vienna",
+  "other": "value"
+}"#;
+        let context = Context::Device(DeviceContext {
+            name: Some("iphone".to_string()).into(),
+            family: Some("iphone".to_string()).into(),
+            model: Some("iphone7,3".to_string()).into(),
+            model_id: Some("AH223".to_string()).into(),
+            arch: Some("arm64".to_string()).into(),
+            battery_level: Some(58.5.into()).into(),
+            orientation: Some("landscape".to_string()).into(),
+            simulator: Some(true).into(),
+            memory_size: Some(3137978368).into(),
+            free_memory: Some(322781184).into(),
+            usable_memory: Some(2843525120).into(),
+            storage_size: Some(63989469184).into(),
+            free_storage: Some(31994734592).into(),
+            external_storage_size: Some(2097152).into(),
+            external_free_storage: Some(2097152).into(),
+            boot_time: Some("2018-02-08T12:52:12Z".parse().unwrap()).into(),
+            timezone: Some("Europe/Vienna".to_string()).into(),
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        });
+
+        assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&context).unwrap());
+    }
+
+    #[test]
+    fn test_device_default_values() {
+        let json = r#"{"type":"device"}"#;
+        let context = Context::Device(DeviceContext {
+            name: None.into(),
+            family: None.into(),
+            model: None.into(),
+            model_id: None.into(),
+            arch: None.into(),
+            battery_level: None.into(),
+            orientation: None.into(),
+            simulator: None.into(),
+            memory_size: None.into(),
+            free_memory: None.into(),
+            usable_memory: None.into(),
+            storage_size: None.into(),
+            free_storage: None.into(),
+            external_storage_size: None.into(),
+            external_free_storage: None.into(),
+            boot_time: None.into(),
+            timezone: None.into(),
+            other: Default::default(),
+        });
+
+        assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string(&context).unwrap());
+    }
+
+    #[test]
+    fn test_os_roundtrip() {
+        let json = r#"{
+  "type": "os",
+  "name": "iOS",
+  "version": "11.4.2",
+  "build": "FEEDFACE",
+  "kernel_version": "17.4.0",
+  "rooted": true,
+  "raw_description": "iOS 11.4.2 FEEDFACE (17.4.0)",
+  "other": "value"
+}"#;
+        let context = Context::Os(OsContext {
+            name: Some("iOS".to_string()).into(),
+            version: Some("11.4.2".to_string()).into(),
+            build: Some("FEEDFACE".to_string()).into(),
+            kernel_version: Some("17.4.0".to_string()).into(),
+            rooted: Some(true).into(),
+            raw_description: Some("iOS 11.4.2 FEEDFACE (17.4.0)".to_string()).into(),
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        });
+
+        assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&context).unwrap());
+    }
+
+    #[test]
+    fn test_os_default_values() {
+        let json = r#"{"type":"os"}"#;
+        let context = Context::Os(OsContext {
+            name: None.into(),
+            version: None.into(),
+            build: None.into(),
+            kernel_version: None.into(),
+            rooted: None.into(),
+            raw_description: None.into(),
+            other: Default::default(),
+        });
+
+        assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string(&context).unwrap());
+    }
+
+    #[test]
+    fn test_runtime_roundtrip() {
+        let json = r#"{
+  "type": "runtime",
+  "name": "rustc",
+  "version": "1.27.0",
+  "raw_description": "rustc 1.27.0 stable",
+  "other": "value"
+}"#;
+        let context = Context::Runtime(RuntimeContext {
+            name: Some("rustc".to_string()).into(),
+            version: Some("1.27.0".to_string()).into(),
+            raw_description: Some("rustc 1.27.0 stable".to_string()).into(),
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        });
+
+        assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&context).unwrap());
+    }
+
+    #[test]
+    fn test_runtime_default_values() {
+        let json = r#"{"type":"runtime"}"#;
+        let context = Context::Runtime(RuntimeContext {
+            name: None.into(),
+            version: None.into(),
+            raw_description: None.into(),
+            other: Default::default(),
+        });
+
+        assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string(&context).unwrap());
+    }
+
+    #[test]
+    fn test_app_roundtrip() {
+        let json = r#"{
+  "type": "app",
+  "app_start_time": 1518128517,
+  "device_app_hash": "4c793e3776474877ae30618378e9662a",
+  "build_type": "testflight",
+  "app_identifier": "foo.bar.baz",
+  "app_name": "Baz App",
+  "app_version": "1.0",
+  "app_build": "100001",
+  "other": "value"
+}"#;
+        let context = Context::App(AppContext {
+            app_start_time: Some("2018-02-08T22:21:57Z".parse().unwrap()).into(),
+            device_app_hash: Some("4c793e3776474877ae30618378e9662a".to_string()).into(),
+            build_type: Some("testflight".to_string()).into(),
+            app_identifier: Some("foo.bar.baz".to_string()).into(),
+            app_name: Some("Baz App".to_string()).into(),
+            app_version: Some("1.0".to_string()).into(),
+            app_build: Some("100001".to_string()).into(),
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        });
+
+        assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&context).unwrap());
+    }
+
+    #[test]
+    fn test_app_default_values() {
+        let json = r#"{"type":"app"}"#;
+        let context = Context::App(AppContext {
+            app_start_time: None.into(),
+            device_app_hash: None.into(),
+            build_type: None.into(),
+            app_identifier: None.into(),
+            app_name: None.into(),
+            app_version: None.into(),
+            app_build: None.into(),
+            other: Default::default(),
+        });
+
+        assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string(&context).unwrap());
+    }
+    #[test]
+    fn test_browser_roundtrip() {
+        let json = r#"{
+  "type": "browser",
+  "name": "Google Chrome",
+  "version": "67.0.3396.99",
+  "other": "value"
+}"#;
+        let context = Context::Browser(BrowserContext {
+            name: Some("Google Chrome".to_string()).into(),
+            version: Some("67.0.3396.99".to_string()).into(),
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        });
+
+        assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&context).unwrap());
+    }
+
+    #[test]
+    fn test_browser_default_values() {
+        let json = r#"{"type":"browser"}"#;
+        let context = Context::Browser(BrowserContext {
+            name: None.into(),
+            version: None.into(),
+            other: Default::default(),
+        });
+
+        assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string(&context).unwrap());
+    }
+
+    #[test]
+    fn test_other_roundtrip() {
+        let json = r#"{"type":"mytype","other":"value"}"#;
+        let context = Context::Other("mytype".to_string(), {
+            let mut map = Map::new();
+            map.insert(
+                "other".to_string(),
+                Value::String("value".to_string()).into(),
+            );
+            map
+        });
+
+        assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string(&context).unwrap());
+    }
+
+    #[test]
+    fn test_untagged_deserialize() {
+        let json = r#"{"mytype": {"other": "value"}}"#;
+
+        let context = Context::Other("mytype".to_string(), {
+            let mut map = Map::new();
+            map.insert(
+                "other".to_string(),
+                Value::String("value".to_string()).into(),
+            );
+            map
+        });
+
+        use std::collections::BTreeMap;
+        let mut wrapper = BTreeMap::new();
+        wrapper.insert("mytype".to_string(), context);
+
+        let deserialized = Deserialize::deserialize(TrackedDeserializer::new(
+            &mut serde_json::Deserializer::from_str(json),
+            Default::default(),
+        )).unwrap();
+
+        assert_eq_dbg!(wrapper, deserialized);
+    }
+
+    #[test]
+    fn test_fallback_roundtrip() {
+        let input = r#"{"other":"value"}"#;
+        let output = r#"{"type":"unknown","other":"value"}"#;
+        let context = Context::Other("unknown".to_string(), {
+            let mut map = Map::new();
+            map.insert(
+                "other".to_string(),
+                Value::String("value".to_string()).into(),
+            );
+            map
+        });
+
+        assert_eq_dbg!(context, serde_json::from_str(input).unwrap());
+        assert_eq_str!(output, serde_json::to_string(&context).unwrap());
+    }
+}
+
 fn default_breadcrumb_type() -> Annotated<String> {
     "default".to_string().into()
 }
@@ -2384,7 +3062,7 @@ mod event {
             let mut environment = None;
             let mut user = None;
             let mut request = None;
-            // let mut contexts = None;
+            let mut contexts = None;
             let mut breadcrumbs = None;
             let mut exceptions = None;
             let mut stacktrace = None;
@@ -2427,10 +3105,10 @@ mod event {
                     "sentry.interfaces.Http" => if request.is_none() {
                         request = Some(Deserialize::deserialize(deserializer)?);
                     },
-                    // "contexts" => contexts = Some(Deserialize::deserialize(deserializer)?),
-                    // "sentry.interfaces.Contexts" => if contexts.is_none() {
-                    //     contexts = Some(Deserialize::deserialize(deserializer)?);
-                    // },
+                    "contexts" => contexts = Some(Deserialize::deserialize(deserializer)?),
+                    "sentry.interfaces.Contexts" => if contexts.is_none() {
+                        contexts = Some(Deserialize::deserialize(deserializer)?);
+                    },
                     "breadcrumbs" => breadcrumbs = Some(Deserialize::deserialize(deserializer)?),
                     "sentry.interfaces.Breadcrumbs" => if breadcrumbs.is_none() {
                         breadcrumbs = Some(Deserialize::deserialize(deserializer)?);
@@ -2483,6 +3161,7 @@ mod event {
                 environment: environment.unwrap_or_default(),
                 user: user.unwrap_or_default(),
                 request: request.unwrap_or_default(),
+                contexts: contexts.unwrap_or_default(),
                 breadcrumbs: breadcrumbs.unwrap_or_default(),
                 exceptions: exceptions.unwrap_or_default(),
                 stacktrace: stacktrace.unwrap_or_default(),
@@ -2581,7 +3260,11 @@ pub struct Event {
     #[process_annotated_value]
     pub request: Annotated<Option<Request>>,
 
-    // TODO: contexts
+    /// Contexts describing the environment (e.g. device, os or browser).
+    #[serde(skip_serializing_if = "utils::is_empty_map")]
+    #[process_annotated_value]
+    pub contexts: Annotated<Map<Context>>,
+
     /// List of breadcrumbs recorded before this event.
     #[serde(skip_serializing_if = "utils::is_empty_values")]
     #[process_annotated_value]
@@ -2589,6 +3272,7 @@ pub struct Event {
 
     /// One or multiple chained (nested) exceptions.
     #[serde(rename = "exception", skip_serializing_if = "utils::is_empty_values")]
+    #[process_annotated_value]
     pub exceptions: Annotated<Values<Exception>>,
 
     /// Deprecated event stacktrace.
@@ -2618,6 +3302,7 @@ pub struct Event {
 
     /// Meta data for event processing and debugging.
     #[serde(skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value]
     pub debug_meta: Annotated<Option<DebugMeta>>,
 
     /// Information about the Sentry SDK that generated this event.
@@ -2712,6 +3397,7 @@ mod test_event {
             environment: Some("myenv".to_string()).into(),
             user: None.into(),
             request: None.into(),
+            contexts: Default::default(),
             breadcrumbs: Default::default(),
             exceptions: Default::default(),
             stacktrace: None.into(),
@@ -2773,9 +3459,10 @@ mod test_event {
             release: None.into(),
             dist: None.into(),
             repos: Default::default(),
+            environment: None.into(),
             user: None.into(),
             request: None.into(),
-            environment: None.into(),
+            contexts: Default::default(),
             breadcrumbs: Default::default(),
             exceptions: Default::default(),
             stacktrace: None.into(),

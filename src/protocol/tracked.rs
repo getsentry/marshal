@@ -25,6 +25,20 @@ pub enum Path {
     NewtypeVariant { parent: Rc<Path> },
 }
 
+impl Path {
+    /// Retrieves the last part of this path.
+    pub fn key(&self) -> String {
+        match self {
+            Path::Root => "".to_string(),
+            Path::Seq { index, .. } => index.to_string(),
+            Path::Map { key, .. } => key.clone(),
+            Path::Some { parent } => parent.key(),
+            Path::NewtypeStruct { parent } => parent.key(),
+            Path::NewtypeVariant { parent } => parent.key(),
+        }
+    }
+}
+
 impl fmt::Display for Path {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         struct Parent<'a>(&'a Rc<Path>);
