@@ -31,10 +31,8 @@ macro_rules! assert_eq_str {
 
 fn read_fixture<P: AsRef<Path>>(path: P) -> String {
     let full_path = Path::new("tests/").join(path.as_ref());
-    let mut string = fs::read_to_string(full_path).expect(&format!(
-        "failed to read fixture '{}'",
-        path.as_ref().display()
-    ));
+    let mut string = fs::read_to_string(full_path)
+        .unwrap_or_else(|_| panic!("failed to read fixture '{}'", path.as_ref().display()));
 
     if string.ends_with('\n') {
         let len = string.len();
