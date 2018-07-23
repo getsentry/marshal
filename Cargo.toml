@@ -23,7 +23,5 @@ sha-1 = "0.7.0"
 difference = "2.0.0"
 
 [patch.crates-io]
-#serde = { path = "../serde/serde" }
-#serde_derive = { path = "../serde/serde_derive" }
-serde = { git = "https://github.com/mitsuhiko/serde", rev = "e4eb33057e193e69e09cdc97074536486780c33d" }
-serde_derive = { git = "https://github.com/mitsuhiko/serde", rev = "e4eb33057e193e69e09cdc97074536486780c33d" }
+serde = { git = "https://github.com/mitsuhiko/serde", rev = "880a8c0181ad7202950f24cc8f6872994913441d" }
+serde_derive = { git = "https://github.com/mitsuhiko/serde", rev = "880a8c0181ad7202950f24cc8f6872994913441d" }
