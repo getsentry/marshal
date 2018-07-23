@@ -17,3 +17,6 @@ matrix:
     - env: SUITE=test
     - env: SUITE=format-check
       install: rustup component add rustfmt-preview
+    - env: SUITE=lint
+      install: rustup component add clippy-preview
+      rust: nightly

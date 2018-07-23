@@ -16,10 +16,11 @@ use protocol::{Annotated, Meta, Remark, RemarkType, Value};
 
 use super::builtin::BUILTIN_RULES;
 use super::chunk::{self, Chunk};
-use super::processor::{PiiKind, PiiProcessor, ProcessAnnotatedValue, ValueInfo};
+use super::pii::{PiiKind, PiiProcessor, ProcessAnnotatedValue, ValueInfo};
 
 lazy_static! {
-    static ref NULL_SPLIT_RE: Regex = Regex::new("\x00").unwrap();
+    static ref NULL_SPLIT_RE: Regex = #[cfg_attr(feature = "cargo-clippy", allow(trivial_regex))]
+    Regex::new("\x00").unwrap();
 }
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -185,6 +186,7 @@ pub(crate) enum RuleType {
 
 /// Defines the hash algorithm to use for hashing
 #[derive(Serialize, Deserialize, Debug)]
+#[cfg_attr(feature = "cargo-clippy", allow(enum_variant_names))]
 pub(crate) enum HashAlgorithm {
     /// HMAC-SHA1
     #[serde(rename = "HMAC-SHA1")]
@@ -284,7 +286,7 @@ fn in_range(range: (Option<i32>, Option<i32>), pos: usize, len: usize) -> bool {
     fn get_range_index(idx: Option<i32>, len: usize, default: usize) -> usize {
         match idx {
             None => default,
-            Some(idx) if idx < 0 => len.saturating_sub((idx * -1) as usize),
+            Some(idx) if idx < 0 => len.saturating_sub(-idx as usize),
             Some(idx) => cmp::min(idx as usize, len),
         }
     }
@@ -324,13 +326,13 @@ fn apply_regex_to_chunks(
         let mut pos = 0;
         for piece in NULL_SPLIT_RE.find_iter(text) {
             rv.push(Chunk::Text {
-                text: text[pos..piece.start()].to_string().into(),
+                text: text[pos..piece.start()].to_string(),
             });
             rv.push(replacement_chunks.pop().unwrap());
             pos = piece.end();
         }
         rv.push(Chunk::Text {
-            text: text[pos..].to_string().into(),
+            text: text[pos..].to_string(),
         });
     }
 
@@ -635,7 +637,7 @@ impl<'a> Rule<'a> {
                     redaction,
                     rv.0,
                     rv.1,
-                    &*$regex,
+                    $regex,
                     $replace_groups,
                     report_rule,
                     self.cfg,
@@ -648,15 +650,15 @@ impl<'a> Rule<'a> {
                 ref pattern,
                 ref replace_groups,
             } => apply_regex!(&pattern.0, replace_groups.as_ref()),
-            RuleType::Imei => apply_regex!(IMEI_REGEX, None),
-            RuleType::Mac => apply_regex!(MAC_REGEX, None),
-            RuleType::Email => apply_regex!(EMAIL_REGEX, None),
+            RuleType::Imei => apply_regex!(&IMEI_REGEX, None),
+            RuleType::Mac => apply_regex!(&MAC_REGEX, None),
+            RuleType::Email => apply_regex!(&EMAIL_REGEX, None),
             RuleType::Ip => {
-                apply_regex!(IPV4_REGEX, None);
-                apply_regex!(IPV6_REGEX, Some(&*GROUP_1));
+                apply_regex!(&IPV4_REGEX, None);
+                apply_regex!(&IPV6_REGEX, Some(&*GROUP_1));
             }
-            RuleType::Creditcard => apply_regex!(CREDITCARD_REGEX, None),
-            RuleType::Userpath => apply_regex!(PATH_REGEX, Some(&*GROUP_1)),
+            RuleType::Creditcard => apply_regex!(&CREDITCARD_REGEX, None),
+            RuleType::Userpath => apply_regex!(&PATH_REGEX, Some(&*GROUP_1)),
             RuleType::Alias {
                 ref rule,
                 hide_rule,
@@ -784,10 +786,7 @@ impl<'a> RuleBasedPiiProcessor<'a> {
             applications.insert(pii_kind, rules);
         }
 
-        RuleBasedPiiProcessor {
-            cfg: cfg,
-            applications: applications,
-        }
+        RuleBasedPiiProcessor { cfg, applications }
     }
 
     /// Returns a reference to the config that created the processor.
@@ -803,11 +802,7 @@ impl<'a> RuleBasedPiiProcessor<'a> {
         &self,
         value: Annotated<T>,
     ) -> Annotated<T> {
-        ProcessAnnotatedValue::process_annotated_value(
-            Annotated::from(value),
-            self,
-            &ValueInfo::default(),
-        )
+        ProcessAnnotatedValue::process_annotated_value(value, self, &ValueInfo::default())
     }
 }
 

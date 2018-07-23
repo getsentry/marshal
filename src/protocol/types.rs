@@ -66,33 +66,6 @@ impl fmt::Display for Level {
     }
 }
 
-impl Level {
-    /// A quick way to check if the level is `debug`.
-    pub fn is_debug(&self) -> bool {
-        *self == Level::Debug
-    }
-
-    /// A quick way to check if the level is `info`.
-    pub fn is_info(&self) -> bool {
-        *self == Level::Info
-    }
-
-    /// A quick way to check if the level is `warning`.
-    pub fn is_warning(&self) -> bool {
-        *self == Level::Warning
-    }
-
-    /// A quick way to check if the level is `error`.
-    pub fn is_error(&self) -> bool {
-        *self == Level::Error
-    }
-
-    /// A quick way to check if the level is `fatal`.
-    pub fn is_fatal(&self) -> bool {
-        *self == Level::Fatal
-    }
-}
-
 impl_str_serde!(Level);
 
 #[cfg(test)]
@@ -672,15 +645,15 @@ pub struct BrowserContext {
 #[derive(Debug, PartialEq)]
 pub enum Context {
     /// Device information.
-    Device(DeviceContext),
+    Device(Box<DeviceContext>),
     /// Operating system information.
-    Os(OsContext),
+    Os(Box<OsContext>),
     /// Runtime information.
-    Runtime(RuntimeContext),
+    Runtime(Box<RuntimeContext>),
     /// Application information.
-    App(AppContext),
+    App(Box<AppContext>),
     /// Web browser information.
-    Browser(BrowserContext),
+    Browser(Box<BrowserContext>),
     /// A context type that is unknown to this protocol specification.
     Other(String, Map<Value>),
 }
@@ -847,7 +820,7 @@ mod test_contexts {
   "timezone": "Europe/Vienna",
   "other": "value"
 }"#;
-        let context = Context::Device(DeviceContext {
+        let context = Context::Device(Box::new(DeviceContext {
             name: Some("iphone".to_string()).into(),
             family: Some("iphone".to_string()).into(),
             model: Some("iphone7,3".to_string()).into(),
@@ -873,7 +846,7 @@ mod test_contexts {
                 );
                 Annotated::from(map)
             },
-        });
+        }));
 
         assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
         assert_eq_str!(json, serde_json::to_string_pretty(&context).unwrap());
@@ -882,7 +855,7 @@ mod test_contexts {
     #[test]
     fn test_device_default_values() {
         let json = r#"{"type":"device"}"#;
-        let context = Context::Device(DeviceContext {
+        let context = Context::Device(Box::new(DeviceContext {
             name: None.into(),
             family: None.into(),
             model: None.into(),
@@ -901,7 +874,7 @@ mod test_contexts {
             boot_time: None.into(),
             timezone: None.into(),
             other: Default::default(),
-        });
+        }));
 
         assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
         assert_eq_str!(json, serde_json::to_string(&context).unwrap());
@@ -919,7 +892,7 @@ mod test_contexts {
   "raw_description": "iOS 11.4.2 FEEDFACE (17.4.0)",
   "other": "value"
 }"#;
-        let context = Context::Os(OsContext {
+        let context = Context::Os(Box::new(OsContext {
             name: Some("iOS".to_string()).into(),
             version: Some("11.4.2".to_string()).into(),
             build: Some("FEEDFACE".to_string()).into(),
@@ -934,7 +907,7 @@ mod test_contexts {
                 );
                 Annotated::from(map)
             },
-        });
+        }));
 
         assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
         assert_eq_str!(json, serde_json::to_string_pretty(&context).unwrap());
@@ -943,7 +916,7 @@ mod test_contexts {
     #[test]
     fn test_os_default_values() {
         let json = r#"{"type":"os"}"#;
-        let context = Context::Os(OsContext {
+        let context = Context::Os(Box::new(OsContext {
             name: None.into(),
             version: None.into(),
             build: None.into(),
@@ -951,7 +924,7 @@ mod test_contexts {
             rooted: None.into(),
             raw_description: None.into(),
             other: Default::default(),
-        });
+        }));
 
         assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
         assert_eq_str!(json, serde_json::to_string(&context).unwrap());
@@ -966,7 +939,7 @@ mod test_contexts {
   "raw_description": "rustc 1.27.0 stable",
   "other": "value"
 }"#;
-        let context = Context::Runtime(RuntimeContext {
+        let context = Context::Runtime(Box::new(RuntimeContext {
             name: Some("rustc".to_string()).into(),
             version: Some("1.27.0".to_string()).into(),
             raw_description: Some("rustc 1.27.0 stable".to_string()).into(),
@@ -978,7 +951,7 @@ mod test_contexts {
                 );
                 Annotated::from(map)
             },
-        });
+        }));
 
         assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
         assert_eq_str!(json, serde_json::to_string_pretty(&context).unwrap());
@@ -987,12 +960,12 @@ mod test_contexts {
     #[test]
     fn test_runtime_default_values() {
         let json = r#"{"type":"runtime"}"#;
-        let context = Context::Runtime(RuntimeContext {
+        let context = Context::Runtime(Box::new(RuntimeContext {
             name: None.into(),
             version: None.into(),
             raw_description: None.into(),
             other: Default::default(),
-        });
+        }));
 
         assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
         assert_eq_str!(json, serde_json::to_string(&context).unwrap());
@@ -1011,7 +984,7 @@ mod test_contexts {
   "app_build": "100001",
   "other": "value"
 }"#;
-        let context = Context::App(AppContext {
+        let context = Context::App(Box::new(AppContext {
             app_start_time: Some("2018-02-08T22:21:57Z".parse().unwrap()).into(),
             device_app_hash: Some("4c793e3776474877ae30618378e9662a".to_string()).into(),
             build_type: Some("testflight".to_string()).into(),
@@ -1027,7 +1000,7 @@ mod test_contexts {
                 );
                 Annotated::from(map)
             },
-        });
+        }));
 
         assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
         assert_eq_str!(json, serde_json::to_string_pretty(&context).unwrap());
@@ -1036,7 +1009,7 @@ mod test_contexts {
     #[test]
     fn test_app_default_values() {
         let json = r#"{"type":"app"}"#;
-        let context = Context::App(AppContext {
+        let context = Context::App(Box::new(AppContext {
             app_start_time: None.into(),
             device_app_hash: None.into(),
             build_type: None.into(),
@@ -1045,7 +1018,7 @@ mod test_contexts {
             app_version: None.into(),
             app_build: None.into(),
             other: Default::default(),
-        });
+        }));
 
         assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
         assert_eq_str!(json, serde_json::to_string(&context).unwrap());
@@ -1058,7 +1031,7 @@ mod test_contexts {
   "version": "67.0.3396.99",
   "other": "value"
 }"#;
-        let context = Context::Browser(BrowserContext {
+        let context = Context::Browser(Box::new(BrowserContext {
             name: Some("Google Chrome".to_string()).into(),
             version: Some("67.0.3396.99".to_string()).into(),
             other: {
@@ -1069,7 +1042,7 @@ mod test_contexts {
                 );
                 Annotated::from(map)
             },
-        });
+        }));
 
         assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
         assert_eq_str!(json, serde_json::to_string_pretty(&context).unwrap());
@@ -1078,11 +1051,11 @@ mod test_contexts {
     #[test]
     fn test_browser_default_values() {
         let json = r#"{"type":"browser"}"#;
-        let context = Context::Browser(BrowserContext {
+        let context = Context::Browser(Box::new(BrowserContext {
             name: None.into(),
             version: None.into(),
             other: Default::default(),
-        });
+        }));
 
         assert_eq_dbg!(context, serde_json::from_str(json).unwrap());
         assert_eq_str!(json, serde_json::to_string(&context).unwrap());
@@ -2419,11 +2392,11 @@ pub struct ProguardDebugImage {
 pub enum DebugImage {
     /// Apple debug images (machos).  This is currently also used for non apple platforms with
     /// similar debug setups.
-    Apple(AppleDebugImage),
+    Apple(Box<AppleDebugImage>),
     /// Symbolic (new style) debug infos.
-    Symbolic(SymbolicDebugImage),
+    Symbolic(Box<SymbolicDebugImage>),
     /// A reference to a proguard debug file.
-    Proguard(ProguardDebugImage),
+    Proguard(Box<ProguardDebugImage>),
     /// A debug image that is unknown to this protocol specification.
     Other(String, Map<Value>),
 }
@@ -2550,7 +2523,7 @@ mod test_debug_image {
   "uuid": "395835f4-03e0-4436-80d3-136f0749a893",
   "other": "value"
 }"#;
-        let image = DebugImage::Proguard(ProguardDebugImage {
+        let image = DebugImage::Proguard(Box::new(ProguardDebugImage {
             uuid: "395835f4-03e0-4436-80d3-136f0749a893"
                 .parse::<Uuid>()
                 .unwrap()
@@ -2563,7 +2536,7 @@ mod test_debug_image {
                 );
                 Annotated::from(map)
             },
-        });
+        }));
 
         assert_eq_dbg!(image, serde_json::from_str(json).unwrap());
         assert_eq_str!(json, serde_json::to_string_pretty(&image).unwrap());
@@ -2584,7 +2557,7 @@ mod test_debug_image {
   "other": "value"
 }"#;
 
-        let image = DebugImage::Apple(AppleDebugImage {
+        let image = DebugImage::Apple(Box::new(AppleDebugImage {
             name: "CoreFoundation".to_string().into(),
             arch: Some("arm64".to_string()).into(),
             cpu_type: Some(1233).into(),
@@ -2604,7 +2577,7 @@ mod test_debug_image {
                 );
                 Annotated::from(map)
             },
-        });
+        }));
 
         assert_eq_dbg!(image, serde_json::from_str(json).unwrap());
         assert_eq_str!(json, serde_json::to_string_pretty(&image).unwrap());
@@ -2621,7 +2594,7 @@ mod test_debug_image {
   "uuid": "494f3aea-88fa-4296-9644-fa8ef5d139b6"
 }"#;
 
-        let image = DebugImage::Apple(AppleDebugImage {
+        let image = DebugImage::Apple(Box::new(AppleDebugImage {
             name: "CoreFoundation".to_string().into(),
             arch: None.into(),
             cpu_type: None.into(),
@@ -2634,7 +2607,7 @@ mod test_debug_image {
                 .unwrap()
                 .into(),
             other: Default::default(),
-        });
+        }));
 
         assert_eq_dbg!(image, serde_json::from_str(json).unwrap());
         assert_eq_str!(json, serde_json::to_string_pretty(&image).unwrap());
@@ -2653,7 +2626,7 @@ mod test_debug_image {
   "other": "value"
 }"#;
 
-        let image = DebugImage::Symbolic(SymbolicDebugImage {
+        let image = DebugImage::Symbolic(Box::new(SymbolicDebugImage {
             name: "CoreFoundation".to_string().into(),
             arch: Some("arm64".to_string()).into(),
             image_addr: Addr(0).into(),
@@ -2671,7 +2644,7 @@ mod test_debug_image {
                 );
                 Annotated::from(map)
             },
-        });
+        }));
 
         assert_eq_dbg!(image, serde_json::from_str(json).unwrap());
         assert_eq_str!(json, serde_json::to_string_pretty(&image).unwrap());
@@ -2688,7 +2661,7 @@ mod test_debug_image {
   "id": "494f3aea-88fa-4296-9644-fa8ef5d139b6-1234"
 }"#;
 
-        let image = DebugImage::Symbolic(SymbolicDebugImage {
+        let image = DebugImage::Symbolic(Box::new(SymbolicDebugImage {
             name: "CoreFoundation".to_string().into(),
             arch: None.into(),
             image_addr: Addr(0).into(),
@@ -2699,7 +2672,7 @@ mod test_debug_image {
                 .unwrap()
                 .into(),
             other: Default::default(),
-        });
+        }));
 
         assert_eq_dbg!(image, serde_json::from_str(json).unwrap());
         assert_eq_str!(json, serde_json::to_string_pretty(&image).unwrap());
@@ -3211,14 +3184,14 @@ mod event {
             Ok(Event {
                 id: id.unwrap_or_default(),
                 level: level.unwrap_or_default(),
-                fingerprint: fingerprint.unwrap_or_else(|| fingerprint::default()),
+                fingerprint: fingerprint.unwrap_or_else(fingerprint::default),
                 culprit: culprit.unwrap_or_default(),
                 transaction: transaction.unwrap_or_default(),
                 message: message.unwrap_or_default(),
                 logentry: logentry.unwrap_or_default(),
                 logger: logger.unwrap_or_default(),
                 modules: modules.unwrap_or_default(),
-                platform: platform.unwrap_or_else(|| default_platform()),
+                platform: platform.unwrap_or_else(default_platform),
                 timestamp: timestamp.unwrap_or_default(),
                 server_name: server_name.unwrap_or_default(),
                 release: release.unwrap_or_default(),

@@ -59,7 +59,7 @@ impl Remark {
     pub fn new<S: Into<String>>(ty: RemarkType, rule_id: S) -> Self {
         Remark {
             rule_id: rule_id.into(),
-            ty: ty,
+            ty,
             range: None,
         }
     }
@@ -68,7 +68,7 @@ impl Remark {
     pub fn with_range<S: Into<String>>(ty: RemarkType, rule_id: S, range: Range) -> Self {
         Remark {
             rule_id: rule_id.into(),
-            ty: ty,
+            ty,
             range: Some(range),
         }
     }
@@ -86,6 +86,11 @@ impl Remark {
     /// The length of this range.
     pub fn len(&self) -> Option<usize> {
         self.range.map(|r| r.1 - r.0)
+    }
+
+    /// Indicates if the remark refers to an empty range
+    pub fn is_empty(&self) -> bool {
+        self.len().map_or(false, |l| l == 0)
     }
 
     /// Returns the type.
@@ -331,6 +336,7 @@ impl<T> Annotated<T> {
     }
 
     /// Custom deserialize implementation that merges meta data from the deserializer.
+    #[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
     pub fn deserialize_with<'de, D, C>(deserializer: D, _custom: C) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,

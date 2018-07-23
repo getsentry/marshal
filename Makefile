@@ -11,6 +11,9 @@ test: cargotest
 cargotest:
 	@cargo test --all-features
 
+format:
+	@cargo fmt
+
 format-check:
 	@cargo fmt -- --write-mode diff
 

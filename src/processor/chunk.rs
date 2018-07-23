@@ -43,7 +43,7 @@ pub fn chunks_from_str(text: &str, meta: &Meta) -> Vec<Chunk> {
 
     for remark in meta.remarks() {
         let (start, end) = match remark.range() {
-            Some(range) => range.clone(),
+            Some(range) => *range,
             None => continue,
         };
 

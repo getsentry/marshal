@@ -8,7 +8,7 @@ fn state_with_parent_path<F: FnOnce(Rc<Path>) -> Rc<Path>>(state: &State, f: F) 
     let mut rv = state.clone();
     let parent = state
         .get::<Rc<Path>>()
-        .map(|x| x.clone())
+        .cloned()
         .unwrap_or_else(|| Rc::new(Path::Root));
     rv.set(f(parent));
     rv
@@ -80,10 +80,7 @@ pub struct TrackedDeserializer<D> {
 impl<D> TrackedDeserializer<D> {
     pub fn new(de: D, mut state: State) -> Self {
         state.set(Rc::new(Path::Root));
-        TrackedDeserializer {
-            de: de,
-            state: state,
-        }
+        TrackedDeserializer { de, state }
     }
 }
 
@@ -279,7 +276,7 @@ struct TrackedVisitor<X> {
 impl<X> TrackedVisitor<X> {
     fn new(delegate: X, state: &State) -> Self {
         TrackedVisitor {
-            delegate: delegate,
+            delegate,
             state: state.clone(),
         }
     }
@@ -476,10 +473,7 @@ struct CaptureKey<'a, X> {
 
 impl<'a, X> CaptureKey<'a, X> {
     fn new(delegate: X, key: &'a mut Option<String>) -> Self {
-        CaptureKey {
-            delegate: delegate,
-            key: key,
-        }
+        CaptureKey { delegate, key }
     }
 }
 
@@ -807,10 +801,7 @@ struct TrackedSeed<X> {
 
 impl<X> TrackedSeed<X> {
     fn new(seed: X, state: State) -> Self {
-        TrackedSeed {
-            seed: seed,
-            state: state,
-        }
+        TrackedSeed { seed, state }
     }
 }
 
@@ -838,7 +829,7 @@ struct SeqAccess<X> {
 impl<X> SeqAccess<X> {
     fn new(delegate: X, state: &State) -> Self {
         SeqAccess {
-            delegate: delegate,
+            delegate,
             state: state.clone(),
             index: 0,
         }
@@ -883,7 +874,7 @@ struct MapAccess<X> {
 impl<X> MapAccess<X> {
     fn new(delegate: X, state: &State) -> Self {
         MapAccess {
-            delegate: delegate,
+            delegate,
             state: state.clone(),
             key: None,
         }
