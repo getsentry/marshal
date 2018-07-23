@@ -959,10 +959,10 @@ mod tests {
             }
         );
 
-        let foo = new_event.extra.value().unwrap().get("foo").unwrap();
-        assert!(foo.value().is_none());
+        let annotated = new_event.extra.value().unwrap().get("foo").unwrap();
+        assert!(annotated.value().is_none());
         assert_eq_dbg!(
-            foo.meta(),
+            annotated.meta(),
             &Meta {
                 remarks: vec![Remark::new(RemarkType::Removed, "remove_foo")],
                 errors: vec![],

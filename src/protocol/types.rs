@@ -389,7 +389,7 @@ mod test_request {
             data: {
                 let mut map = Map::new();
                 map.insert("some".to_string(), Value::U64(1).into());
-                Annotated::from(Some(Value::Map(map.into())))
+                Annotated::from(Some(Value::Map(map)))
             },
             query_string: Some("q=foo".to_string()).into(),
             cookies: Some("GOOGLE=1".to_string()).into(),
@@ -826,16 +826,16 @@ mod test_contexts {
             model: Some("iphone7,3".to_string()).into(),
             model_id: Some("AH223".to_string()).into(),
             arch: Some("arm64".to_string()).into(),
-            battery_level: Some(58.5.into()).into(),
+            battery_level: Some(58.5).into(),
             orientation: Some("landscape".to_string()).into(),
             simulator: Some(true).into(),
-            memory_size: Some(3137978368).into(),
-            free_memory: Some(322781184).into(),
-            usable_memory: Some(2843525120).into(),
-            storage_size: Some(63989469184).into(),
-            free_storage: Some(31994734592).into(),
-            external_storage_size: Some(2097152).into(),
-            external_free_storage: Some(2097152).into(),
+            memory_size: Some(3_137_978_368).into(),
+            free_memory: Some(322_781_184).into(),
+            usable_memory: Some(2_843_525_120).into(),
+            storage_size: Some(63_989_469_184).into(),
+            free_storage: Some(31_994_734_592).into(),
+            external_storage_size: Some(2_097_152).into(),
+            external_free_storage: Some(2_097_152).into(),
             boot_time: Some("2018-02-08T12:52:12Z".parse().unwrap()).into(),
             timezone: Some("Europe/Vienna".to_string()).into(),
             other: {
@@ -1480,10 +1480,10 @@ mod test_stacktrace {
             frames_omitted: Some((0, 2)).into(),
             registers: {
                 let mut map = Map::new();
-                map.insert("cspr".to_string(), RegVal(0x20000000).into());
-                map.insert("lr".to_string(), RegVal(0x18a31aadc).into());
-                map.insert("pc".to_string(), RegVal(0x18a310ea4).into());
-                map.insert("sp".to_string(), RegVal(0x16fd75060).into());
+                map.insert("cspr".to_string(), RegVal(0x2000_0000).into());
+                map.insert("lr".to_string(), RegVal(0x1_8a31_aadc).into());
+                map.insert("pc".to_string(), RegVal(0x1_8a31_0ea4).into());
+                map.insert("sp".to_string(), RegVal(0x1_6fd7_5060).into());
                 Annotated::from(map)
             },
             other: {
@@ -3114,7 +3114,7 @@ mod event {
             let mut other: Map<Value> = Default::default();
 
             for (key, content) in BTreeMap::<String, Content>::deserialize(deserializer)? {
-                if key.starts_with("_") {
+                if key.starts_with('_') {
                     continue;
                 }
 
