@@ -3114,9 +3114,12 @@ mod event {
             let mut other: Map<Value> = Default::default();
 
             for (key, content) in BTreeMap::<String, Content>::deserialize(deserializer)? {
+                if key.starts_with("_") {
+                    continue;
+                }
+
                 let deserializer = ContentDeserializer::new(content);
                 match key.as_str() {
-                    "" => (),
                     "event_id" => id = Some(Deserialize::deserialize(deserializer)?),
                     "level" => level = Some(Deserialize::deserialize(deserializer)?),
                     "fingerprint" => fingerprint = Some(fingerprint::deserialize(deserializer)?),
@@ -3402,7 +3405,7 @@ mod test_event {
     "extra": "value"
   },
   "other": "value",
-  "": {
+  "_meta": {
     "event_id": {
       "": {
         "err": [

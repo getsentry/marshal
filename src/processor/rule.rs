@@ -983,43 +983,105 @@ mod tests {
             }
         );
 
-        let value = processed_event.to_json().unwrap();
-        assert_eq_str!(value, "{\"message\":\"Hello *****@*****.***.  You signed up with card ****-****-****-1234. Your home folder is C:\\\\Users\\\\[username] Look at our compliance from 5A2DF387CD660E9F3E0AB20F9E7805450D56C5DACE9B959FC620C336E2B5D09A\",\"extra\":{\"bar\":true,\"foo\":null},\"ip\":null,\"\":{\"extra\":{\"foo\":{\"\":{\"rem\":[[\"remove_foo\",\"x\"]]}}},\"ip\":{\"\":{\"rem\":[[\"remove_ip\",\"x\"]]}},\"message\":{\"\":{\"len\":142,\"rem\":[[\"email_address\",\"m\",6,21],[\"creditcard_number\",\"m\",48,67],[\"path_username\",\"s\",98,108],[\"hash_ip\",\"p\",137,201]]}}}}");
+        let value = processed_event.to_json_pretty().unwrap();
+        assert_eq_str!(value, r#"{
+  "message": "Hello *****@*****.***.  You signed up with card ****-****-****-1234. Your home folder is C:\\Users\\[username] Look at our compliance from 5A2DF387CD660E9F3E0AB20F9E7805450D56C5DACE9B959FC620C336E2B5D09A",
+  "extra": {
+    "bar": true,
+    "foo": null
+  },
+  "ip": null,
+  "_meta": {
+    "extra": {
+      "foo": {
+        "": {
+          "rem": [
+            [
+              "remove_foo",
+              "x"
+            ]
+          ]
+        }
+      }
+    },
+    "ip": {
+      "": {
+        "rem": [
+          [
+            "remove_ip",
+            "x"
+          ]
+        ]
+      }
+    },
+    "message": {
+      "": {
+        "len": 142,
+        "rem": [
+          [
+            "email_address",
+            "m",
+            6,
+            21
+          ],
+          [
+            "creditcard_number",
+            "m",
+            48,
+            67
+          ],
+          [
+            "path_username",
+            "s",
+            98,
+            108
+          ],
+          [
+            "hash_ip",
+            "p",
+            137,
+            201
+          ]
+        ]
+      }
+    }
+  }
+}"#);
     }
 
     #[test]
     fn test_well_known_stripping() {
         let cfg = PiiConfig::from_json(
             r#"{
-        "rules": {
-            "user_id": {
-                "type": "pattern",
-                "pattern": "u/[a-f0-9]{12}",
-                "redaction": {
-                    "method": "replace",
-                    "text": "[user-id]"
+            "rules": {
+                "user_id": {
+                    "type": "pattern",
+                    "pattern": "u/[a-f0-9]{12}",
+                    "redaction": {
+                        "method": "replace",
+                        "text": "[user-id]"
+                    }
+                },
+                "device_id": {
+                    "type": "pattern",
+                    "pattern": "d/[a-f0-9]{12}",
+                    "redaction": {
+                        "method": "replace",
+                        "text": "[device-id]"
+                    }
+                },
+                "ids": {
+                    "type": "multiple",
+                    "rules": [
+                        "user_id",
+                        "device_id"
+                    ]
                 }
             },
-            "device_id": {
-                "type": "pattern",
-                "pattern": "d/[a-f0-9]{12}",
-                "redaction": {
-                    "method": "replace",
-                    "text": "[device-id]"
-                }
-            },
-            "ids": {
-                "type": "multiple",
-                "rules": [
-                    "user_id",
-                    "device_id"
-                ]
+            "applications": {
+                "freeform": ["ids", "@ip:replace"]
             }
-        },
-        "applications": {
-            "freeform": ["ids", "@ip:replace"]
-        }
-    }"#,
+        }"#,
         ).unwrap();
 
         #[derive(ProcessAnnotatedValue, Debug, Deserialize, Serialize, Clone)]
@@ -1029,11 +1091,9 @@ mod tests {
         }
 
         let event = Annotated::<Event>::from_json(
-            r#"
-        {
+            r#"{
             "message": "u/f444e9498e6b on d/db3d6129ca10 (144.132.11.23): Hello World!"
-        }
-    "#,
+        }"#,
         ).unwrap();
 
         let processor = cfg.processor();
@@ -1057,8 +1117,40 @@ mod tests {
             }
         );
 
-        let value = processed_event.to_json().unwrap();
-        assert_eq_str!(value, "{\"message\":\"[user-id] on [device-id] ([ip]): Hello World!\",\"\":{\"message\":{\"\":{\"len\":62,\"rem\":[[\"user_id\",\"s\",0,9],[\"device_id\",\"s\",13,24],[\"@ip:replace\",\"s\",26,30]]}}}}");
+        let value = processed_event.to_json_pretty().unwrap();
+        assert_eq_str!(
+            value,
+            r#"{
+  "message": "[user-id] on [device-id] ([ip]): Hello World!",
+  "_meta": {
+    "message": {
+      "": {
+        "len": 62,
+        "rem": [
+          [
+            "user_id",
+            "s",
+            0,
+            9
+          ],
+          [
+            "device_id",
+            "s",
+            13,
+            24
+          ],
+          [
+            "@ip:replace",
+            "s",
+            26,
+            30
+          ]
+        ]
+      }
+    }
+  }
+}"#
+        );
     }
 
     #[test]
@@ -1137,7 +1229,39 @@ mod tests {
             }
         );
 
-        let value = processed_event.to_json().unwrap();
-        assert_eq_str!(value, "{\"message\":\"[id] on [id] ([id]): Hello World!\",\"\":{\"message\":{\"\":{\"len\":62,\"rem\":[[\"ids\",\"s\",0,4],[\"ids\",\"s\",8,12],[\"ids\",\"s\",14,18]]}}}}");
+        let value = processed_event.to_json_pretty().unwrap();
+        assert_eq_str!(
+            value,
+            r#"{
+  "message": "[id] on [id] ([id]): Hello World!",
+  "_meta": {
+    "message": {
+      "": {
+        "len": 62,
+        "rem": [
+          [
+            "ids",
+            "s",
+            0,
+            4
+          ],
+          [
+            "ids",
+            "s",
+            8,
+            12
+          ],
+          [
+            "ids",
+            "s",
+            14,
+            18
+          ]
+        ]
+      }
+    }
+  }
+}"#
+        );
     }
 }

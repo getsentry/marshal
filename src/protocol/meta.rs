@@ -269,13 +269,13 @@ impl<'de, T: Deserialize<'de>> Annotated<T> {
     ) -> Result<Annotated<T>, D::Error> {
         #[derive(Debug, Deserialize)]
         struct MetaDeserializeHelper {
-            #[serde(rename = "")]
-            metadata: Option<MetaMap>,
+            #[serde(rename = "_meta")]
+            meta: Option<MetaMap>,
         }
 
         let content = Content::deserialize(deserializer)?;
         let helper = MetaDeserializeHelper::deserialize(ContentRefDeserializer::new(&content))?;
-        let meta_map = helper.metadata.unwrap_or_default();
+        let meta_map = helper.meta.unwrap_or_default();
         deserialize_meta(ContentDeserializer::new(content), meta_map)
     }
 
@@ -294,13 +294,13 @@ impl<T: Serialize> Annotated<T> {
         struct MetaSerializeHelper<'a, T: Serialize + 'a> {
             #[serde(flatten)]
             event: Option<&'a T>,
-            #[serde(rename = "", skip_serializing_if = "MetaTree::is_empty")]
-            metadata: MetaTree,
+            #[serde(rename = "_meta", skip_serializing_if = "MetaTree::is_empty")]
+            meta: MetaTree,
         }
 
         MetaSerializeHelper {
             event: self.value(),
-            metadata: serialize_meta(self).map_err(S::Error::custom)?,
+            meta: serialize_meta(self).map_err(S::Error::custom)?,
         }.serialize(serializer)
     }
 
