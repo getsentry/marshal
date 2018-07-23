@@ -1,0 +1,157 @@
+{
+  "event_id": "a568161a4f9f4d8d946a366908e3fb57",
+  "transaction": "eval at <anonymous> (unknown source), <anonymous>",
+  "logger": "javascript",
+  "platform": "javascript",
+  "release": "sentry-electron-test@2.0.2",
+  "environment": "development",
+  "user": {
+    "ip_address": "{{auto}}"
+  },
+  "request": {
+    "url": "app:///dist/index.html"
+  },
+  "contexts": {
+    "app": {
+      "type": "app",
+      "app_name": "Sentry Crash Test",
+      "app_version": "2.0.2"
+    },
+    "chrome": {
+      "type": "runtime",
+      "name": "Chrome",
+      "version": "61.0.3163.100"
+    },
+    "device": {
+      "type": "device",
+      "arch": "x64"
+    },
+    "node": {
+      "type": "runtime",
+      "name": "Node",
+      "version": "8.9.3"
+    },
+    "os": {
+      "type": "os",
+      "name": "Mac OS X",
+      "version": "10.13.6",
+      "build": "17G65",
+      "kernel_version": "17.7.0"
+    },
+    "runtime": {
+      "type": "runtime",
+      "name": "Electron",
+      "version": "2.0.2"
+    }
+  },
+  "breadcrumbs": {
+    "values": [
+      {
+        "timestamp": 1532344755.697,
+        "type": "ui",
+        "category": "electron",
+        "level": "info",
+        "message": "app.will-finish-launching"
+      },
+      {
+        "timestamp": 1532344755.729,
+        "type": "ui",
+        "category": "electron",
+        "level": "info",
+        "message": "app.ready"
+      },
+      {
+        "timestamp": 1532344755.747999,
+        "type": "ui",
+        "category": "electron",
+        "level": "info",
+        "message": "app.session-created"
+      },
+      {
+        "timestamp": 1532344755.778,
+        "type": "ui",
+        "category": "electron",
+        "level": "info",
+        "message": "app.web-contents-created"
+      },
+      {
+        "timestamp": 1532344755.819,
+        "type": "ui",
+        "category": "electron",
+        "level": "info",
+        "message": "app.browser-window-created"
+      },
+      {
+        "timestamp": 1532344756.030999,
+        "type": "ui",
+        "category": "electron",
+        "level": "info",
+        "message": "app.browser-window-focus"
+      },
+      {
+        "timestamp": 1532344756.631,
+        "type": "ui",
+        "category": "electron",
+        "level": "info",
+        "message": "WebContents[1].dom-ready"
+      },
+      {
+        "timestamp": 1532344759.124,
+        "type": "default",
+        "category": "ui.click",
+        "level": "info",
+        "message": "body"
+      },
+      {
+        "timestamp": 1532344759.992,
+        "type": "default",
+        "category": "ui.click",
+        "level": "info",
+        "message": "body > div.main > div.group > a.crash"
+      }
+    ]
+  },
+  "exception": {
+    "values": [
+      {
+        "type": "Error",
+        "value": "Error triggered in renderer process",
+        "stacktrace": {
+          "frames": [
+            {
+              "function": "?",
+              "filename": "<anonymous>",
+              "lineno": 1,
+              "colno": 1,
+              "in_app": true
+            },
+            {
+              "function": "window.errorRenderer",
+              "filename": "eval at <anonymous> (unknown source), <anonymous>",
+              "lineno": 2,
+              "colno": 83106,
+              "in_app": true
+            }
+          ]
+        }
+      }
+    ],
+    "mechanism": {
+      "handled": false,
+      "type": "onerror"
+    }
+  },
+  "tags": {
+    "event_type": "javascript"
+  },
+  "extra": {
+    "crashed_process": "renderer[1]",
+    "crashed_url": "app:///dist/index.html",
+    "session:duration": 3397
+  },
+  "sdk": {
+    "name": "sentry-electron",
+    "version": "0.7.0"
+  },
+  "project": "3"
+}
