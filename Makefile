@@ -20,4 +20,4 @@ format-check:
 lint:
 	@cargo +nightly clippy --all-features --tests -- -D clippy
 
-.PHONY: all doc test cargotest format-check lint
+.PHONY: all doc test cargotest format format-check lint
