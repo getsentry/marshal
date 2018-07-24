@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde::{de, ser};
 
 use super::meta::Annotated;
@@ -36,7 +36,10 @@ impl<'de> de::Visitor<'de> for SecondsTimestampVisitor {
     }
 
     fn visit_str<E: de::Error>(self, value: &str) -> Result<Self::Value, E> {
-        value.parse().map_err(|e| E::custom(format!("{}", e)))
+        match value.parse::<NaiveDateTime>() {
+            Ok(dt) => Ok(DateTime::from_utc(dt, Utc)),
+            Err(_) => value.parse(),
+        }.map_err(|e| E::custom(format!("{}", e)))
     }
 }
 
@@ -134,6 +137,24 @@ mod tests {
     #[test]
     fn test_date() {
         let deserializer = &mut Deserializer::from_str("\"2000-01-01T00:00:00Z\"");
+        assert_eq_dbg!(
+            deserialize(deserializer).unwrap(),
+            Annotated::from(Utc.ymd(2000, 1, 1).and_hms(0, 0, 0))
+        );
+    }
+
+    #[test]
+    fn test_date_with_timezone() {
+        let deserializer = &mut Deserializer::from_str("\"2000-01-01T09:00:00+09:00\"");
+        assert_eq_dbg!(
+            deserialize(deserializer).unwrap(),
+            Annotated::from(Utc.ymd(2000, 1, 1).and_hms(0, 0, 0))
+        );
+    }
+
+    #[test]
+    fn test_date_without_timezone() {
+        let deserializer = &mut Deserializer::from_str("\"2000-01-01T00:00:00\"");
         assert_eq_dbg!(
             deserialize(deserializer).unwrap(),
             Annotated::from(Utc.ymd(2000, 1, 1).and_hms(0, 0, 0))
