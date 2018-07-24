@@ -2913,10 +2913,6 @@ mod fingerprint {
             Ok(Fingerprint(Some(v.to_string())))
         }
 
-        fn visit_borrowed_str<E: de::Error>(self, v: &'de str) -> Result<Self::Value, E> {
-            Ok(Fingerprint(Some(v.to_string())))
-        }
-
         fn visit_string<E: de::Error>(self, v: String) -> Result<Self::Value, E> {
             Ok(Fingerprint(Some(v)))
         }

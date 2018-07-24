@@ -156,20 +156,6 @@ macro_rules! impl_hex_de {
                     fn visit_str<E: ::serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
                         v.parse().map_err(::serde::de::Error::custom)
                     }
-
-                    fn visit_borrowed_str<E: ::serde::de::Error>(
-                        self,
-                        v: &'de str,
-                    ) -> Result<Self::Value, E> {
-                        v.parse().map_err(::serde::de::Error::custom)
-                    }
-
-                    fn visit_string<E: ::serde::de::Error>(
-                        self,
-                        v: String,
-                    ) -> Result<Self::Value, E> {
-                        v.parse().map_err(::serde::de::Error::custom)
-                    }
                 }
 
                 deserializer.deserialize_any(HexVisitor)

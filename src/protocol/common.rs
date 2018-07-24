@@ -209,13 +209,6 @@ impl<'de> de::Visitor<'de> for ValueVisitor {
         Ok(Value::String(v.to_string()))
     }
 
-    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        Ok(Value::String(v.to_string()))
-    }
-
     fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -228,20 +221,6 @@ impl<'de> de::Visitor<'de> for ValueVisitor {
         E: de::Error,
     {
         Ok(Value::String(String::from_utf8_lossy(v).into_owned()))
-    }
-
-    fn visit_borrowed_bytes<E>(self, v: &'de [u8]) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        Ok(Value::String(String::from_utf8_lossy(v).into_owned()))
-    }
-
-    fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        Ok(Value::String(String::from_utf8_lossy(&v).into_owned()))
     }
 
     fn visit_none<E>(self) -> Result<Self::Value, E>
