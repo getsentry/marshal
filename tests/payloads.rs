@@ -73,9 +73,11 @@ macro_rules! test_all {
         mod $mode {
             use super::read_fixture;
 
+            run!($mode, cocoa);
             run!($mode, dotnet);
             run!($mode, electron_main);
             run!($mode, electron_renderer);
+            run!($mode, swift);
         }
     };
 }
