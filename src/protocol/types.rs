@@ -472,6 +472,7 @@ mod request {
         }
     }
 
+    #[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
     fn capitalize_header(header: String) -> String {
         header
             .split('-')
