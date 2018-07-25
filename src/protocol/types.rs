@@ -66,7 +66,44 @@ impl fmt::Display for Level {
     }
 }
 
-impl_str_serde!(Level);
+mod level {
+    use super::*;
+    use serde::de;
+
+    struct LevelVisitor;
+
+    impl<'de> de::Visitor<'de> for LevelVisitor {
+        type Value = Level;
+
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "a severity level")
+        }
+
+        fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+            // Log level from: https://docs.python.org/2/library/logging.html#logging-levels
+            Ok(match v {
+                10 => Level::Debug,
+                20 => Level::Info,
+                30 => Level::Warning,
+                40 => Level::Error,
+                50 => Level::Fatal,
+                _ => return Err(E::custom(ParseLevelError)),
+            })
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            v.parse().map_err(E::custom)
+        }
+    }
+
+    impl<'de> Deserialize<'de> for Level {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            deserializer.deserialize_any(LevelVisitor)
+        }
+    }
+
+    impl_str_ser!(Level);
+}
 
 #[cfg(test)]
 mod test_level {
@@ -76,6 +113,11 @@ mod test_level {
     #[test]
     fn test_log() {
         assert_eq_dbg!(Level::Info, serde_json::from_str("\"log\"").unwrap());
+    }
+
+    #[test]
+    fn test_numeric() {
+        assert_eq_dbg!(Level::Warning, serde_json::from_str("30").unwrap());
     }
 }
 
