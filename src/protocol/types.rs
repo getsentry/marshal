@@ -3511,4 +3511,79 @@ mod test_event {
         assert_eq_dbg!(event, serde_json::from_str(json).unwrap());
         assert_eq_str!(json, serde_json::to_string_pretty(&event).unwrap());
     }
+
+    #[test]
+    fn test_default_values_with_meta() {
+        let json = r#"{
+  "event_id": "52df9022835246eeb317dbd739ccd059",
+  "fingerprint": [
+    "{{ default }}"
+  ],
+  "platform": "other",
+  "_meta": {
+    "event_id": {
+      "": {
+        "err": [
+          "some error"
+        ]
+      }
+    },
+    "fingerprint": {
+      "": {
+        "err": [
+          "some error"
+        ]
+      }
+    },
+    "platform": {
+      "": {
+        "err": [
+          "some error"
+        ]
+      }
+    }
+  }
+}"#;
+
+        let event = Annotated::from(Event {
+            id: Annotated::new(
+                Some("52df9022-8352-46ee-b317-dbd739ccd059".parse().unwrap()),
+                Meta::from_error("some error"),
+            ),
+            level: None.into(),
+            fingerprint: Annotated::new(
+                vec!["{{ default }}".to_string()],
+                Meta::from_error("some error"),
+            ),
+            culprit: None.into(),
+            transaction: None.into(),
+            message: None.into(),
+            logentry: None.into(),
+            logger: None.into(),
+            modules: Default::default(),
+            platform: Annotated::new("other".to_string(), Meta::from_error("some error")),
+            timestamp: None.into(),
+            server_name: None.into(),
+            release: None.into(),
+            dist: None.into(),
+            repos: Default::default(),
+            environment: None.into(),
+            user: None.into(),
+            request: None.into(),
+            contexts: Default::default(),
+            breadcrumbs: Default::default(),
+            exceptions: Default::default(),
+            stacktrace: None.into(),
+            template_info: None.into(),
+            threads: Default::default(),
+            tags: Default::default(),
+            extra: Default::default(),
+            debug_meta: None.into(),
+            client_sdk: None.into(),
+            other: Default::default(),
+        });
+
+        assert_eq_dbg!(event, deserialize(json).unwrap());
+        assert_eq_str!(json, serialize(&event).unwrap());
+    }
 }

@@ -7,8 +7,16 @@ pub fn skip_if<T, F>(annotated: &Annotated<T>, predicate: F) -> bool
 where
     F: FnOnce(&T) -> bool,
 {
-    // Always serialize meta data. The MetaTreeSerializer will automatically remove empty nodes.
-    !should_serialize_meta() && annotated.value().map_or(false, predicate)
+    // There are two serialization modes:
+    //  1. Data serialization (default). If there is meta data attached, we must not skip this
+    //     value, as otherwise deserialization in the next relay will not pick it up later.
+    //     Otherwise, we can safely execute the predicate.
+    //  2. Meta serialization. We can never skip, and the MetaTreeSerializer will recursively prune
+    //     empty meta nodes.
+
+    !should_serialize_meta()
+        && annotated.meta().is_empty()
+        && annotated.value().map_or(true, predicate)
 }
 
 pub fn is_false(annotated: &Annotated<bool>) -> bool {

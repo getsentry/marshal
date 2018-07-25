@@ -342,6 +342,12 @@ impl<T> Annotated<T> {
         D: Deserializer<'de>,
         C: CustomDeserialize<'de, T>,
     {
+        // TODO: Meta data is only fetched if the key is present. Otherwise, serde will simply use
+        // the value provided by `serde(default)` and skip this function alltogether. See
+        // `utils::skip_if` for more information.
+        //
+        // THIS IS A BUG AND NEEDS TO BE FIXED WITH CUSTOM DESERIALIZATION!
+
         let mut annotated = {
             let mut annotated = Annotated::<T>::empty();
 
