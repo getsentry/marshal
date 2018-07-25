@@ -176,7 +176,6 @@
     "url": "/Home/PostIndex",
     "method": "POST",
     "data": "{\n    \"a\": \"b\",\n    \"c\": [ { \"d\": \"e\",\n           \"f\": \"g\" } ]\n}\n",
-    "query_string": "",
     "headers": {
       "Accept": "application/json, text/javascript, */*; q=0.01",
       "Accept-Encoding": "gzip, deflate, br",

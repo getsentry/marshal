@@ -306,6 +306,14 @@ mod test_user {
     }
 }
 
+/// Wrapper type for query-string like maps.
+#[derive(Debug, Default, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct Query(pub Map<Value>);
+
+/// Wrapper type for request header maps.
+#[derive(Debug, Default, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct Headers(pub Map<String>);
+
 /// Http request information.
 #[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Request {
@@ -326,37 +334,147 @@ pub struct Request {
     pub data: Annotated<Option<Value>>,
 
     /// URL encoded HTTP query string.
-    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[serde(default, skip_serializing_if = "request::is_empty_query")]
     #[process_annotated_value(pii_kind = "freeform")]
-    // TODO: cap?
-    // TODO: normalize to dict
-    pub query_string: Annotated<Option<String>>,
+    pub query_string: Annotated<Query>,
 
     /// URL encoded contents of the Cookie header.
-    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[serde(default, skip_serializing_if = "request::is_empty_query")]
     #[process_annotated_value(pii_kind = "freeform")]
-    // TODO: cap?
-    // TODO: normalize to dict
-    pub cookies: Annotated<Option<String>>,
+    pub cookies: Annotated<Query>,
 
     /// HTTP request headers.
-    #[serde(default, skip_serializing_if = "utils::is_empty_map")]
+    #[serde(default, skip_serializing_if = "request::is_empty_headers")]
     #[process_annotated_value(pii_kind = "databag")]
-    // TODO: cap?
-    // TODO: normalize to capital case
-    pub headers: Annotated<Map<String>>,
+    pub headers: Annotated<Headers>,
 
     /// Server environment data, such as CGI/WSGI.
     #[serde(default, skip_serializing_if = "utils::is_empty_map")]
     #[process_annotated_value(pii_kind = "databag")]
     // TODO: cap?
-    // TODO: Map<Value>
-    pub env: Annotated<Map<String>>,
+    pub env: Annotated<Map<Value>>,
 
     /// Additional arbitrary fields for forwards compatibility.
     #[serde(flatten)]
     #[process_annotated_value(pii_kind = "databag")]
     pub other: Annotated<Map<Value>>,
+}
+
+mod request {
+    use queryst;
+    use serde::de;
+    use serde_json;
+
+    use super::super::utils;
+    use super::*;
+
+    pub fn is_empty_query(annotated: &Annotated<Query>) -> bool {
+        utils::skip_if(annotated, |query| query.0.is_empty())
+    }
+
+    pub fn is_empty_headers(annotated: &Annotated<Headers>) -> bool {
+        utils::skip_if(annotated, |headers| headers.0.is_empty())
+    }
+
+    struct ParseQueryError(String);
+
+    impl fmt::Display for ParseQueryError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "{}", self.0)
+        }
+    }
+
+    impl From<queryst::ParseError> for ParseQueryError {
+        fn from(error: queryst::ParseError) -> Self {
+            ParseQueryError(error.message)
+        }
+    }
+
+    impl From<serde_json::Error> for ParseQueryError {
+        fn from(error: serde_json::Error) -> Self {
+            ParseQueryError(error.to_string())
+        }
+    }
+
+    fn parse_qs(qs: &str) -> Result<Query, ParseQueryError> {
+        let value = queryst::parse(qs)?;
+        Ok(serde_json::from_value(value)?)
+    }
+
+    struct QueryVisitor;
+
+    impl<'de> de::Visitor<'de> for QueryVisitor {
+        type Value = Query;
+
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "a query string or map")
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            let qs = if v.starts_with('?') { &v[1..] } else { v };
+            parse_qs(qs).map_err(E::custom)
+        }
+
+        fn visit_map<A: de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+            let mut query = Map::new();
+            while let Some(entry) = map.next_entry()? {
+                query.insert(entry.0, entry.1);
+            }
+            Ok(Query(query))
+        }
+    }
+
+    impl<'de> Deserialize<'de> for Query {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            deserializer.deserialize_any(QueryVisitor)
+        }
+    }
+
+    fn capitalize_header(header: String) -> String {
+        header
+            .split('-')
+            .enumerate()
+            .fold(String::new(), |mut all, (i, part)| {
+                // join
+                if i > 0 {
+                    all.push_str("-");
+                }
+
+                // capitalize the first characters
+                let mut chars = part.chars();
+                if let Some(c) = chars.next() {
+                    all.extend(c.to_uppercase());
+                }
+
+                // copy all others
+                all.extend(chars);
+                all
+            })
+    }
+
+    struct HeadersVisitor;
+
+    impl<'de> de::Visitor<'de> for HeadersVisitor {
+        type Value = Headers;
+
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "a headers map")
+        }
+
+        fn visit_map<A: de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+            let mut headers = Map::new();
+            while let Some(entry) = map.next_entry()? {
+                headers.insert(capitalize_header(entry.0), entry.1);
+            }
+            Ok(Headers(headers))
+        }
+    }
+
+    impl<'de> Deserialize<'de> for Headers {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            deserializer.deserialize_map(HeadersVisitor)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -372,8 +490,12 @@ mod test_request {
   "data": {
     "some": 1
   },
-  "query_string": "q=foo",
-  "cookies": "GOOGLE=1",
+  "query_string": {
+    "q": "foo"
+  },
+  "cookies": {
+    "GOOGLE": 1
+  },
   "headers": {
     "Referer": "https://google.com/"
   },
@@ -391,21 +513,29 @@ mod test_request {
                 map.insert("some".to_string(), Value::U64(1).into());
                 Annotated::from(Some(Value::Map(map)))
             },
-            query_string: Some("q=foo".to_string()).into(),
-            cookies: Some("GOOGLE=1".to_string()).into(),
+            query_string: Query({
+                let mut map = Map::new();
+                map.insert("q".to_string(), Value::String("foo".to_string()).into());
+                map
+            }).into(),
+            cookies: Query({
+                let mut map = Map::new();
+                map.insert("GOOGLE".to_string(), Value::U64(1).into());
+                map
+            }).into(),
             headers: {
                 let mut map = Map::new();
                 map.insert(
                     "Referer".to_string(),
                     "https://google.com/".to_string().into(),
                 );
-                Annotated::from(map)
+                Annotated::from(Headers(map))
             },
             env: {
                 let mut map = Map::new();
                 map.insert(
                     "REMOTE_ADDR".to_string(),
-                    "213.47.147.207".to_string().into(),
+                    Value::String("213.47.147.207".to_string()).into(),
                 );
                 Annotated::from(map)
             },
@@ -430,8 +560,8 @@ mod test_request {
             url: None.into(),
             method: None.into(),
             data: None.into(),
-            query_string: None.into(),
-            cookies: None.into(),
+            query_string: Default::default(),
+            cookies: Default::default(),
             headers: Default::default(),
             env: Default::default(),
             other: Default::default(),
@@ -439,6 +569,55 @@ mod test_request {
 
         assert_eq_dbg!(request, serde_json::from_str(json).unwrap());
         assert_eq_str!(json, serde_json::to_string(&request).unwrap());
+    }
+
+    #[test]
+    fn test_query_string() {
+        let mut map = Map::new();
+        map.insert("foo".to_string(), Value::String("bar".to_string()).into());
+        let query = Annotated::from(Query(map));
+        assert_eq_dbg!(query, serde_json::from_str("\"foo=bar\"").unwrap());
+    }
+
+    #[test]
+    fn test_query_string_questionmark() {
+        let mut map = Map::new();
+        map.insert("foo".to_string(), Value::String("bar".to_string()).into());
+        let query = Annotated::from(Query(map));
+        assert_eq_dbg!(query, serde_json::from_str("\"?foo=bar\"").unwrap());
+    }
+
+    #[test]
+    fn test_query_object() {
+        let mut map = Map::new();
+        map.insert("foo".to_string(), Value::String("bar".to_string()).into());
+        let query = Annotated::from(Query(map));
+        assert_eq_dbg!(query, serde_json::from_str(r#"{"foo":"bar"}"#).unwrap());
+    }
+
+    #[test]
+    fn test_query_invalid() {
+        let query = Annotated::<Query>::from_error(
+            "invalid type: integer `42`, expected a query string or map",
+        );
+        assert_eq_dbg!(query, serde_json::from_str("42").unwrap());
+    }
+
+    #[test]
+    fn test_header_normalization() {
+        let json = r#"{
+  "accept": "application/json",
+  "x-sentry": "version=8",
+  "-other-": "header"
+}"#;
+
+        let mut map = Map::new();
+        map.insert("Accept".to_string(), "application/json".to_string().into());
+        map.insert("X-Sentry".to_string(), "version=8".to_string().into());
+        map.insert("-Other-".to_string(), "header".to_string().into());
+
+        let query = Annotated::from(Headers(map));
+        assert_eq_dbg!(query, serde_json::from_str(json).unwrap());
     }
 }
 
@@ -2883,7 +3062,7 @@ mod fingerprint {
     impl<'de> de::Visitor<'de> for FingerprintVisitor {
         type Value = Fingerprint;
 
-        fn expecting(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "a fingerprint value")
         }
 

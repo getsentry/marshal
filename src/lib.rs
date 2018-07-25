@@ -12,11 +12,12 @@ extern crate failure;
 extern crate failure_derive;
 #[macro_use]
 extern crate lazy_static;
+extern crate hmac;
+extern crate queryst;
 extern crate regex;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate hmac;
 extern crate serde_json;
 extern crate sha1;
 extern crate sha2;
