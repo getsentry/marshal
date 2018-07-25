@@ -1,0 +1,974 @@
+{
+  "event_id": "7ada2c428ec242b09a18db583965abb4",
+  "transaction": "main at mainHandler",
+  "message": "Error: Broken!",
+  "modules": {
+    "accepts": "1.3.5",
+    "array-flatten": "1.1.1",
+    "body-parser": "1.18.2",
+    "bytes": "3.0.0",
+    "charenc": "0.0.2",
+    "content-disposition": "0.5.2",
+    "content-type": "1.0.4",
+    "cookie": "0.3.1",
+    "cookie-signature": "1.0.6",
+    "crypt": "0.0.2",
+    "debug": "2.6.9",
+    "depd": "1.1.2",
+    "destroy": "1.0.4",
+    "ee-first": "1.1.1",
+    "encodeurl": "1.0.2",
+    "escape-html": "1.0.3",
+    "etag": "1.8.1",
+    "express": "4.16.3",
+    "finalhandler": "1.1.1",
+    "forwarded": "0.1.2",
+    "fresh": "0.5.2",
+    "http-errors": "1.6.3",
+    "iconv-lite": "0.4.19",
+    "inherits": "2.0.3",
+    "ipaddr.js": "1.6.0",
+    "is-buffer": "1.1.6",
+    "md5": "2.2.1",
+    "media-typer": "0.3.0",
+    "merge-descriptors": "1.0.1",
+    "methods": "1.1.2",
+    "mime": "1.4.1",
+    "mime-db": "1.35.0",
+    "mime-types": "2.1.19",
+    "ms": "2.0.0",
+    "negotiator": "0.6.1",
+    "on-finished": "2.3.0",
+    "parseurl": "1.3.2",
+    "path-to-regexp": "0.1.7",
+    "proxy-addr": "2.0.3",
+    "qs": "6.5.1",
+    "range-parser": "1.2.0",
+    "raven": "2.6.3",
+    "raw-body": "2.3.2",
+    "safe-buffer": "5.1.1",
+    "send": "0.16.2",
+    "serve-static": "1.13.2",
+    "setprototypeof": "1.1.0",
+    "stack-trace": "0.0.10",
+    "statuses": "1.4.0",
+    "timed-out": "4.0.1",
+    "type-is": "1.6.16",
+    "unpipe": "1.0.0",
+    "utils-merge": "1.0.1",
+    "uuid": "3.0.0",
+    "vary": "1.1.2"
+  },
+  "platform": "node",
+  "timestamp": 1532443845,
+  "server_name": "Kamils-MacBook-Pro.local",
+  "release": "randomRelease",
+  "environment": "development",
+  "user": {},
+  "request": {
+    "url": "http://localhost/foo",
+    "method": "GET",
+    "headers": {
+      "Accept": "*/*",
+      "Host": "localhost:3000",
+      "User-Agent": "curl/7.54.0"
+    }
+  },
+  "exception": {
+    "values": [
+      {
+        "type": "Error",
+        "value": "Broken!",
+        "stacktrace": {
+          "frames": [
+            {
+              "function": "HTTPParser.parserOnHeadersComplete",
+              "module": "_http_common",
+              "filename": "_http_common.js",
+              "lineno": 112,
+              "colno": 17,
+              "in_app": false
+            },
+            {
+              "function": "parserOnIncoming",
+              "module": "_http_server",
+              "filename": "_http_server.js",
+              "lineno": 619,
+              "colno": 12,
+              "in_app": false
+            },
+            {
+              "function": "Server.emit",
+              "module": "events",
+              "filename": "events.js",
+              "lineno": 214,
+              "colno": 7,
+              "in_app": false
+            },
+            {
+              "function": "emitTwo",
+              "module": "events",
+              "filename": "events.js",
+              "lineno": 126,
+              "colno": 13,
+              "in_app": false
+            },
+            {
+              "function": "Server.app",
+              "module": "express.lib:express",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/express.js",
+              "lineno": 39,
+              "colno": 9,
+              "pre_context": [
+                " *",
+                " * @return {Function}",
+                " * @api public",
+                " */",
+                "",
+                "function createApplication() {",
+                "  var app = function(req, res, next) {"
+              ],
+              "context_line": "    app.handle(req, res, next);",
+              "post_context": [
+                "  };",
+                "",
+                "  mixin(app, EventEmitter.prototype, false);",
+                "  mixin(app, proto, false);",
+                "",
+                "  // expose the prototype that will get set on requests",
+                "  app.request = Object.create(req, {"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "Function.handle",
+              "module": "express.lib:application",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/application.js",
+              "lineno": 174,
+              "colno": 10,
+              "pre_context": [
+                "  // no routes",
+                "  if (!router) {",
+                "    debug('no routes defined on app');",
+                "    done();",
+                "    return;",
+                "  }",
+                ""
+              ],
+              "context_line": "  router.handle(req, res, done);",
+              "post_context": [
+                "};",
+                "",
+                "/**",
+                " * Proxy `Router#use()` to add middleware to the app router.",
+                " * See Router#use() documentation for details.",
+                " *",
+                " * If the _fn_ parameter is an express app, then it will be"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "Function.handle",
+              "module": "express.lib.router:index",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/index.js",
+              "lineno": 174,
+              "colno": 3,
+              "pre_context": [
+                "    });",
+                "  }",
+                "",
+                "  // setup basic req values",
+                "  req.baseUrl = parentUrl;",
+                "  req.originalUrl = req.originalUrl || req.url;",
+                ""
+              ],
+              "context_line": "  next();",
+              "post_context": [
+                "",
+                "  function next(err) {",
+                "    var layerError = err === 'route'",
+                "      ? null",
+                "      : err;",
+                "",
+                "    // remove added slash"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "next",
+              "module": "express.lib.router:index",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/index.js",
+              "lineno": 275,
+              "colno": 10,
+              "pre_context": [
+                "    // Capture one-time layer values",
+                "    req.params = self.mergeParams",
+                "      ? mergeParams(layer.params, parentParams)",
+                "      : layer.params;",
+                "    var layerPath = layer.path;",
+                "",
+                "    // this should be done for the layer"
+              ],
+              "context_line": "    self.process_params(layer, paramcalled, req, res, function (err) {",
+              "post_context": [
+                "      if (err) {",
+                "        return next(layerError || err);",
+                "      }",
+                "",
+                "      if (route) {",
+                "        return layer.handle_request(req, res, next);",
+                "      }"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "Function.process_params",
+              "module": "express.lib.router:index",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/index.js",
+              "lineno": 335,
+              "colno": 12,
+              "pre_context": [
+                "  var params = this.params;",
+                "",
+                "  // captured parameters from the layer, keys and values",
+                "  var keys = layer.keys;",
+                "",
+                "  // fast track",
+                "  if (!keys || keys.length === 0) {"
+              ],
+              "context_line": "    return done();",
+              "post_context": [
+                "  }",
+                "",
+                "  var i = 0;",
+                "  var name;",
+                "  var paramIndex = 0;",
+                "  var key;",
+                "  var paramVal;"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "null.<anonymous>",
+              "module": "express.lib.router:index",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/index.js",
+              "lineno": 284,
+              "colno": 7,
+              "pre_context": [
+                "        return next(layerError || err);",
+                "      }",
+                "",
+                "      if (route) {",
+                "        return layer.handle_request(req, res, next);",
+                "      }",
+                ""
+              ],
+              "context_line": "      trim_prefix(layer, layerError, layerPath, path);",
+              "post_context": [
+                "    });",
+                "  }",
+                "",
+                "  function trim_prefix(layer, layerError, layerPath, path) {",
+                "    if (layerPath.length !== 0) {",
+                "      // Validate path breaks on a path separator",
+                "      var c = path[layerPath.length]"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "trim_prefix",
+              "module": "express.lib.router:index",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/index.js",
+              "lineno": 317,
+              "colno": 13,
+              "pre_context": [
+                "    }",
+                "",
+                "    debug('%s %s : %s', layer.name, layerPath, req.originalUrl);",
+                "",
+                "    if (layerError) {",
+                "      layer.handle_error(layerError, req, res, next);",
+                "    } else {"
+              ],
+              "context_line": "      layer.handle_request(req, res, next);",
+              "post_context": [
+                "    }",
+                "  }",
+                "};",
+                "",
+                "/**",
+                " * Process any parameters for the layer.",
+                " * @private"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "Layer.handle [as handle_request]",
+              "module": "express.lib.router:layer",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/layer.js",
+              "lineno": 95,
+              "colno": 5,
+              "pre_context": [
+                "",
+                "  if (fn.length > 3) {",
+                "    // not a standard request handler",
+                "    return next();",
+                "  }",
+                "",
+                "  try {"
+              ],
+              "context_line": "    fn(req, res, next);",
+              "post_context": [
+                "  } catch (err) {",
+                "    next(err);",
+                "  }",
+                "};",
+                "",
+                "/**",
+                " * Check if this route matches `path`, if so"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "query",
+              "module": "express.lib.middleware:query",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/middleware/query.js",
+              "lineno": 45,
+              "colno": 5,
+              "pre_context": [
+                "",
+                "  return function query(req, res, next){",
+                "    if (!req.query) {",
+                "      var val = parseUrl(req).query;",
+                "      req.query = queryparse(val, opts);",
+                "    }",
+                ""
+              ],
+              "context_line": "    next();",
+              "post_context": [
+                "  };",
+                "};",
+                ""
+              ],
+              "in_app": false
+            },
+            {
+              "function": "next",
+              "module": "express.lib.router:index",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/index.js",
+              "lineno": 275,
+              "colno": 10,
+              "pre_context": [
+                "    // Capture one-time layer values",
+                "    req.params = self.mergeParams",
+                "      ? mergeParams(layer.params, parentParams)",
+                "      : layer.params;",
+                "    var layerPath = layer.path;",
+                "",
+                "    // this should be done for the layer"
+              ],
+              "context_line": "    self.process_params(layer, paramcalled, req, res, function (err) {",
+              "post_context": [
+                "      if (err) {",
+                "        return next(layerError || err);",
+                "      }",
+                "",
+                "      if (route) {",
+                "        return layer.handle_request(req, res, next);",
+                "      }"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "Function.process_params",
+              "module": "express.lib.router:index",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/index.js",
+              "lineno": 335,
+              "colno": 12,
+              "pre_context": [
+                "  var params = this.params;",
+                "",
+                "  // captured parameters from the layer, keys and values",
+                "  var keys = layer.keys;",
+                "",
+                "  // fast track",
+                "  if (!keys || keys.length === 0) {"
+              ],
+              "context_line": "    return done();",
+              "post_context": [
+                "  }",
+                "",
+                "  var i = 0;",
+                "  var name;",
+                "  var paramIndex = 0;",
+                "  var key;",
+                "  var paramVal;"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "null.<anonymous>",
+              "module": "express.lib.router:index",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/index.js",
+              "lineno": 284,
+              "colno": 7,
+              "pre_context": [
+                "        return next(layerError || err);",
+                "      }",
+                "",
+                "      if (route) {",
+                "        return layer.handle_request(req, res, next);",
+                "      }",
+                ""
+              ],
+              "context_line": "      trim_prefix(layer, layerError, layerPath, path);",
+              "post_context": [
+                "    });",
+                "  }",
+                "",
+                "  function trim_prefix(layer, layerError, layerPath, path) {",
+                "    if (layerPath.length !== 0) {",
+                "      // Validate path breaks on a path separator",
+                "      var c = path[layerPath.length]"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "trim_prefix",
+              "module": "express.lib.router:index",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/index.js",
+              "lineno": 317,
+              "colno": 13,
+              "pre_context": [
+                "    }",
+                "",
+                "    debug('%s %s : %s', layer.name, layerPath, req.originalUrl);",
+                "",
+                "    if (layerError) {",
+                "      layer.handle_error(layerError, req, res, next);",
+                "    } else {"
+              ],
+              "context_line": "      layer.handle_request(req, res, next);",
+              "post_context": [
+                "    }",
+                "  }",
+                "};",
+                "",
+                "/**",
+                " * Process any parameters for the layer.",
+                " * @private"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "Layer.handle [as handle_request]",
+              "module": "express.lib.router:layer",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/layer.js",
+              "lineno": 95,
+              "colno": 5,
+              "pre_context": [
+                "",
+                "  if (fn.length > 3) {",
+                "    // not a standard request handler",
+                "    return next();",
+                "  }",
+                "",
+                "  try {"
+              ],
+              "context_line": "    fn(req, res, next);",
+              "post_context": [
+                "  } catch (err) {",
+                "    next(err);",
+                "  }",
+                "};",
+                "",
+                "/**",
+                " * Check if this route matches `path`, if so"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "expressInit",
+              "module": "express.lib.middleware:init",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/middleware/init.js",
+              "lineno": 40,
+              "colno": 5,
+              "pre_context": [
+                "    req.next = next;",
+                "",
+                "    setPrototypeOf(req, app.request)",
+                "    setPrototypeOf(res, app.response)",
+                "",
+                "    res.locals = res.locals || Object.create(null);",
+                ""
+              ],
+              "context_line": "    next();",
+              "post_context": [
+                "  };",
+                "};",
+                "",
+                ""
+              ],
+              "in_app": false
+            },
+            {
+              "function": "next",
+              "module": "express.lib.router:index",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/index.js",
+              "lineno": 275,
+              "colno": 10,
+              "pre_context": [
+                "    // Capture one-time layer values",
+                "    req.params = self.mergeParams",
+                "      ? mergeParams(layer.params, parentParams)",
+                "      : layer.params;",
+                "    var layerPath = layer.path;",
+                "",
+                "    // this should be done for the layer"
+              ],
+              "context_line": "    self.process_params(layer, paramcalled, req, res, function (err) {",
+              "post_context": [
+                "      if (err) {",
+                "        return next(layerError || err);",
+                "      }",
+                "",
+                "      if (route) {",
+                "        return layer.handle_request(req, res, next);",
+                "      }"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "Function.process_params",
+              "module": "express.lib.router:index",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/index.js",
+              "lineno": 335,
+              "colno": 12,
+              "pre_context": [
+                "  var params = this.params;",
+                "",
+                "  // captured parameters from the layer, keys and values",
+                "  var keys = layer.keys;",
+                "",
+                "  // fast track",
+                "  if (!keys || keys.length === 0) {"
+              ],
+              "context_line": "    return done();",
+              "post_context": [
+                "  }",
+                "",
+                "  var i = 0;",
+                "  var name;",
+                "  var paramIndex = 0;",
+                "  var key;",
+                "  var paramVal;"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "null.<anonymous>",
+              "module": "express.lib.router:index",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/index.js",
+              "lineno": 284,
+              "colno": 7,
+              "pre_context": [
+                "        return next(layerError || err);",
+                "      }",
+                "",
+                "      if (route) {",
+                "        return layer.handle_request(req, res, next);",
+                "      }",
+                ""
+              ],
+              "context_line": "      trim_prefix(layer, layerError, layerPath, path);",
+              "post_context": [
+                "    });",
+                "  }",
+                "",
+                "  function trim_prefix(layer, layerError, layerPath, path) {",
+                "    if (layerPath.length !== 0) {",
+                "      // Validate path breaks on a path separator",
+                "      var c = path[layerPath.length]"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "trim_prefix",
+              "module": "express.lib.router:index",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/index.js",
+              "lineno": 317,
+              "colno": 13,
+              "pre_context": [
+                "    }",
+                "",
+                "    debug('%s %s : %s', layer.name, layerPath, req.originalUrl);",
+                "",
+                "    if (layerError) {",
+                "      layer.handle_error(layerError, req, res, next);",
+                "    } else {"
+              ],
+              "context_line": "      layer.handle_request(req, res, next);",
+              "post_context": [
+                "    }",
+                "  }",
+                "};",
+                "",
+                "/**",
+                " * Process any parameters for the layer.",
+                " * @private"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "Layer.handle [as handle_request]",
+              "module": "express.lib.router:layer",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/layer.js",
+              "lineno": 95,
+              "colno": 5,
+              "pre_context": [
+                "",
+                "  if (fn.length > 3) {",
+                "    // not a standard request handler",
+                "    return next();",
+                "  }",
+                "",
+                "  try {"
+              ],
+              "context_line": "    fn(req, res, next);",
+              "post_context": [
+                "  } catch (err) {",
+                "    next(err);",
+                "  }",
+                "};",
+                "",
+                "/**",
+                " * Check if this route matches `path`, if so"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "ravenRequestMiddleware",
+              "module": "raven.lib:client",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/raven/lib/client.js",
+              "lineno": 555,
+              "colno": 12,
+              "pre_context": [
+                "  setShouldSendCallback: function(callback) {",
+                "    return this.setCallbackHelper('shouldSendCallback', callback);",
+                "  },",
+                "",
+                "  requestHandler: function() {",
+                "    var self = this;",
+                "    return function ravenRequestMiddleware(req, res, next) {"
+              ],
+              "context_line": "      self.context({req: req}, function() {",
+              "post_context": [
+                "        domain.active.add(req);",
+                "        domain.active.add(res);",
+                "        next();",
+                "      });",
+                "    };",
+                "  },",
+                ""
+              ],
+              "in_app": false
+            },
+            {
+              "function": "Raven.context",
+              "module": "raven.lib:client",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/raven/lib/client.js",
+              "lineno": 429,
+              "colno": 33,
+              "pre_context": [
+                "      func = ctx;",
+                "      ctx = {};",
+                "    }",
+                "",
+                "    // todo/note: raven-js takes an args param to do apply(this, args)",
+                "    // i don't think it's correct/necessary to bind this to the wrap call",
+                "    // and i don't know if we need to support the args param; it's undocumented"
+              ],
+              "context_line": "    return this.wrap(ctx, func).apply(null);",
+              "post_context": [
+                "  },",
+                "",
+                "  wrap: function(options, func) {",
+                "    if (!this.installed) {",
+                "      utils.consoleAlertOnce(",
+                "        'Raven has not been installed, therefore no breadcrumbs will be captured. Call `Raven.config(...).install()` to fix this.'",
+                "      );"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "runBound",
+              "module": "domain",
+              "filename": "domain.js",
+              "lineno": 314,
+              "colno": 12,
+              "in_app": false
+            },
+            {
+              "function": "bound",
+              "module": "domain",
+              "filename": "domain.js",
+              "lineno": 303,
+              "colno": 14,
+              "in_app": false
+            },
+            {
+              "function": "null.<anonymous>",
+              "module": "raven.lib:client",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/raven/lib/client.js",
+              "lineno": 558,
+              "colno": 9,
+              "pre_context": [
+                "",
+                "  requestHandler: function() {",
+                "    var self = this;",
+                "    return function ravenRequestMiddleware(req, res, next) {",
+                "      self.context({req: req}, function() {",
+                "        domain.active.add(req);",
+                "        domain.active.add(res);"
+              ],
+              "context_line": "        next();",
+              "post_context": [
+                "      });",
+                "    };",
+                "  },",
+                "",
+                "  errorHandler: function() {",
+                "    var self = this;",
+                "    return function ravenErrorMiddleware(err, req, res, next) {"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "next",
+              "module": "express.lib.router:index",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/index.js",
+              "lineno": 275,
+              "colno": 10,
+              "pre_context": [
+                "    // Capture one-time layer values",
+                "    req.params = self.mergeParams",
+                "      ? mergeParams(layer.params, parentParams)",
+                "      : layer.params;",
+                "    var layerPath = layer.path;",
+                "",
+                "    // this should be done for the layer"
+              ],
+              "context_line": "    self.process_params(layer, paramcalled, req, res, function (err) {",
+              "post_context": [
+                "      if (err) {",
+                "        return next(layerError || err);",
+                "      }",
+                "",
+                "      if (route) {",
+                "        return layer.handle_request(req, res, next);",
+                "      }"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "Function.process_params",
+              "module": "express.lib.router:index",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/index.js",
+              "lineno": 335,
+              "colno": 12,
+              "pre_context": [
+                "  var params = this.params;",
+                "",
+                "  // captured parameters from the layer, keys and values",
+                "  var keys = layer.keys;",
+                "",
+                "  // fast track",
+                "  if (!keys || keys.length === 0) {"
+              ],
+              "context_line": "    return done();",
+              "post_context": [
+                "  }",
+                "",
+                "  var i = 0;",
+                "  var name;",
+                "  var paramIndex = 0;",
+                "  var key;",
+                "  var paramVal;"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "null.<anonymous>",
+              "module": "express.lib.router:index",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/index.js",
+              "lineno": 281,
+              "colno": 22,
+              "pre_context": [
+                "    // this should be done for the layer",
+                "    self.process_params(layer, paramcalled, req, res, function (err) {",
+                "      if (err) {",
+                "        return next(layerError || err);",
+                "      }",
+                "",
+                "      if (route) {"
+              ],
+              "context_line": "        return layer.handle_request(req, res, next);",
+              "post_context": [
+                "      }",
+                "",
+                "      trim_prefix(layer, layerError, layerPath, path);",
+                "    });",
+                "  }",
+                "",
+                "  function trim_prefix(layer, layerError, layerPath, path) {"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "Layer.handle [as handle_request]",
+              "module": "express.lib.router:layer",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/layer.js",
+              "lineno": 95,
+              "colno": 5,
+              "pre_context": [
+                "",
+                "  if (fn.length > 3) {",
+                "    // not a standard request handler",
+                "    return next();",
+                "  }",
+                "",
+                "  try {"
+              ],
+              "context_line": "    fn(req, res, next);",
+              "post_context": [
+                "  } catch (err) {",
+                "    next(err);",
+                "  }",
+                "};",
+                "",
+                "/**",
+                " * Check if this route matches `path`, if so"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "Route.dispatch",
+              "module": "express.lib.router:route",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/route.js",
+              "lineno": 112,
+              "colno": 3,
+              "pre_context": [
+                "  var method = req.method.toLowerCase();",
+                "  if (method === 'head' && !this.methods['head']) {",
+                "    method = 'get';",
+                "  }",
+                "",
+                "  req.route = this;",
+                ""
+              ],
+              "context_line": "  next();",
+              "post_context": [
+                "",
+                "  function next(err) {",
+                "    // signal to exit route",
+                "    if (err && err === 'route') {",
+                "      return done();",
+                "    }",
+                ""
+              ],
+              "in_app": false
+            },
+            {
+              "function": "next",
+              "module": "express.lib.router:route",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/route.js",
+              "lineno": 137,
+              "colno": 13,
+              "pre_context": [
+                "    if (layer.method && layer.method !== method) {",
+                "      return next(err);",
+                "    }",
+                "",
+                "    if (err) {",
+                "      layer.handle_error(err, req, res, next);",
+                "    } else {"
+              ],
+              "context_line": "      layer.handle_request(req, res, next);",
+              "post_context": [
+                "    }",
+                "  }",
+                "};",
+                "",
+                "/**",
+                " * Add a handler for all HTTP verbs to this route.",
+                " *"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "Layer.handle [as handle_request]",
+              "module": "express.lib.router:layer",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/node_modules/express/lib/router/layer.js",
+              "lineno": 95,
+              "colno": 5,
+              "pre_context": [
+                "",
+                "  if (fn.length > 3) {",
+                "    // not a standard request handler",
+                "    return next();",
+                "  }",
+                "",
+                "  try {"
+              ],
+              "context_line": "    fn(req, res, next);",
+              "post_context": [
+                "  } catch (err) {",
+                "    next(err);",
+                "  }",
+                "};",
+                "",
+                "/**",
+                " * Check if this route matches `path`, if so"
+              ],
+              "in_app": false
+            },
+            {
+              "function": "mainHandler",
+              "module": "main",
+              "filename": "/Users/kamilogorek/Projects/sentry/tmp/main.js",
+              "lineno": 32,
+              "colno": 9,
+              "pre_context": [
+                "//   reject(new Error(\"promise exception\"));",
+                "// });",
+                "//",
+                "// throw new Error(\"regular exception\");",
+                "",
+                "app.use(Raven.requestHandler());",
+                "app.get(\"/foo\", function mainHandler(req, res) {"
+              ],
+              "context_line": "  throw new Error(\"Broken!\");",
+              "post_context": [
+                "});",
+                "app.use(Raven.errorHandler());",
+                "app.listen(3000);",
+                ""
+              ],
+              "in_app": true
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "tags": {
+    "git_commit": "c0deb10c4"
+  },
+  "extra": {
+    "node": "v8.11.2",
+    "planet": {
+      "name": "Earth"
+    }
+  },
+  "project": "297378"
+}

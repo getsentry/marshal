@@ -73,11 +73,25 @@ macro_rules! test_all {
         mod $mode {
             use super::read_fixture;
 
+            run!($mode, legacy_js_exception);
+            run!($mode, legacy_js_message);
+            run!($mode, legacy_js_onerror);
+            run!($mode, legacy_js_promise);
+            run!($mode, legacy_node_exception);
+            run!($mode, legacy_node_express);
+            run!($mode, legacy_node_message);
+            run!($mode, legacy_node_onerror);
+            run!($mode, legacy_node_promise);
+            run!($mode, legacy_python);
+            run!($mode, legacy_swift);
+
             run!($mode, cocoa);
             run!($mode, dotnet);
             run!($mode, electron_main);
             run!($mode, electron_renderer);
-            run!($mode, swift);
+
+            // To add new tests, run:
+            // cargo run --example add-test
         }
     };
 }

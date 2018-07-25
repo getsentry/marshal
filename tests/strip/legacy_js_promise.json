@@ -1,0 +1,95 @@
+{
+  "event_id": "73a215504d4b4d8c858e95026ca7fa2d",
+  "transaction": "http://localhost:5001/error.js",
+  "logger": "javascript",
+  "platform": "javascript",
+  "release": "randomRelease",
+  "environment": "development",
+  "request": {
+    "url": "http://localhost:5001/",
+    "headers": {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.119 Safari/537.36"
+    }
+  },
+  "breadcrumbs": {
+    "values": [
+      {
+        "timestamp": 1532444284.907999,
+        "type": "default",
+        "category": "sentry",
+        "level": "error",
+        "message": "Error: captureException",
+        "event_id": "2c6cd1fbe9eb40a698d8bfa9eca34828"
+      },
+      {
+        "timestamp": 1532444284.911,
+        "type": "default",
+        "category": "sentry",
+        "level": "error",
+        "message": "captureMessage",
+        "event_id": "b2c595e016164e5baa63ed087e44978b"
+      },
+      {
+        "timestamp": 1532444284.913,
+        "type": "default",
+        "category": "sentry",
+        "level": "error",
+        "message": "Error: regular exception",
+        "event_id": "6795167296744bb1b608e007d78b8de3"
+      }
+    ]
+  },
+  "exception": {
+    "values": [
+      {
+        "type": "Error",
+        "value": "promise exception",
+        "stacktrace": {
+          "frames": [
+            {
+              "function": "?",
+              "filename": "http://localhost:5001/error.js",
+              "lineno": 14,
+              "colno": 3,
+              "in_app": true
+            },
+            {
+              "function": "?",
+              "filename": "http://localhost:5001/error.js",
+              "lineno": 5,
+              "colno": 3,
+              "in_app": true
+            },
+            {
+              "function": "new Promise",
+              "filename": "<anonymous>",
+              "in_app": true
+            },
+            {
+              "function": "?",
+              "filename": "http://localhost:5001/error.js",
+              "lineno": 6,
+              "colno": 12,
+              "in_app": true
+            }
+          ]
+        }
+      }
+    ],
+    "mechanism": {
+      "handled": false,
+      "type": "onunhandledrejection"
+    }
+  },
+  "tags": {
+    "git_commit": "c0deb10c4"
+  },
+  "extra": {
+    "planet": {
+      "name": "Earth"
+    },
+    "session:duration": 157
+  },
+  "project": "297378",
+  "trimHeadFrames": 0
+}

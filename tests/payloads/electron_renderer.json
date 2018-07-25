@@ -1,15 +1,94 @@
 {
-  "environment": "development",
-  "extra": {
-    "crashed_process": "renderer[1]",
-    "crashed_url": "app:///dist/index.html",
-    "session:duration": 3397
+  "breadcrumbs": [
+    {
+      "category": "electron",
+      "message": "app.will-finish-launching",
+      "timestamp": 1532344755.697,
+      "type": "ui"
+    },
+    {
+      "category": "electron",
+      "message": "app.ready",
+      "timestamp": 1532344755.729,
+      "type": "ui"
+    },
+    {
+      "category": "electron",
+      "message": "app.session-created",
+      "timestamp": 1532344755.748,
+      "type": "ui"
+    },
+    {
+      "category": "electron",
+      "message": "app.web-contents-created",
+      "timestamp": 1532344755.778,
+      "type": "ui"
+    },
+    {
+      "category": "electron",
+      "message": "app.browser-window-created",
+      "timestamp": 1532344755.819,
+      "type": "ui"
+    },
+    {
+      "category": "electron",
+      "message": "app.browser-window-focus",
+      "timestamp": 1532344756.031,
+      "type": "ui"
+    },
+    {
+      "category": "electron",
+      "message": "WebContents[1].dom-ready",
+      "timestamp": 1532344756.631,
+      "type": "ui"
+    },
+    {
+      "category": "ui.click",
+      "message": "body",
+      "timestamp": 1532344759.124
+    },
+    {
+      "category": "ui.click",
+      "message": "body > div.main > div.group > a.crash",
+      "timestamp": 1532344759.992
+    }
+  ],
+  "contexts": {
+    "app": {
+      "app_name": "Sentry Crash Test",
+      "app_version": "2.0.2"
+    },
+    "chrome": {
+      "name": "Chrome",
+      "type": "runtime",
+      "version": "61.0.3163.100"
+    },
+    "device": {
+      "arch": "x64"
+    },
+    "node": {
+      "name": "Node",
+      "type": "runtime",
+      "version": "8.9.3"
+    },
+    "os": {
+      "build": "17G65",
+      "kernel_version": "17.7.0",
+      "name": "Mac OS X",
+      "version": "10.13.6"
+    },
+    "runtime": {
+      "name": "Electron",
+      "version": "2.0.2"
+    }
   },
-  "release": "sentry-electron-test@2.0.2",
-  "user": { "ip_address": "{{auto}}" },
-  "sdk": { "name": "sentry-electron", "version": "0.7.0" },
+  "environment": "development",
+  "event_id": "a568161a4f9f4d8d946a366908e3fb57",
   "exception": {
-    "mechanism": { "handled": false, "type": "onerror" },
+    "mechanism": {
+      "handled": false,
+      "type": "onerror"
+    },
     "values": [
       {
         "stacktrace": {
@@ -35,78 +114,28 @@
       }
     ]
   },
+  "extra": {
+    "crashed_process": "renderer[1]",
+    "crashed_url": "app:///dist/index.html",
+    "session:duration": 3397
+  },
   "logger": "javascript",
   "platform": "javascript",
   "project": "3",
-  "request": { "headers": {}, "url": "app:///dist/index.html" },
+  "release": "sentry-electron-test@2.0.2",
+  "request": {
+    "headers": {},
+    "url": "app:///dist/index.html"
+  },
+  "sdk": {
+    "name": "sentry-electron",
+    "version": "0.7.0"
+  },
+  "tags": {
+    "event_type": "javascript"
+  },
   "transaction": "eval at <anonymous> (unknown source), <anonymous>",
-  "tags": { "event_type": "javascript" },
-  "event_id": "a568161a4f9f4d8d946a366908e3fb57",
-  "breadcrumbs": [
-    {
-      "timestamp": 1532344755.697,
-      "category": "electron",
-      "message": "app.will-finish-launching",
-      "type": "ui"
-    },
-    {
-      "timestamp": 1532344755.729,
-      "category": "electron",
-      "message": "app.ready",
-      "type": "ui"
-    },
-    {
-      "timestamp": 1532344755.748,
-      "category": "electron",
-      "message": "app.session-created",
-      "type": "ui"
-    },
-    {
-      "timestamp": 1532344755.778,
-      "category": "electron",
-      "message": "app.web-contents-created",
-      "type": "ui"
-    },
-    {
-      "timestamp": 1532344755.819,
-      "category": "electron",
-      "message": "app.browser-window-created",
-      "type": "ui"
-    },
-    {
-      "timestamp": 1532344756.031,
-      "category": "electron",
-      "message": "app.browser-window-focus",
-      "type": "ui"
-    },
-    {
-      "timestamp": 1532344756.631,
-      "category": "electron",
-      "message": "WebContents[1].dom-ready",
-      "type": "ui"
-    },
-    { "timestamp": 1532344759.124, "category": "ui.click", "message": "body" },
-    {
-      "timestamp": 1532344759.992,
-      "category": "ui.click",
-      "message": "body > div.main > div.group > a.crash"
-    }
-  ],
-  "contexts": {
-    "app": { "app_name": "Sentry Crash Test", "app_version": "2.0.2" },
-    "chrome": {
-      "name": "Chrome",
-      "type": "runtime",
-      "version": "61.0.3163.100"
-    },
-    "device": { "arch": "x64" },
-    "node": { "name": "Node", "type": "runtime", "version": "8.9.3" },
-    "os": {
-      "kernel_version": "17.7.0",
-      "name": "Mac OS X",
-      "version": "10.13.6",
-      "build": "17G65"
-    },
-    "runtime": { "name": "Electron", "version": "2.0.2" }
+  "user": {
+    "ip_address": "{{auto}}"
   }
 }
