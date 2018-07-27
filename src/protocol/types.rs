@@ -354,6 +354,10 @@ pub struct Query(pub Map<Value>);
 
 /// Wrapper type for request header maps.
 #[derive(Debug, Default, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct Cookies(pub Map<String>);
+
+/// Wrapper type for request header maps.
+#[derive(Debug, Default, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Headers(pub Map<String>);
 
 /// Http request information.
@@ -377,13 +381,13 @@ pub struct Request {
 
     /// URL encoded HTTP query string.
     #[serde(default, skip_serializing_if = "request::is_empty_query")]
-    #[process_annotated_value(pii_kind = "freeform")]
+    #[process_annotated_value(pii_kind = "databag")]
     pub query_string: Annotated<Query>,
 
     /// URL encoded contents of the Cookie header.
-    #[serde(default, skip_serializing_if = "request::is_empty_query")]
-    #[process_annotated_value(pii_kind = "freeform")]
-    pub cookies: Annotated<Query>,
+    #[serde(default, skip_serializing_if = "request::is_empty_cookies")]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub cookies: Annotated<Cookies>,
 
     /// HTTP request headers.
     #[serde(default, skip_serializing_if = "request::is_empty_headers")]
@@ -403,6 +407,7 @@ pub struct Request {
 }
 
 mod request {
+    use cookie::Cookie;
     use queryst;
     use serde::de;
     use serde_json;
@@ -412,6 +417,10 @@ mod request {
 
     pub fn is_empty_query(annotated: &Annotated<Query>) -> bool {
         utils::skip_if(annotated, |query| query.0.is_empty())
+    }
+
+    pub fn is_empty_cookies(annotated: &Annotated<Cookies>) -> bool {
+        utils::skip_if(annotated, |cookies| cookies.0.is_empty())
     }
 
     pub fn is_empty_headers(annotated: &Annotated<Headers>) -> bool {
@@ -469,6 +478,39 @@ mod request {
     impl<'de> Deserialize<'de> for Query {
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
             deserializer.deserialize_any(QueryVisitor)
+        }
+    }
+
+    struct CookiesVisitor;
+
+    impl<'de> de::Visitor<'de> for CookiesVisitor {
+        type Value = Cookies;
+
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "a cookie map or header string")
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            let mut cookies = Map::new();
+            for cookie in v.split("; ") {
+                let cookie = Cookie::parse_encoded(cookie).map_err(E::custom)?;
+                cookies.insert(cookie.name().to_string(), cookie.value().to_string().into());
+            }
+            Ok(Cookies(cookies))
+        }
+
+        fn visit_map<A: de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+            let mut cookies = Map::new();
+            while let Some(entry) = map.next_entry()? {
+                cookies.insert(entry.0, entry.1);
+            }
+            Ok(Cookies(cookies))
+        }
+    }
+
+    impl<'de> Deserialize<'de> for Cookies {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            deserializer.deserialize_any(CookiesVisitor)
         }
     }
 
@@ -537,7 +579,7 @@ mod test_request {
     "q": "foo"
   },
   "cookies": {
-    "GOOGLE": 1
+    "GOOGLE": "1"
   },
   "headers": {
     "Referer": "https://google.com/"
@@ -561,9 +603,9 @@ mod test_request {
                 map.insert("q".to_string(), Value::String("foo".to_string()).into());
                 map
             }).into(),
-            cookies: Query({
+            cookies: Cookies({
                 let mut map = Map::new();
-                map.insert("GOOGLE".to_string(), Value::U64(1).into());
+                map.insert("GOOGLE".to_string(), "1".to_string().into());
                 map
             }).into(),
             headers: {
@@ -644,6 +686,45 @@ mod test_request {
             "invalid type: integer `42`, expected a query string or map",
         );
         assert_eq_dbg!(query, serde_json::from_str("42").unwrap());
+    }
+
+    #[test]
+    fn test_cookies_string() {
+        let json = "\" PHPSESSID=298zf09hf012fh2; csrftoken=u32t4o3tb3gg43; _gat=1;\"";
+
+        let mut map = Map::new();
+        map.insert(
+            "PHPSESSID".to_string(),
+            "298zf09hf012fh2".to_string().into(),
+        );
+        map.insert("csrftoken".to_string(), "u32t4o3tb3gg43".to_string().into());
+        map.insert("_gat".to_string(), "1".to_string().into());
+
+        let cookies = Annotated::from(Cookies(map));
+        assert_eq_dbg!(cookies, serde_json::from_str(json).unwrap());
+    }
+
+    #[test]
+    fn test_cookies_object() {
+        let json = r#"{"foo":"bar", "invalid": 42}"#;
+
+        let mut map = Map::new();
+        map.insert("foo".to_string(), "bar".to_string().into());
+        map.insert(
+            "invalid".to_string(),
+            Annotated::from_error("invalid type: integer `42`, expected a string"),
+        );
+
+        let cookies = Annotated::from(Cookies(map));
+        assert_eq_dbg!(cookies, serde_json::from_str(json).unwrap());
+    }
+
+    #[test]
+    fn test_cookies_invalid() {
+        let cookies = Annotated::<Cookies>::from_error(
+            "invalid type: integer `42`, expected a cookie map or header string",
+        );
+        assert_eq_dbg!(cookies, serde_json::from_str("42").unwrap());
     }
 
     #[test]
