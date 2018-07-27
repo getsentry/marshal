@@ -86,6 +86,7 @@ macro_rules! test_all {
             run!($mode, legacy_swift);
 
             run!($mode, cocoa);
+            run!($mode, cordova);
             run!($mode, dotnet);
             run!($mode, electron_main);
             run!($mode, electron_renderer);
