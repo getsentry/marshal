@@ -380,6 +380,7 @@ where
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         #[derive(Deserialize)]
         #[serde(untagged)]
+        #[cfg_attr(feature = "cargo-clippy", allow(large_enum_variant))]
         enum Repr<T> {
             Qualified {
                 values: Annotated<Array<T>>,
