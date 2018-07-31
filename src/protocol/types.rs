@@ -125,7 +125,7 @@ mod test_level {
 ///
 /// A log message is similar to the `message` attribute on the event itself but
 /// can additionally hold optional parameters.
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct LogEntry {
     /// The log message with parameter placeholders (required).
     #[process_annotated_value(pii_kind = "freeform", cap = "message")]
@@ -199,7 +199,7 @@ mod test_logentry {
 }
 
 /// Reference to a source code repository.
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
 pub struct RepoReference {
     /// Name of the repository as registered in Sentry (required).
     pub name: Annotated<String>,
@@ -271,7 +271,7 @@ mod test_repos {
 }
 
 /// Information about the user who triggered an event.
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct User {
     /// Unique identifier of the user.
     #[serde(default, skip_serializing_if = "utils::is_none")]
@@ -349,19 +349,19 @@ mod test_user {
 }
 
 /// Wrapper type for query-string like maps.
-#[derive(Debug, Default, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Query(pub Map<Value>);
 
 /// Wrapper type for request header maps.
-#[derive(Debug, Default, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Cookies(pub Map<String>);
 
 /// Wrapper type for request header maps.
-#[derive(Debug, Default, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Headers(pub Map<String>);
 
 /// Http request information.
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Request {
     /// URL of the request.
     #[serde(default, skip_serializing_if = "utils::is_none")]
@@ -746,7 +746,7 @@ mod test_request {
 }
 
 /// Device information.
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct DeviceContext {
     /// Name of the device.
     #[serde(default, skip_serializing_if = "utils::is_none")]
@@ -824,7 +824,7 @@ pub struct DeviceContext {
 }
 
 /// Operating system information.
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct OsContext {
     /// Name of the operating system.
     #[serde(default, skip_serializing_if = "utils::is_none")]
@@ -862,7 +862,7 @@ pub struct OsContext {
 }
 
 /// Runtime information.
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct RuntimeContext {
     /// Runtime name.
     #[serde(default, skip_serializing_if = "utils::is_none")]
@@ -886,7 +886,7 @@ pub struct RuntimeContext {
 }
 
 /// Application information.
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct AppContext {
     /// Start time of the app.
     #[serde(default, with = "serde_chrono", skip_serializing_if = "utils::is_none")]
@@ -926,7 +926,7 @@ pub struct AppContext {
 }
 
 /// Web browser information.
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct BrowserContext {
     /// Runtime name.
     #[serde(default, skip_serializing_if = "utils::is_none")]
@@ -945,7 +945,7 @@ pub struct BrowserContext {
 }
 
 /// Contexts describing the environment (e.g. device, os or browser).
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Context {
     /// Device information.
     Device(Box<DeviceContext>),
@@ -1428,7 +1428,7 @@ fn default_breadcrumb_type() -> Annotated<String> {
 }
 
 /// A breadcrumb.
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Breadcrumb {
     /// The timestamp of the breadcrumb (required).
     #[serde(with = "serde_chrono")]
@@ -1549,7 +1549,7 @@ pub struct Addr(pub u64);
 impl_hex_serde!(Addr, u64);
 
 /// Single frame in a stack trace.
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Frame {
     /// Name of the frame's function. This might include the name of a class.
     #[serde(default, skip_serializing_if = "utils::is_none")]
@@ -1737,7 +1737,7 @@ mod test_frame {
 }
 
 /// Stack trace containing a thread's frames.
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Stacktrace {
     /// List of frames in this stack trace (required).
     #[process_annotated_value]
@@ -1825,7 +1825,7 @@ mod test_stacktrace {
 }
 
 /// POSIX signal with optional extended data.
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
 pub struct CError {
     /// The error code as specified by ISO C99, POSIX.1-2001 or POSIX.1-2008.
     pub number: Annotated<i32>,
@@ -1836,7 +1836,7 @@ pub struct CError {
 }
 
 /// Mach exception information.
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
 pub struct MachException {
     /// The mach exception type.
     #[serde(rename = "exception")]
@@ -1854,7 +1854,7 @@ pub struct MachException {
 }
 
 /// POSIX signal with optional extended data.
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
 pub struct PosixSignal {
     /// The POSIX signal number.
     pub number: Annotated<i32>,
@@ -1873,7 +1873,7 @@ pub struct PosixSignal {
 }
 
 /// Operating system or runtime meta information to an exception mechanism.
-#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Serialize)]
 pub struct MechanismMeta {
     /// Optional ISO C standard error code.
     #[serde(default, skip_serializing_if = "utils::is_none")]
@@ -1906,7 +1906,7 @@ impl MechanismMeta {
 }
 
 /// The mechanism by which an exception was generated and handled.
-#[derive(Debug, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Mechanism {
     /// Mechanism type (required).
     #[serde(rename = "type")]
@@ -2294,7 +2294,7 @@ pub enum ThreadId {
 }
 
 /// An exception (error).
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Exception {
     /// Exception type (required).
     #[serde(rename = "type")]
@@ -2398,7 +2398,7 @@ mod test_exception {
 }
 
 /// Template debug information.
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct TemplateInfo {
     /// The file name (basename only).
     #[serde(default, skip_serializing_if = "utils::is_none")]
@@ -2499,7 +2499,7 @@ mod test_template_info {
 }
 
 /// A process thread of an event.
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Thread {
     /// Identifier of this thread within the process (usually an integer).
     #[serde(default, skip_serializing_if = "utils::is_none")]
@@ -2592,7 +2592,7 @@ mod thread {
 ///
 /// This is relevant for iOS and other platforms that have a system
 /// SDK.  Not to be confused with the client SDK.
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct SystemSdkInfo {
     /// The internal name of the SDK.
     pub sdk_name: Annotated<String>,
@@ -2613,7 +2613,7 @@ pub struct SystemSdkInfo {
 }
 
 /// Apple debug image in
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct AppleDebugImage {
     /// Path and name of the debug image (required).
     pub name: Annotated<String>,
@@ -2650,7 +2650,7 @@ pub struct AppleDebugImage {
 }
 
 /// Any debug information file supported by symbolic.
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct SymbolicDebugImage {
     /// Path and name of the debug image (required).
     pub name: Annotated<String>,
@@ -2679,7 +2679,7 @@ pub struct SymbolicDebugImage {
 }
 
 /// Proguard mapping file.
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct ProguardDebugImage {
     /// UUID computed from the file contents.
     pub uuid: Annotated<Uuid>,
@@ -2691,7 +2691,7 @@ pub struct ProguardDebugImage {
 }
 
 /// A debug information file (debug image).
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum DebugImage {
     /// Apple debug images (machos).  This is currently also used for non apple platforms with
     /// similar debug setups.
@@ -3016,7 +3016,7 @@ mod test_debug_image {
 }
 
 /// Debugging and processing meta information.
-#[derive(Debug, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct DebugMeta {
     /// Information about the system SDK (e.g. iOS SDK).
     #[serde(default, rename = "sdk_info", skip_serializing_if = "utils::is_none")]
@@ -3097,7 +3097,7 @@ mod test_debug_meta {
 }
 
 /// Information about the Sentry SDK.
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
 pub struct ClientSdkInfo {
     /// Unique SDK name.
     pub name: Annotated<String>,
@@ -3519,7 +3519,7 @@ mod event {
 }
 
 /// Represents a full event for Sentry.
-#[derive(Debug, Default, PartialEq, ProcessAnnotatedValue, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct Event {
     /// Unique identifier of this event.
     #[serde(
