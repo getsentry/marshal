@@ -759,12 +759,17 @@ impl<'a> Rule<'a> {
                 }
             }
             RuleType::RedactPair { ref key_pattern } => {
-                if let Some(ref path) = value.meta().path() {
-                    if key_pattern.0.is_match(&path.to_string()) {
-                        return Ok(redaction.replace_value(report_rule, self.config(), value));
+                let mut should_redact = false;
+                if let Some(path) = value.meta().path() {
+                    if key_pattern.0.is_match(&path) {
+                        should_redact = true;
                     }
                 }
-                Err(value)
+                if should_redact {
+                    Ok(redaction.replace_value(report_rule, self.config(), value))
+                } else {
+                    Err(value)
+                }
             }
         }
     }

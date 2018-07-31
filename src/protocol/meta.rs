@@ -164,7 +164,7 @@ pub struct Meta {
 
     /// Path at which the annotated value was deserialized.
     #[serde(skip)]
-    pub path: Option<Rc<Path>>,
+    pub path: Option<String>,
 }
 
 impl PartialEq for Meta {
@@ -237,13 +237,13 @@ impl Meta {
     }
 
     /// The path at which the annotated value was deserialized.
-    pub fn path(&self) -> Option<Rc<Path>> {
-        self.path.clone()
+    pub fn path(&self) -> Option<&str> {
+        self.path.as_ref().map(|x| x.as_str())
     }
 
     /// Sets the path at which the annotated value was deserialized.
     fn set_path(&mut self, path: Option<Rc<Path>>) {
-        self.path = path
+        self.path = path.map(|x| x.to_string())
     }
 }
 
