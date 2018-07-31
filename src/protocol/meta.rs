@@ -283,6 +283,11 @@ impl<'de, T: Deserialize<'de>> Annotated<T> {
     pub fn from_json(s: &'de str) -> Result<Annotated<T>, serde_json::Error> {
         Self::deserialize_with_meta(&mut serde_json::Deserializer::from_str(s))
     }
+
+    /// Deserializes an annotated from JSON bytes.
+    pub fn from_json_bytes(b: &'de [u8]) -> Result<Annotated<T>, serde_json::Error> {
+        Self::deserialize_with_meta(&mut serde_json::Deserializer::from_slice(b))
+    }
 }
 
 impl<T: Serialize> Annotated<T> {
