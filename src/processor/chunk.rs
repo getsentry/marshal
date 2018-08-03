@@ -42,13 +42,13 @@ pub fn chunks_from_str(text: &str, meta: &Meta) -> Vec<Chunk> {
     let mut pos = 0;
 
     for remark in meta.remarks() {
-        let (start, end) = match remark.range() {
+        let (from, to) = match remark.range() {
             Some(range) => *range,
             None => continue,
         };
 
-        if start > pos {
-            if let Some(piece) = text.get(pos..start) {
+        if from > pos {
+            if let Some(piece) = text.get(pos..from) {
                 rv.push(Chunk::Text {
                     text: piece.to_string(),
                 });
@@ -56,7 +56,7 @@ pub fn chunks_from_str(text: &str, meta: &Meta) -> Vec<Chunk> {
                 break;
             }
         }
-        if let Some(piece) = text.get(start..end) {
+        if let Some(piece) = text.get(from..to) {
             rv.push(Chunk::Redaction {
                 text: piece.to_string(),
                 rule_id: remark.rule_id().into(),
@@ -65,7 +65,7 @@ pub fn chunks_from_str(text: &str, meta: &Meta) -> Vec<Chunk> {
         } else {
             break;
         }
-        pos = end;
+        pos = to;
     }
 
     if pos < text.len() {

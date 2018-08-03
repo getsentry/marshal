@@ -109,9 +109,11 @@ impl<'de> de::Visitor<'de> for RemarkVisitor {
     }
 
     fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-        let rule_id = seq.next_element()?
+        let rule_id = seq
+            .next_element()?
             .ok_or_else(|| de::Error::custom("missing required rule-id"))?;
-        let ty = seq.next_element()?
+        let ty = seq
+            .next_element()?
             .ok_or_else(|| de::Error::custom("missing required remark-type"))?;
         let start = seq.next_element()?;
         let end = seq.next_element()?;

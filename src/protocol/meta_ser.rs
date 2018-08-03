@@ -647,7 +647,8 @@ impl SerializeMap for SerializeMapMeta {
     where
         T: Serialize,
     {
-        let key = self.key
+        let key = self
+            .key
             .take()
             .ok_or_else(|| Error::custom("serialize_value called without serialize_key"))?;
 
