@@ -17,6 +17,8 @@ use super::meta_ser::{serialize_annotated_meta, MetaError, MetaSerializer, MetaT
 use super::serde::{CustomDeserialize, CustomSerialize, DefaultDeserialize, DefaultSerialize};
 use super::tracked::{Path, TrackedDeserializer};
 
+pub use serde_json::Error;
+
 /// Internal synchronization for meta data serialization.
 thread_local!(static SERIALIZE_META: AtomicBool = AtomicBool::new(false));
 
@@ -282,12 +284,12 @@ impl<'de, T: Deserialize<'de>> Annotated<T> {
     }
 
     /// Deserializes an annotated from a JSON string.
-    pub fn from_json(s: &'de str) -> Result<Annotated<T>, serde_json::Error> {
+    pub fn from_json(s: &'de str) -> Result<Annotated<T>, Error> {
         Self::deserialize_with_meta(&mut serde_json::Deserializer::from_str(s))
     }
 
     /// Deserializes an annotated from JSON bytes.
-    pub fn from_json_bytes(b: &'de [u8]) -> Result<Annotated<T>, serde_json::Error> {
+    pub fn from_json_bytes(b: &'de [u8]) -> Result<Annotated<T>, Error> {
         Self::deserialize_with_meta(&mut serde_json::Deserializer::from_slice(b))
     }
 }
@@ -312,14 +314,14 @@ impl<T: Serialize> Annotated<T> {
     }
 
     /// Serializes an annotated value into a JSON string.
-    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+    pub fn to_json(&self) -> Result<String, Error> {
         let mut ser = serde_json::Serializer::new(Vec::with_capacity(128));
         self.serialize_with_meta(&mut ser)?;
         Ok(unsafe { String::from_utf8_unchecked(ser.into_inner()) })
     }
 
     /// Serializes an annotated value into a pretty JSON string.
-    pub fn to_json_pretty(&self) -> Result<String, serde_json::Error> {
+    pub fn to_json_pretty(&self) -> Result<String, Error> {
         let mut ser = serde_json::Serializer::pretty(Vec::with_capacity(128));
         self.serialize_with_meta(&mut ser)?;
         Ok(unsafe { String::from_utf8_unchecked(ser.into_inner()) })
