@@ -207,7 +207,7 @@ impl Default for HashAlgorithm {
 }
 
 impl HashAlgorithm {
-    fn hash_value(&self, text: &str, key: Option<&str>, config: &PiiConfig) -> String {
+    fn hash_value(self, text: &str, key: Option<&str>, config: &PiiConfig) -> String {
         let key = key.unwrap_or_else(|| {
             config
                 .vars
@@ -223,7 +223,7 @@ impl HashAlgorithm {
                 format!("{:X}", mac.result().code())
             }};
         }
-        match *self {
+        match self {
             HashAlgorithm::HmacSha1 => hmac!(Sha1),
             HashAlgorithm::HmacSha256 => hmac!(Sha256),
             HashAlgorithm::HmacSha512 => hmac!(Sha512),
