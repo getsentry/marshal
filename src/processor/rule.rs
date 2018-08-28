@@ -103,6 +103,7 @@ lazy_static! {
 }
 
 /// A regex pattern for text replacement.
+#[derive(Clone)]
 pub(crate) struct Pattern(pub Regex);
 
 impl From<&'static str> for Pattern {
@@ -135,7 +136,7 @@ impl<'de> Deserialize<'de> for Pattern {
 }
 
 /// Supported stripping rules.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub(crate) enum RuleType {
     /// Applies a regular expression.
@@ -185,7 +186,7 @@ pub(crate) enum RuleType {
 }
 
 /// Defines the hash algorithm to use for hashing
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[cfg_attr(feature = "cargo-clippy", allow(enum_variant_names))]
 pub(crate) enum HashAlgorithm {
     /// HMAC-SHA1
@@ -206,7 +207,7 @@ impl Default for HashAlgorithm {
 }
 
 impl HashAlgorithm {
-    fn hash_value(&self, text: &str, key: Option<&str>, config: &PiiConfig) -> String {
+    fn hash_value(self, text: &str, key: Option<&str>, config: &PiiConfig) -> String {
         let key = key.unwrap_or_else(|| {
             config
                 .vars
@@ -222,7 +223,7 @@ impl HashAlgorithm {
                 format!("{:X}", mac.result().code())
             }};
         }
-        match *self {
+        match self {
             HashAlgorithm::HmacSha1 => hmac!(Sha1),
             HashAlgorithm::HmacSha256 => hmac!(Sha256),
             HashAlgorithm::HmacSha512 => hmac!(Sha512),
@@ -235,7 +236,7 @@ fn default_mask_char() -> char {
 }
 
 /// Defines how replacements happen.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "method", rename_all = "camelCase")]
 pub(crate) enum Redaction {
     /// The default redaction for this operation (normally equivalen to `Remove`).
@@ -505,7 +506,7 @@ impl Redaction {
 }
 
 /// A single rule configuration.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub(crate) struct RuleSpec {
     #[serde(flatten)]
     pub(crate) ty: RuleType,
@@ -522,7 +523,7 @@ pub(crate) struct Rule<'a> {
 }
 
 /// Common config vars.
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Vars {
     /// The default secret key for hashing operations.
@@ -530,7 +531,7 @@ pub(crate) struct Vars {
 }
 
 /// A set of named rule configurations.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct PiiConfig {
     #[serde(default)]
     pub(crate) rules: BTreeMap<String, RuleSpec>,
@@ -541,6 +542,7 @@ pub struct PiiConfig {
 }
 
 /// A PII processor that uses JSON rules.
+#[derive(Debug)]
 pub struct RuleBasedPiiProcessor<'a> {
     cfg: &'a PiiConfig,
     applications: BTreeMap<PiiKind, Vec<Rule<'a>>>,
