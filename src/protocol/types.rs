@@ -810,7 +810,11 @@ pub struct DeviceContext {
     pub external_free_storage: Annotated<Option<u64>>,
 
     /// Indicator when the device was booted.
-    #[serde(default, with = "serde_chrono", skip_serializing_if = "utils::is_none")]
+    #[serde(
+        default,
+        with = "serde_chrono",
+        skip_serializing_if = "utils::is_none"
+    )]
     pub boot_time: Annotated<Option<DateTime<Utc>>>,
 
     /// Timezone of the device.
@@ -889,7 +893,11 @@ pub struct RuntimeContext {
 #[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct AppContext {
     /// Start time of the app.
-    #[serde(default, with = "serde_chrono", skip_serializing_if = "utils::is_none")]
+    #[serde(
+        default,
+        with = "serde_chrono",
+        skip_serializing_if = "utils::is_none"
+    )]
     pub app_start_time: Annotated<Option<DateTime<Utc>>>,
 
     /// Device app hash (app specific device ID)
@@ -1592,23 +1600,43 @@ pub struct Frame {
     pub abs_path: Annotated<Option<String>>,
 
     /// Line number within the source file.
-    #[serde(default, rename = "lineno", skip_serializing_if = "utils::is_none")]
+    #[serde(
+        default,
+        rename = "lineno",
+        skip_serializing_if = "utils::is_none"
+    )]
     pub line: Annotated<Option<u64>>,
 
     /// Column number within the source file.
-    #[serde(default, rename = "colno", skip_serializing_if = "utils::is_none")]
+    #[serde(
+        default,
+        rename = "colno",
+        skip_serializing_if = "utils::is_none"
+    )]
     pub column: Annotated<Option<u64>>,
 
     /// Source code leading up to the current line.
-    #[serde(default, rename = "pre_context", skip_serializing_if = "utils::is_empty_array")]
+    #[serde(
+        default,
+        rename = "pre_context",
+        skip_serializing_if = "utils::is_empty_array"
+    )]
     pub pre_lines: Annotated<Array<String>>,
 
     /// Source code of the current line.
-    #[serde(default, rename = "context_line", skip_serializing_if = "utils::is_none")]
+    #[serde(
+        default,
+        rename = "context_line",
+        skip_serializing_if = "utils::is_none"
+    )]
     pub current_line: Annotated<Option<String>>,
 
     /// Source code of the lines after the current line.
-    #[serde(default, rename = "post_context", skip_serializing_if = "utils::is_empty_array")]
+    #[serde(
+        default,
+        rename = "post_context",
+        skip_serializing_if = "utils::is_empty_array"
+    )]
     pub post_lines: Annotated<Array<String>>,
 
     /// Override whether this frame should be considered in-app.
@@ -2411,23 +2439,43 @@ pub struct TemplateInfo {
     pub abs_path: Annotated<Option<String>>,
 
     /// Line number within the source file.
-    #[serde(default, rename = "lineno", skip_serializing_if = "utils::is_none")]
+    #[serde(
+        default,
+        rename = "lineno",
+        skip_serializing_if = "utils::is_none"
+    )]
     pub line: Annotated<Option<u64>>,
 
     /// Column number within the source file.
-    #[serde(default, rename = "colno", skip_serializing_if = "utils::is_none")]
+    #[serde(
+        default,
+        rename = "colno",
+        skip_serializing_if = "utils::is_none"
+    )]
     pub column: Annotated<Option<u64>>,
 
     /// Source code leading up to the current line.
-    #[serde(default, rename = "pre_context", skip_serializing_if = "utils::is_empty_array")]
+    #[serde(
+        default,
+        rename = "pre_context",
+        skip_serializing_if = "utils::is_empty_array"
+    )]
     pub pre_lines: Annotated<Array<String>>,
 
     /// Source code of the current line.
-    #[serde(default, rename = "context_line", skip_serializing_if = "utils::is_none")]
+    #[serde(
+        default,
+        rename = "context_line",
+        skip_serializing_if = "utils::is_none"
+    )]
     pub current_line: Annotated<Option<String>>,
 
     /// Source code of the lines after the current line.
-    #[serde(default, rename = "post_context", skip_serializing_if = "utils::is_empty_array")]
+    #[serde(
+        default,
+        rename = "post_context",
+        skip_serializing_if = "utils::is_empty_array"
+    )]
     pub post_lines: Annotated<Array<String>>,
 
     /// Additional arbitrary fields for forwards compatibility.
@@ -3019,7 +3067,11 @@ mod test_debug_image {
 #[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct DebugMeta {
     /// Information about the system SDK (e.g. iOS SDK).
-    #[serde(default, rename = "sdk_info", skip_serializing_if = "utils::is_none")]
+    #[serde(
+        default,
+        rename = "sdk_info",
+        skip_serializing_if = "utils::is_none"
+    )]
     #[process_annotated_value]
     pub system_sdk: Annotated<Option<SystemSdkInfo>>,
 
@@ -3570,7 +3622,10 @@ pub struct Event {
     pub platform: Annotated<String>,
 
     /// Timestamp when the event was created.
-    #[serde(with = "serde_chrono", skip_serializing_if = "utils::is_none")]
+    #[serde(
+        with = "serde_chrono",
+        skip_serializing_if = "utils::is_none"
+    )]
     pub timestamp: Annotated<Option<DateTime<Utc>>>,
 
     /// Server or device name the event was generated on.
@@ -3615,7 +3670,10 @@ pub struct Event {
     pub breadcrumbs: Annotated<Values<Breadcrumb>>,
 
     /// One or multiple chained (nested) exceptions.
-    #[serde(rename = "exception", skip_serializing_if = "utils::is_empty_values")]
+    #[serde(
+        rename = "exception",
+        skip_serializing_if = "utils::is_empty_values"
+    )]
     #[process_annotated_value]
     pub exceptions: Annotated<Values<Exception>>,
 

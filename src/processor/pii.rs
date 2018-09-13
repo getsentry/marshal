@@ -341,8 +341,7 @@ impl<T: ProcessAnnotatedValue> ProcessAnnotatedValue for Array<T> {
                 .into_iter()
                 .map(|item| {
                     ProcessAnnotatedValue::process_annotated_value(item, processor, &info.derive())
-                })
-                .collect()
+                }).collect()
         })
     }
 }
@@ -365,8 +364,7 @@ impl<T: ProcessAnnotatedValue> ProcessAnnotatedValue for Map<T> {
                             &info.derive(),
                         ),
                     )
-                })
-                .collect()
+                }).collect()
         })
     }
 }

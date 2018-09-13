@@ -155,15 +155,27 @@ impl Serialize for Remark {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Meta {
     /// Remarks detailling modifications of this field.
-    #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "rem")]
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        rename = "rem"
+    )]
     pub remarks: Vec<Remark>,
 
     /// Errors that happened during deserialization or processing.
-    #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "err")]
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        rename = "err"
+    )]
     pub errors: Vec<String>,
 
     /// The original length of modified text fields or collections.
-    #[serde(default, skip_serializing_if = "Option::is_none", rename = "len")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "len"
+    )]
     pub original_length: Option<u32>,
 
     /// Path at which the annotated value was deserialized.
