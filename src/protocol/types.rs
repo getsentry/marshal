@@ -3425,6 +3425,92 @@ mod test_fingerprint {
     }
 }
 
+mod tags {
+    use serde::de;
+
+    use super::super::serde::CustomDeserialize;
+    use super::*;
+
+    struct TagsVisitor;
+
+    impl<'de> de::Visitor<'de> for TagsVisitor {
+        type Value = Map<String>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            write!(formatter, "a tags object or array")
+        }
+
+        fn visit_seq<A: de::SeqAccess<'de>>(self, mut access: A) -> Result<Self::Value, A::Error> {
+            let mut map = Map::new();
+            while let Some((key, value)) = access.next_element()? {
+                map.insert(key, value);
+            }
+            Ok(map)
+        }
+
+        fn visit_map<A: de::MapAccess<'de>>(self, mut access: A) -> Result<Self::Value, A::Error> {
+            let mut map = Map::new();
+            while let Some((key, value)) = access.next_entry()? {
+                map.insert(key, value);
+            }
+            Ok(map)
+        }
+    }
+
+    struct TagsDeserialize;
+
+    impl<'de> CustomDeserialize<'de, Map<String>> for TagsDeserialize {
+        fn deserialize<D>(deserializer: D) -> Result<Map<String>, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            deserializer.deserialize_any(TagsVisitor)
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Annotated<Map<String>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Annotated::deserialize_with(deserializer, TagsDeserialize)
+    }
+}
+
+#[cfg(test)]
+mod test_tags {
+    use super::tags;
+    use protocol::*;
+    use serde_json;
+
+    fn deserialize(json: &str) -> Result<Annotated<Map<String>>, serde_json::Error> {
+        tags::deserialize(&mut serde_json::Deserializer::from_str(json))
+    }
+
+    #[test]
+    fn test_tags_map() {
+        let mut map = Map::new();
+        map.insert("context".to_string(), "production".to_string().into());
+        map.insert("ios_version".to_string(), "4.0".to_string().into());
+
+        assert_eq_dbg!(
+            Annotated::from(map),
+            deserialize(r#"{"context":"production","ios_version":"4.0"}"#).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_tags_list() {
+        let mut map = Map::new();
+        map.insert("context".to_string(), "production".to_string().into());
+        map.insert("ios_version".to_string(), "4.0".to_string().into());
+
+        assert_eq_dbg!(
+            Annotated::from(map),
+            deserialize(r#"[["context","production"],["ios_version","4.0"]]"#).unwrap()
+        );
+    }
+}
+
 mod event {
     use std::collections::BTreeMap;
 
@@ -3556,7 +3642,7 @@ mod event {
                     "sentry.interfaces.Threads" => if threads.is_none() {
                         threads = Some(Deserialize::deserialize(deserializer)?)
                     },
-                    "tags" => tags = Some(Deserialize::deserialize(deserializer)?),
+                    "tags" => tags = Some(tags::deserialize(deserializer)?),
                     "extra" => extra = Some(Deserialize::deserialize(deserializer)?),
                     "debug_meta" => debug_meta = Some(Deserialize::deserialize(deserializer)?),
                     "sentry.interfaces.DebugMeta" => if debug_meta.is_none() {
