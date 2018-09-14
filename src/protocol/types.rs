@@ -3148,6 +3148,15 @@ mod test_debug_meta {
     }
 }
 
+/// An installed and loaded package as part of the Sentry SDK.
+#[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
+pub struct ClientSdkPackage {
+    /// Name of the package.
+    pub name: Annotated<String>,
+    /// Version of the package.
+    pub version: Annotated<String>,
+}
+
 /// Information about the Sentry SDK.
 #[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
 pub struct ClientSdkInfo {
@@ -3160,6 +3169,10 @@ pub struct ClientSdkInfo {
     /// List of integrations that are enabled in the SDK.
     #[serde(default, skip_serializing_if = "utils::is_empty_array")]
     pub integrations: Annotated<Array<String>>,
+
+    /// List of installed and loaded SDK packages.
+    #[serde(default, skip_serializing_if = "utils::is_empty_array")]
+    pub packages: Annotated<Array<ClientSdkPackage>>,
 
     /// Additional arbitrary fields for forwards compatibility.
     #[serde(flatten)]
@@ -3179,12 +3192,32 @@ mod test_client_sdk {
   "integrations": [
     "actix"
   ],
+  "packages": [
+    {
+      "name": "cargo:sentry",
+      "version": "0.10.0"
+    },
+    {
+      "name": "cargo:sentry-actix",
+      "version": "0.10.0"
+    }
+  ],
   "other": "value"
 }"#;
         let sdk = ClientSdkInfo {
             name: "sentry.rust".to_string().into(),
             version: "1.0.0".to_string().into(),
             integrations: vec!["actix".to_string().into()].into(),
+            packages: vec![
+                ClientSdkPackage {
+                    name: "cargo:sentry".to_string().into(),
+                    version: "0.10.0".to_string().into(),
+                }.into(),
+                ClientSdkPackage {
+                    name: "cargo:sentry-actix".to_string().into(),
+                    version: "0.10.0".to_string().into(),
+                }.into(),
+            ].into(),
             other: {
                 let mut map = Map::new();
                 map.insert(
@@ -3209,6 +3242,7 @@ mod test_client_sdk {
             name: "sentry.rust".to_string().into(),
             version: "1.0.0".to_string().into(),
             integrations: Array::new().into(),
+            packages: Array::new().into(),
             other: Default::default(),
         };
 
