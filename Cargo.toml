@@ -4,25 +4,25 @@ version = "0.1.0"
 authors = ["Armin Ronacher <armin.ronacher@active-4.com>"]
 
 [dependencies]
-chrono = "0.4.2"
+chrono = "0.4.6"
 cookie = { version = "0.11.0", features = ["percent-encode"] }
-debugid = { version = "0.2.0", features = ["with_serde"] }
-regex = "1.0.1"
-serde = "1.0.69"
-serde_derive = "1.0.69"
-serde_json = "1.0.22"
-uuid = { version = "0.6.5", features = ["v4", "serde"] }
+debugid = { version = "0.3.0", features = ["with_serde"] }
+regex = "1.0.5"
+serde = "1.0.78"
+serde_derive = "1.0.78"
+serde_json = "1.0.27"
+uuid = { version = "0.7.0", features = ["v4", "serde"] }
 marshal_derive = { path = "derive" }
-failure = "0.1.1"
-failure_derive = "0.1.1"
-lazy_static = "1.0.1"
+failure = "0.1.2"
+failure_derive = "0.1.2"
+lazy_static = "1.1.0"
 sha2 = "0.7.1"
-hmac = "0.6.2"
+hmac = "0.6.3"
 sha-1 = "0.7.0"
 queryst = "2.0.0"
 
 [dev-dependencies]
-console = "0.6.1"
+console = "0.6.2"
 dialoguer = "0.1.0"
 difference = "2.0.0"
 

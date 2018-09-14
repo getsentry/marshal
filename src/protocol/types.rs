@@ -3443,7 +3443,7 @@ mod event {
                 S: Serializer,
             {
                 match value {
-                    Some(uuid) => serializer.serialize_some(&uuid.simple().to_string()),
+                    Some(uuid) => serializer.serialize_some(&uuid.to_simple_ref().to_string()),
                     None => serializer.serialize_none(),
                 }
             }
