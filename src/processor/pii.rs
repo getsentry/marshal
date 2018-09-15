@@ -102,29 +102,17 @@ pub trait Processor {
                 let Annotated(val_opt, meta) = self.process_bool(Annotated::new(val, meta), info);
                 Annotated(val_opt.map(Value::Bool), meta)
             }
-            Annotated(Some(Value::U32(val)), meta) => {
-                let Annotated(val_opt, meta) = self.process_u32(Annotated::new(val, meta), info);
-                Annotated(val_opt.map(Value::U32), meta)
-            }
-            Annotated(Some(Value::I32(val)), meta) => {
-                let Annotated(val_opt, meta) = self.process_i32(Annotated::new(val, meta), info);
-                Annotated(val_opt.map(Value::I32), meta)
-            }
-            Annotated(Some(Value::U64(val)), meta) => {
+            Annotated(Some(Value::UnsignedInteger(val)), meta) => {
                 let Annotated(val_opt, meta) = self.process_u64(Annotated::new(val, meta), info);
-                Annotated(val_opt.map(Value::U64), meta)
+                Annotated(val_opt.map(Value::UnsignedInteger), meta)
             }
-            Annotated(Some(Value::I64(val)), meta) => {
+            Annotated(Some(Value::SignedInteger(val)), meta) => {
                 let Annotated(val_opt, meta) = self.process_i64(Annotated::new(val, meta), info);
-                Annotated(val_opt.map(Value::I64), meta)
+                Annotated(val_opt.map(Value::SignedInteger), meta)
             }
-            Annotated(Some(Value::F32(val)), meta) => {
-                let Annotated(val_opt, meta) = self.process_f32(Annotated::new(val, meta), info);
-                Annotated(val_opt.map(Value::F32), meta)
-            }
-            Annotated(Some(Value::F64(val)), meta) => {
+            Annotated(Some(Value::Float(val)), meta) => {
                 let Annotated(val_opt, meta) = self.process_f64(Annotated::new(val, meta), info);
-                Annotated(val_opt.map(Value::F64), meta)
+                Annotated(val_opt.map(Value::Float), meta)
             }
             Annotated(Some(Value::String(val)), meta) => {
                 let Annotated(val_opt, meta) = self.process_string(Annotated::new(val, meta), info);
@@ -246,12 +234,9 @@ impl<T: PiiProcessor> Processor for T {
     }
 
     impl_primitive_pii_process!(bool, Bool, process_bool);
-    impl_primitive_pii_process!(u32, U32, process_u32);
-    impl_primitive_pii_process!(i32, I32, process_i32);
-    impl_primitive_pii_process!(u64, U64, process_u64);
-    impl_primitive_pii_process!(i64, I64, process_i64);
-    impl_primitive_pii_process!(f32, F32, process_f32);
-    impl_primitive_pii_process!(f64, F64, process_f64);
+    impl_primitive_pii_process!(u64, UnsignedInteger, process_u64);
+    impl_primitive_pii_process!(i64, SignedInteger, process_i64);
+    impl_primitive_pii_process!(f64, Float, process_f64);
 }
 
 macro_rules! impl_primitive_process {
@@ -269,11 +254,8 @@ macro_rules! impl_primitive_process {
 }
 
 impl_primitive_process!(bool, process_bool);
-impl_primitive_process!(u32, process_u32);
-impl_primitive_process!(i32, process_i32);
 impl_primitive_process!(u64, process_u64);
 impl_primitive_process!(i64, process_i64);
-impl_primitive_process!(f32, process_f32);
 impl_primitive_process!(f64, process_f64);
 impl_primitive_process!(String, process_string);
 impl_primitive_process!(Value, process_value);

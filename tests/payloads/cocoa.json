@@ -576,7 +576,7 @@
         "name": "/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/Library/CoreSimulator/Profiles/Runtimes/iOS.simruntime/Contents/Resources/RuntimeRoot/usr/lib/system/libsystem_containermanager.dylib",
         "revision_version": 0,
         "type": "apple",
-        "uuid": "F32F9759-4AD2-3227-8A71-1B9938180292"
+        "uuid": "FloatF9759-4AD2-3227-8A71-1B9938180292"
       },
       {
         "cpu_subtype": 3,
@@ -745,7 +745,7 @@
         "name": "/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/Library/CoreSimulator/Profiles/Runtimes/iOS.simruntime/Contents/Resources/RuntimeRoot/usr/lib/system/libsystem_trace.dylib",
         "revision_version": 17,
         "type": "apple",
-        "uuid": "004F5E16-5889-33D5-A54F-DF649F91815A"
+        "uuid": "004F5E16-5889-33D5-A54F-DFloat9F91815A"
       },
       {
         "cpu_subtype": 3,
@@ -1044,7 +1044,7 @@
         "name": "/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/Library/CoreSimulator/Profiles/Runtimes/iOS.simruntime/Contents/Resources/RuntimeRoot/usr/lib/libcoretls.dylib",
         "revision_version": 1,
         "type": "apple",
-        "uuid": "CCD0954E-AF64-3F84-9B0C-F100813C43AD"
+        "uuid": "CCD0954E-AFloat-3F84-9B0C-F100813C43AD"
       },
       {
         "cpu_subtype": 3,
@@ -1408,7 +1408,7 @@
         "name": "/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/Library/CoreSimulator/Profiles/Runtimes/iOS.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/TextInput.framework/TextInput",
         "revision_version": 0,
         "type": "apple",
-        "uuid": "CACC8683-E618-31C8-84DE-15929F3268A8"
+        "uuid": "CACC8683-E618-31C8-84DE-15929Float68A8"
       },
       {
         "cpu_subtype": 3,
@@ -1707,7 +1707,7 @@
         "name": "/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/Library/CoreSimulator/Profiles/Runtimes/iOS.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/FontServices.framework/libFontParser.dylib",
         "revision_version": 0,
         "type": "apple",
-        "uuid": "90E9EE62-990A-3BCF-94EC-581A2154CF64"
+        "uuid": "90E9EE62-990A-3BCF-94EC-581A2154CFloat"
       },
       {
         "cpu_subtype": 3,

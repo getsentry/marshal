@@ -162,7 +162,7 @@ mod test_logentry {
             message: "Hello, %s %s!".to_string().into(),
             params: vec![
                 Value::String("World".to_string()).into(),
-                Value::U64(1).into(),
+                Value::UnsignedInteger(1).into(),
             ].into(),
             other: {
                 let mut map = Map::new();
@@ -595,7 +595,7 @@ mod test_request {
             method: Some("GET".to_string()).into(),
             data: {
                 let mut map = Map::new();
-                map.insert("some".to_string(), Value::U64(1).into());
+                map.insert("some".to_string(), Value::UnsignedInteger(1).into());
                 Annotated::from(Some(Value::Map(map)))
             },
             query_string: Query({
