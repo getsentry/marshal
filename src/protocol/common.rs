@@ -20,16 +20,10 @@ pub enum Value {
     Null,
     /// A boolean value.
     Bool(bool),
-    /// An unsigned int 32.
-    U32(u32),
-    /// A signed int 32.
-    I32(i32),
     /// An unsigned int 64.
     U64(u64),
     /// A signed int 64.
     I64(i64),
-    /// A 32bit float.
-    F32(f32),
     /// A 64bit float.
     F64(f64),
     /// A string.
@@ -44,18 +38,18 @@ macro_rules! declare_from {
     ($ty:ident, $value_ty:ident) => {
         impl From<$ty> for Value {
             fn from(value: $ty) -> Value {
-                Value::$value_ty(value)
+                Value::$value_ty(value.into())
             }
         }
     };
 }
 
 declare_from!(bool, Bool);
-declare_from!(u32, U32);
-declare_from!(i32, I32);
+declare_from!(u32, U64);
+declare_from!(i32, I64);
 declare_from!(u64, U64);
 declare_from!(i64, I64);
-declare_from!(f32, F32);
+declare_from!(f32, F64);
 declare_from!(f64, F64);
 declare_from!(String, String);
 
@@ -72,11 +66,8 @@ impl fmt::Display for Value {
         match *self {
             Value::Null => write!(f, "null"),
             Value::Bool(val) => write!(f, "{}", val),
-            Value::U32(val) => write!(f, "{}", val),
-            Value::I32(val) => write!(f, "{}", val),
             Value::U64(val) => write!(f, "{}", val),
             Value::I64(val) => write!(f, "{}", val),
-            Value::F32(val) => write!(f, "{}", val),
             Value::F64(val) => write!(f, "{}", val),
             Value::String(ref val) => write!(f, "{}", val),
             Value::Array(ref val) => {
@@ -129,21 +120,21 @@ impl<'de> de::Visitor<'de> for ValueVisitor {
     where
         E: de::Error,
     {
-        Ok(Value::I32(v.into()))
+        Ok(Value::I64(v.into()))
     }
 
     fn visit_i16<E>(self, v: i16) -> Result<Self::Value, E>
     where
         E: de::Error,
     {
-        Ok(Value::I32(v.into()))
+        Ok(Value::I64(v.into()))
     }
 
     fn visit_i32<E>(self, v: i32) -> Result<Self::Value, E>
     where
         E: de::Error,
     {
-        Ok(Value::I32(v))
+        Ok(Value::I64(v.into()))
     }
 
     fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
@@ -157,21 +148,21 @@ impl<'de> de::Visitor<'de> for ValueVisitor {
     where
         E: de::Error,
     {
-        Ok(Value::U32(v.into()))
+        Ok(Value::U64(v.into()))
     }
 
     fn visit_u16<E>(self, v: u16) -> Result<Self::Value, E>
     where
         E: de::Error,
     {
-        Ok(Value::U32(v.into()))
+        Ok(Value::U64(v.into()))
     }
 
     fn visit_u32<E>(self, v: u32) -> Result<Self::Value, E>
     where
         E: de::Error,
     {
-        Ok(Value::U32(v))
+        Ok(Value::U64(v.into()))
     }
 
     fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
@@ -185,7 +176,7 @@ impl<'de> de::Visitor<'de> for ValueVisitor {
     where
         E: de::Error,
     {
-        Ok(Value::F32(v))
+        Ok(Value::F64(v.into()))
     }
 
     fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
@@ -293,11 +284,8 @@ impl Serialize for Value {
         match *self {
             Value::Null => serializer.serialize_none(),
             Value::Bool(b) => serializer.serialize_bool(b),
-            Value::U32(u) => serializer.serialize_u32(u),
-            Value::I32(i) => serializer.serialize_i32(i),
             Value::U64(u) => serializer.serialize_u64(u),
             Value::I64(i) => serializer.serialize_i64(i),
-            Value::F32(f) => serializer.serialize_f32(f),
             Value::F64(f) => serializer.serialize_f64(f),
             Value::String(ref s) => serializer.serialize_str(s),
             Value::Array(ref a) => {
