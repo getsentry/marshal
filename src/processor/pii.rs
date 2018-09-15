@@ -102,17 +102,17 @@ pub trait Processor {
                 let Annotated(val_opt, meta) = self.process_bool(Annotated::new(val, meta), info);
                 Annotated(val_opt.map(Value::Bool), meta)
             }
-            Annotated(Some(Value::UnsignedInteger(val)), meta) => {
+            Annotated(Some(Value::U64(val)), meta) => {
                 let Annotated(val_opt, meta) = self.process_u64(Annotated::new(val, meta), info);
-                Annotated(val_opt.map(Value::UnsignedInteger), meta)
+                Annotated(val_opt.map(Value::U64), meta)
             }
-            Annotated(Some(Value::SignedInteger(val)), meta) => {
+            Annotated(Some(Value::I64(val)), meta) => {
                 let Annotated(val_opt, meta) = self.process_i64(Annotated::new(val, meta), info);
-                Annotated(val_opt.map(Value::SignedInteger), meta)
+                Annotated(val_opt.map(Value::I64), meta)
             }
-            Annotated(Some(Value::Float(val)), meta) => {
+            Annotated(Some(Value::F64(val)), meta) => {
                 let Annotated(val_opt, meta) = self.process_f64(Annotated::new(val, meta), info);
-                Annotated(val_opt.map(Value::Float), meta)
+                Annotated(val_opt.map(Value::F64), meta)
             }
             Annotated(Some(Value::String(val)), meta) => {
                 let Annotated(val_opt, meta) = self.process_string(Annotated::new(val, meta), info);
@@ -234,9 +234,9 @@ impl<T: PiiProcessor> Processor for T {
     }
 
     impl_primitive_pii_process!(bool, Bool, process_bool);
-    impl_primitive_pii_process!(u64, UnsignedInteger, process_u64);
-    impl_primitive_pii_process!(i64, SignedInteger, process_i64);
-    impl_primitive_pii_process!(f64, Float, process_f64);
+    impl_primitive_pii_process!(u64, U64, process_u64);
+    impl_primitive_pii_process!(i64, I64, process_i64);
+    impl_primitive_pii_process!(f64, F64, process_f64);
 }
 
 macro_rules! impl_primitive_process {
