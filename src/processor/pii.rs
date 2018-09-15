@@ -87,11 +87,8 @@ macro_rules! declare_primitive_process {
 /// A general processing trait for annotated values.
 pub trait Processor {
     declare_primitive_process!(bool, process_bool);
-    declare_primitive_process!(u32, process_u32);
-    declare_primitive_process!(i32, process_i32);
     declare_primitive_process!(u64, process_u64);
     declare_primitive_process!(i64, process_i64);
-    declare_primitive_process!(f32, process_f32);
     declare_primitive_process!(f64, process_f64);
     declare_primitive_process!(String, process_string);
 
@@ -189,9 +186,9 @@ macro_rules! impl_primitive_pii_process {
             match (annotated, info.pii_kind) {
                 (annotated, None) | (annotated @ Annotated(None, _), _) => annotated,
                 (Annotated(Some(value), meta), Some(pii_kind)) => {
-                    let annotated = Annotated(Some(Value::$value_ty(value)), meta);
+                    let annotated = Annotated(Some(Value::$value_ty(value.into())), meta);
                     match self.pii_process_value(annotated, pii_kind) {
-                        Annotated(Some(Value::$value_ty(value)), meta) => Annotated(Some(value), meta),
+                        Annotated(Some(Value::$value_ty(value)), meta) => Annotated(Some(value as $ty), meta),
                         Annotated(_, meta) => Annotated(None, meta),
                     }
                 }
@@ -247,15 +244,20 @@ macro_rules! impl_primitive_process {
                 processor: &Processor,
                 info: &ValueInfo,
             ) -> Annotated<$ty> {
-                processor.$func(annotated, info)
+                processor
+                    .$func(annotated.map(From::from), info)
+                    .map(|x| x as $ty)
             }
         }
     };
 }
 
 impl_primitive_process!(bool, process_bool);
+impl_primitive_process!(u32, process_u64);
+impl_primitive_process!(i32, process_i64);
 impl_primitive_process!(u64, process_u64);
 impl_primitive_process!(i64, process_i64);
+impl_primitive_process!(f32, process_f64);
 impl_primitive_process!(f64, process_f64);
 impl_primitive_process!(String, process_string);
 impl_primitive_process!(Value, process_value);
@@ -371,11 +373,11 @@ mod tests {
         struct MyProcessor;
 
         impl Processor for MyProcessor {
-            fn process_u32(
+            fn process_u64(
                 &self,
-                mut annotated: Annotated<u32>,
+                mut annotated: Annotated<u64>,
                 _info: &ValueInfo,
-            ) -> Annotated<u32> {
+            ) -> Annotated<u64> {
                 annotated.set_value(None);
                 annotated.meta_mut().errors.push("Whatever mate".into());
                 annotated
