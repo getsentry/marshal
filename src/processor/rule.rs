@@ -1274,7 +1274,7 @@ mod tests {
 
     #[test]
     fn test_rules_precedence() {
-        fn inner(cfg: PiiConfig) {
+        fn inner(cfg: &PiiConfig) {
             #[derive(ProcessAnnotatedValue, Debug, Deserialize, Serialize, Clone)]
             struct Event {
                 #[process_annotated_value(pii_kind = "databag")]
@@ -1295,7 +1295,7 @@ mod tests {
         }
 
         inner(
-            PiiConfig::from_json(
+            &PiiConfig::from_json(
                 r#"{
           "applications": {
             "databag": [
@@ -1314,7 +1314,7 @@ mod tests {
         );
 
         inner(
-            PiiConfig::from_json(
+            &PiiConfig::from_json(
                 r#"{
           "applications": {
             "databag": [
