@@ -159,8 +159,8 @@ pub(crate) enum RuleType {
     Creditcard,
     /// Sanitizes a path from user data
     Userpath,
-    /// Unconditionally removes the value
-    Remove,
+    /// Matches any value.
+    Anything,
     /// Applies multiple rules.
     Multiple {
         /// A reference to other rules to apply
@@ -688,7 +688,7 @@ impl<'a> Rule<'a> {
                 }
             }
             // no special handling for strings, falls back to `process_value`
-            RuleType::Remove | RuleType::RedactPair { .. } => return Err(rv),
+            RuleType::Anything | RuleType::RedactPair { .. } => return Err(rv),
         }
 
         Ok(rv)
@@ -718,7 +718,7 @@ impl<'a> Rule<'a> {
             | RuleType::Ip
             | RuleType::Creditcard
             | RuleType::Userpath => Err(value),
-            RuleType::Remove => Ok(redaction.replace_value(report_rule, self.config(), value)),
+            RuleType::Anything => Ok(redaction.replace_value(report_rule, self.config(), value)),
             RuleType::Alias {
                 ref rule,
                 hide_rule,
@@ -898,7 +898,7 @@ mod tests {
                 "keyPattern": "foo"
             },
             "remove_ip": {
-                "type": "remove"
+                "type": "anything"
             },
             "hash_ip": {
                 "type": "pattern",
