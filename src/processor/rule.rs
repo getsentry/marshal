@@ -1282,37 +1282,15 @@ mod tests {
             }
 
             let event = Annotated::<Event>::from_json(
-                r#"{
-              "extra": {
-                "foo": "Paid with card 1234-1234-1234-1234 on d/deadbeef1234"
-              }
-            }"#,
+                r#"{"extra": {"foo": "Paid with card 1234-1234-1234-1234 on d/deadbeef1234"}}"#,
             ).unwrap();
 
             let processor = cfg.processor();
             let processed_event = processor.process_root_value(event);
 
             assert_eq_str!(
-                processed_event.to_json_pretty().unwrap(),
-                r#"{
-  "extra": {
-    "foo": null
-  },
-  "_meta": {
-    "extra": {
-      "foo": {
-        "": {
-          "rem": [
-            [
-              "remove_all_message_keys",
-              "x"
-            ]
-          ]
-        }
-      }
-    }
-  }
-}"#
+                processed_event.to_json().unwrap(),
+                r#"{"extra":{"foo":null},"_meta":{"extra":{"foo":{"":{"rem":[["remove_all_message_keys","x"]]}}}}}"#
             );
         }
 
