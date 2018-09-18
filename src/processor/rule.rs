@@ -77,7 +77,7 @@ lazy_static! {
                 "fe80:(:", ip!(v6s), "){0,4}%[0-9a-zA-Z]{1,}",
                 "::(ffff(:0{1,4}){0,1}:){0,1}", ip!(v4a), "|",
                 "(", ip!(v6s), ":){1,4}:", ip!(v4a),
-            ")([\\s]|[[:punct:]]|^)",
+            ")([\\s]|[[:punct:]]|$)",
         )
     ).unwrap();
     static ref CREDITCARD_REGEX: Regex = Regex::new(
