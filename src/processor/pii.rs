@@ -221,7 +221,7 @@ impl<T: PiiProcessor> Processor for T {
 
                         Annotated(Some(value), meta)
                     }
-                    Annotated(_, meta) => return Annotated(None, meta),
+                    Annotated(_, meta) => Annotated(None, meta),
                 }
             }
         }
