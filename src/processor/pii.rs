@@ -203,28 +203,25 @@ impl<T: PiiProcessor> Processor for T {
             (annotated, None) | (annotated @ Annotated(None, _), _) => annotated,
             (Annotated(Some(value), meta), Some(pii_kind)) => {
                 let original_length = value.len();
-                let chunks = chunk::chunks_from_str(&value, &meta);
-                match PiiProcessor::pii_process_chunks(self, chunks, meta, pii_kind) {
-                    Ok((chunks, meta)) => {
-                        let (value, mut meta) = chunk::chunks_to_string(chunks, meta);
+
+                match self.pii_process_value(Annotated(Some(Value::String(value)), meta), pii_kind)
+                {
+                    Annotated(Some(Value::String(value)), mut meta) => {
+                        let (value, mut meta) = {
+                            let chunks = chunk::chunks_from_str(&value, &meta);
+                            match self.pii_process_chunks(chunks, meta, pii_kind) {
+                                Ok((chunks, meta)) => chunk::chunks_to_string(chunks, meta),
+                                Err((_, meta)) => (value, meta),
+                            }
+                        };
+
                         if value.len() != original_length && meta.original_length.is_none() {
                             meta.original_length = Some(original_length as u32);
                         }
+
                         Annotated(Some(value), meta)
                     }
-                    Err((_, meta)) => {
-                        let annotated = Annotated(Some(Value::String(value)), meta);
-                        match self.pii_process_value(annotated, pii_kind) {
-                            Annotated(Some(Value::String(value)), mut meta) => {
-                                if value.len() != original_length && meta.original_length.is_none()
-                                {
-                                    meta.original_length = Some(original_length as u32);
-                                }
-                                Annotated(Some(value), meta)
-                            }
-                            Annotated(_, meta) => Annotated(None, meta),
-                        }
-                    }
+                    Annotated(_, meta) => return Annotated(None, meta),
                 }
             }
         }
