@@ -12,7 +12,61 @@ use syn::{Lit, Meta, MetaNameValue, NestedMeta};
 
 decl_derive!([ProcessAnnotatedValue, attributes(process_annotated_value)] => process_item_derive);
 
+fn process_wrapper_struct_derive(
+    s: synstructure::Structure,
+) -> Result<TokenStream, synstructure::Structure> {
+    if s.variants().len() != 1 {
+        return Err(s);
+    }
+
+    if s.variants()[0].bindings().len() != 1 {
+        return Err(s);
+    }
+
+    if let Some(_) = s.variants()[0].bindings()[0].ast().ident {
+        return Err(s);
+    }
+
+    if !s.variants()[0].bindings()[0].ast().attrs.is_empty() {
+        panic!("Single-field tuple structs are treated as type aliases");
+    }
+
+    // At this point we know we have a struct of the form:
+    // struct Foo(Bar)
+    //
+    // Those structs get special treatment: Bar does not need to be wrapped in Annnotated, and no
+    // #[process_annotated_value] is necessary on the value.
+    //
+    // It basically works like a type alias.
+
+    let name = &s.ast().ident;
+
+    Ok(s.gen_impl(quote! {
+        use processor as __processor;
+        use protocol as __protocol;
+
+        gen impl __processor::ProcessAnnotatedValue for @Self {
+            fn process_annotated_value(
+                __annotated: __protocol::Annotated<Self>,
+                __processor: &__processor::Processor,
+                __info: &__processor::ValueInfo
+            ) -> __protocol::Annotated<Self> {
+                __processor::ProcessAnnotatedValue::process_annotated_value(
+                    __annotated.map(|x| x.0),
+                    __processor,
+                    __info
+                ).map(#name)
+            }
+        }
+    }))
+}
+
 fn process_item_derive(s: synstructure::Structure) -> TokenStream {
+    let s = match process_wrapper_struct_derive(s) {
+        Ok(stream) => return stream,
+        Err(s) => s,
+    };
+
     let mut body = TokenStream::new();
     for variant in s.variants() {
         let mut variant = variant.clone();
@@ -76,7 +130,8 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
                 let pii_kind = pii_kind
                     .map(|x| quote!(Some(__processor::#x)))
                     .unwrap_or_else(|| quote!(None));
-                let cap = cap.map(|x| quote!(Some(__processor::#x)))
+                let cap = cap
+                    .map(|x| quote!(Some(__processor::#x)))
                     .unwrap_or_else(|| quote!(None));
                 (quote! {
                     #bi = __processor::ProcessAnnotatedValue::process_annotated_value(

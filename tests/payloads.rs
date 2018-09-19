@@ -7,7 +7,6 @@ mod common;
 use marshal::processor::PiiConfig;
 use marshal::protocol::{Annotated, Event};
 
-
 static PII_CONFIG: &str = r#"{
   "applications": {
     "freeform": []
@@ -19,7 +18,13 @@ macro_rules! run {
         #[test]
         fn $sdk() {
             let input = read_fixture(concat!("payloads/payloads/", stringify!($sdk), ".json"));
-            let expected = read_fixture(concat!("payloads/", stringify!($mode), "/", stringify!($sdk), ".json"));
+            let expected = read_fixture(concat!(
+                "payloads/",
+                stringify!($mode),
+                "/",
+                stringify!($sdk),
+                ".json"
+            ));
             let actual = super::$mode(&input);
             assert_eq_str!(expected, actual);
         }

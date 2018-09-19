@@ -14,8 +14,8 @@ pub fn read_fixture<P: AsRef<Path>>(path: P) -> String {
     string
 }
 
-
 // XXX: Copy/paste from testutils.rs
+#[macro_export]
 macro_rules! assert_eq_str {
     ($left:expr, $right:expr) => {{
         let left = &($left);
@@ -30,4 +30,3 @@ macro_rules! assert_eq_str {
         )
     }};
 }
-
