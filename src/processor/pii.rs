@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 
 use protocol::{Annotated, Array, Map, Meta, Value, Values};
 
-use super::chunk::{self, Chunk};
+use super::chunks::{self, Chunk};
 
 /// The type of PII that's contained in the field.
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, Ord, PartialOrd, Eq, PartialEq)]
@@ -208,9 +208,13 @@ impl<T: PiiProcessor> Processor for T {
                 {
                     Annotated(Some(Value::String(value)), mut meta) => {
                         let (value, mut meta) = {
-                            let chunks = chunk::chunks_from_str(&value, &meta);
+                            let chunks = chunks::split(&value, meta.remarks());
                             match self.pii_process_chunks(chunks, meta, pii_kind) {
-                                Ok((chunks, meta)) => chunk::chunks_to_string(chunks, meta),
+                                Ok((chunks, mut meta)) => {
+                                    let (value, remarks) = chunks::join(chunks);
+                                    *meta.remarks_mut() = remarks;
+                                    (value, meta)
+                                }
                                 Err((_, meta)) => (value, meta),
                             }
                         };
