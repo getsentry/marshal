@@ -350,15 +350,15 @@ mod test_user {
 
 /// Wrapper type for query-string like maps.
 #[derive(Debug, Clone, Default, PartialEq, ProcessAnnotatedValue, Serialize)]
-pub struct Query(pub Map<Value>);
+pub struct Query(#[process_annotated_value(pii_kind = "databag")] pub Annotated<Map<Value>>);
 
 /// Wrapper type for request header maps.
 #[derive(Debug, Clone, Default, PartialEq, ProcessAnnotatedValue, Serialize)]
-pub struct Cookies(pub Map<String>);
+pub struct Cookies(#[process_annotated_value(pii_kind = "databag")] pub Annotated<Map<String>>);
 
 /// Wrapper type for request header maps.
 #[derive(Debug, Clone, Default, PartialEq, ProcessAnnotatedValue, Serialize)]
-pub struct Headers(pub Map<String>);
+pub struct Headers(#[process_annotated_value(pii_kind = "databag")] pub Annotated<Map<String>>);
 
 /// Http request information.
 #[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
@@ -416,15 +416,15 @@ mod request {
     use super::*;
 
     pub fn is_empty_query(annotated: &Annotated<Query>) -> bool {
-        utils::skip_if(annotated, |query| query.0.is_empty())
+        utils::skip_if(annotated, |query| query.0.value().unwrap().is_empty())
     }
 
     pub fn is_empty_cookies(annotated: &Annotated<Cookies>) -> bool {
-        utils::skip_if(annotated, |cookies| cookies.0.is_empty())
+        utils::skip_if(annotated, |cookies| cookies.0.value().unwrap().is_empty())
     }
 
     pub fn is_empty_headers(annotated: &Annotated<Headers>) -> bool {
-        utils::skip_if(annotated, |headers| headers.0.is_empty())
+        utils::skip_if(annotated, |headers| headers.0.value().unwrap().is_empty())
     }
 
     struct ParseQueryError(String);
@@ -471,7 +471,7 @@ mod request {
             while let Some(entry) = map.next_entry()? {
                 query.insert(entry.0, entry.1);
             }
-            Ok(Query(query))
+            Ok(Query(query.into()))
         }
     }
 
@@ -496,7 +496,7 @@ mod request {
                 let cookie = Cookie::parse_encoded(cookie).map_err(E::custom)?;
                 cookies.insert(cookie.name().to_string(), cookie.value().to_string().into());
             }
-            Ok(Cookies(cookies))
+            Ok(Cookies(cookies.into()))
         }
 
         fn visit_map<A: de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
@@ -504,7 +504,7 @@ mod request {
             while let Some(entry) = map.next_entry()? {
                 cookies.insert(entry.0, entry.1);
             }
-            Ok(Cookies(cookies))
+            Ok(Cookies(cookies.into()))
         }
     }
 
@@ -551,7 +551,7 @@ mod request {
             while let Some(entry) = map.next_entry()? {
                 headers.insert(capitalize_header(entry.0), entry.1);
             }
-            Ok(Headers(headers))
+            Ok(Headers(headers.into()))
         }
     }
 
@@ -601,28 +601,28 @@ mod test_request {
             query_string: Query({
                 let mut map = Map::new();
                 map.insert("q".to_string(), Value::String("foo".to_string()).into());
-                map
+                map.into()
             }).into(),
             cookies: Cookies({
                 let mut map = Map::new();
                 map.insert("GOOGLE".to_string(), "1".to_string().into());
-                map
+                map.into()
             }).into(),
-            headers: {
+            headers: Headers({
                 let mut map = Map::new();
                 map.insert(
                     "Referer".to_string(),
                     "https://google.com/".to_string().into(),
                 );
-                Annotated::from(Headers(map))
-            },
+                map.into()
+            }).into(),
             env: {
                 let mut map = Map::new();
                 map.insert(
                     "REMOTE_ADDR".to_string(),
                     Value::String("213.47.147.207".to_string()).into(),
                 );
-                Annotated::from(map)
+                map.into()
             },
             other: {
                 let mut map = Map::new();
@@ -630,7 +630,7 @@ mod test_request {
                     "other".to_string(),
                     Value::String("value".to_string()).into(),
                 );
-                Annotated::from(map)
+                map.into()
             },
         };
 
@@ -660,7 +660,7 @@ mod test_request {
     fn test_query_string() {
         let mut map = Map::new();
         map.insert("foo".to_string(), Value::String("bar".to_string()).into());
-        let query = Annotated::from(Query(map));
+        let query = Annotated::from(Query(map.into()));
         assert_eq_dbg!(query, serde_json::from_str("\"foo=bar\"").unwrap());
     }
 
@@ -668,7 +668,7 @@ mod test_request {
     fn test_query_string_questionmark() {
         let mut map = Map::new();
         map.insert("foo".to_string(), Value::String("bar".to_string()).into());
-        let query = Annotated::from(Query(map));
+        let query = Annotated::from(Query(map.into()));
         assert_eq_dbg!(query, serde_json::from_str("\"?foo=bar\"").unwrap());
     }
 
@@ -676,7 +676,7 @@ mod test_request {
     fn test_query_object() {
         let mut map = Map::new();
         map.insert("foo".to_string(), Value::String("bar".to_string()).into());
-        let query = Annotated::from(Query(map));
+        let query = Annotated::from(Query(map.into()));
         assert_eq_dbg!(query, serde_json::from_str(r#"{"foo":"bar"}"#).unwrap());
     }
 
@@ -700,7 +700,7 @@ mod test_request {
         map.insert("csrftoken".to_string(), "u32t4o3tb3gg43".to_string().into());
         map.insert("_gat".to_string(), "1".to_string().into());
 
-        let cookies = Annotated::from(Cookies(map));
+        let cookies = Annotated::from(Cookies(map.into()));
         assert_eq_dbg!(cookies, serde_json::from_str(json).unwrap());
     }
 
@@ -715,7 +715,7 @@ mod test_request {
             Annotated::from_error("invalid type: integer `42`, expected a string"),
         );
 
-        let cookies = Annotated::from(Cookies(map));
+        let cookies = Annotated::from(Cookies(map.into()));
         assert_eq_dbg!(cookies, serde_json::from_str(json).unwrap());
     }
 
@@ -740,7 +740,7 @@ mod test_request {
         map.insert("X-Sentry".to_string(), "version=8".to_string().into());
         map.insert("-Other-".to_string(), "header".to_string().into());
 
-        let query = Annotated::from(Headers(map));
+        let query = Annotated::from(Headers(map.into()));
         assert_eq_dbg!(query, serde_json::from_str(json).unwrap());
     }
 }

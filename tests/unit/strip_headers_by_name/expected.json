@@ -1,0 +1,23 @@
+{
+  "request": {
+    "headers": {
+      "Foo": null
+    }
+  },
+  "_meta": {
+    "request": {
+      "headers": {
+        "Foo": {
+          "": {
+            "rem": [
+              [
+                "remove_data",
+                "x"
+              ]
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,11 +1,12 @@
 extern crate difference;
 extern crate marshal;
 
-use std::fs;
-use std::path::Path;
+#[macro_use]
+mod common;
 
 use marshal::processor::PiiConfig;
 use marshal::protocol::{Annotated, Event};
+
 
 static PII_CONFIG: &str = r#"{
   "applications": {
@@ -13,41 +14,12 @@ static PII_CONFIG: &str = r#"{
   }
 }"#;
 
-// XXX: Copy/paste from testutils.rs
-macro_rules! assert_eq_str {
-    ($left:expr, $right:expr) => {{
-        let left = &($left);
-        let right = &$right;
-
-        assert!(
-            left == right,
-            "`left == right` in line {}:\n{}\n{}",
-            line!(),
-            ::difference::Changeset::new("- left", "+ right", "\n"),
-            ::difference::Changeset::new(&left, &right, "\n")
-        )
-    }};
-}
-
-fn read_fixture<P: AsRef<Path>>(path: P) -> String {
-    let full_path = Path::new("tests/").join(path.as_ref());
-    let mut string = fs::read_to_string(full_path)
-        .unwrap_or_else(|_| panic!("failed to read fixture '{}'", path.as_ref().display()));
-
-    if string.ends_with('\n') {
-        let len = string.len();
-        string.truncate(len - 1);
-    }
-
-    string
-}
-
 macro_rules! run {
     ($mode:ident, $sdk:ident) => {
         #[test]
         fn $sdk() {
-            let input = read_fixture(concat!("payloads/", stringify!($sdk), ".json"));
-            let expected = read_fixture(concat!(stringify!($mode), "/", stringify!($sdk), ".json"));
+            let input = read_fixture(concat!("payloads/payloads/", stringify!($sdk), ".json"));
+            let expected = read_fixture(concat!("payloads/", stringify!($mode), "/", stringify!($sdk), ".json"));
             let actual = super::$mode(&input);
             assert_eq_str!(expected, actual);
         }
@@ -71,7 +43,7 @@ fn strip(input: &str) -> String {
 macro_rules! test_all {
     ($mode:ident) => {
         mod $mode {
-            use super::read_fixture;
+            use super::common::read_fixture;
 
             run!($mode, legacy_js_exception);
             run!($mode, legacy_js_message);
