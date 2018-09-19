@@ -15,7 +15,7 @@ use sha2::{Sha256, Sha512};
 use protocol::{Annotated, Meta, Remark, RemarkType, Value};
 
 use super::builtin::BUILTIN_RULES;
-use super::chunk::{self, Chunk};
+use super::chunks::{self, Chunk};
 use super::pii::{PiiKind, PiiProcessor, ProcessAnnotatedValue, ValueInfo};
 
 lazy_static! {
@@ -453,7 +453,7 @@ impl Redaction {
                 annotated.with_removed_value(Remark::new(RemarkType::Removed, rule.rule_id()))
             }
             Redaction::Mask { .. } => match annotated {
-                Annotated(Some(value), meta) => {
+                Annotated(Some(value), mut meta) => {
                     let value_as_string = value.to_string();
                     let original_length = value_as_string.len();
                     let mut output = vec![];
@@ -463,10 +463,13 @@ impl Redaction {
                         &value_as_string,
                         &mut output,
                     );
-                    let (value, mut meta) = chunk::chunks_to_string(output, meta);
+
+                    let (value, remarks) = chunks::join(output);
+                    *meta.remarks_mut() = remarks;
                     if value.len() != original_length && meta.original_length.is_none() {
                         meta.original_length = Some(original_length as u32);
                     }
+
                     Annotated(Some(Value::String(value)), meta)
                 }
                 annotated @ Annotated(None, _) => {
