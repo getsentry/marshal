@@ -28,7 +28,7 @@ use protocol::{Remark, RemarkType};
 
 /// A type for dealing with chunks of annotated text.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", rename_all = "lowercase")]
 pub enum Chunk {
     /// Unmodified text chunk.
     Text {
@@ -42,6 +42,7 @@ pub enum Chunk {
         /// The rule that crated this redaction
         rule_id: String,
         /// Type type of remark for this redaction
+        #[serde(rename = "remark")]
         ty: RemarkType,
     },
 }
