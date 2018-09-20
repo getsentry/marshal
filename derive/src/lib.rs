@@ -15,20 +15,25 @@ decl_derive!([ProcessAnnotatedValue, attributes(process_annotated_value)] => pro
 fn process_wrapper_struct_derive(
     s: synstructure::Structure,
 ) -> Result<TokenStream, synstructure::Structure> {
+    // The next few blocks are for finding out whether the given type is of the form:
+    // struct Foo(Bar)  (tuple struct with a single field)
+
     if s.variants().len() != 1 {
+        // We have more than one variant (e.g. `enum Foo { A, B }`)
         return Err(s);
     }
 
     if s.variants()[0].bindings().len() != 1 {
+        // The single variant has multiple fields
+        // e.g. `struct Foo(Bar, Baz)`
+        //      `enum Foo { A(X, Y) }`
         return Err(s);
     }
 
     if let Some(_) = s.variants()[0].bindings()[0].ast().ident {
+        // The variant has a name
+        // e.g. `struct Foo { bar: Bar }` instead of `struct Foo(Bar)`
         return Err(s);
-    }
-
-    if !s.variants()[0].bindings()[0].ast().attrs.is_empty() {
-        panic!("Single-field tuple structs are treated as type aliases");
     }
 
     // At this point we know we have a struct of the form:
@@ -38,6 +43,20 @@ fn process_wrapper_struct_derive(
     // #[process_annotated_value] is necessary on the value.
     //
     // It basically works like a type alias.
+
+    // Last check: It's a programming error to add `#[process_annotated_value]` to the single
+    // field, because it does not do anything.
+    //
+    // e.g.
+    // `struct Foo(#[process_annotated_value] Annnotated<Bar>)` is useless
+    // `struct Foo(Bar)` is how it's supposed to be used
+    for attr in &s.variants()[0].bindings()[0].ast().attrs {
+        if let Some(meta) = attr.interpret_meta() {
+            if meta.name() == "process_annotated_value" {
+                panic!("Single-field tuple structs are treated as type aliases");
+            }
+        }
+    }
 
     let name = &s.ast().ident;
 
