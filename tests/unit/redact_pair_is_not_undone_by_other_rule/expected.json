@@ -1,0 +1,19 @@
+{
+  "extra": {
+    "foo": null
+  },
+  "_meta": {
+    "extra": {
+      "foo": {
+        "": {
+          "rem": [
+            [
+              "remove_all_message_keys",
+              "x"
+            ]
+          ]
+        }
+      }
+    }
+  }
+}

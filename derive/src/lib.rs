@@ -12,7 +12,80 @@ use syn::{Lit, Meta, MetaNameValue, NestedMeta};
 
 decl_derive!([ProcessAnnotatedValue, attributes(process_annotated_value)] => process_item_derive);
 
+fn process_wrapper_struct_derive(
+    s: synstructure::Structure,
+) -> Result<TokenStream, synstructure::Structure> {
+    // The next few blocks are for finding out whether the given type is of the form:
+    // struct Foo(Bar)  (tuple struct with a single field)
+
+    if s.variants().len() != 1 {
+        // We have more than one variant (e.g. `enum Foo { A, B }`)
+        return Err(s);
+    }
+
+    if s.variants()[0].bindings().len() != 1 {
+        // The single variant has multiple fields
+        // e.g. `struct Foo(Bar, Baz)`
+        //      `enum Foo { A(X, Y) }`
+        return Err(s);
+    }
+
+    if let Some(_) = s.variants()[0].bindings()[0].ast().ident {
+        // The variant has a name
+        // e.g. `struct Foo { bar: Bar }` instead of `struct Foo(Bar)`
+        return Err(s);
+    }
+
+    // At this point we know we have a struct of the form:
+    // struct Foo(Bar)
+    //
+    // Those structs get special treatment: Bar does not need to be wrapped in Annnotated, and no
+    // #[process_annotated_value] is necessary on the value.
+    //
+    // It basically works like a type alias.
+
+    // Last check: It's a programming error to add `#[process_annotated_value]` to the single
+    // field, because it does not do anything.
+    //
+    // e.g.
+    // `struct Foo(#[process_annotated_value] Annnotated<Bar>)` is useless
+    // `struct Foo(Bar)` is how it's supposed to be used
+    for attr in &s.variants()[0].bindings()[0].ast().attrs {
+        if let Some(meta) = attr.interpret_meta() {
+            if meta.name() == "process_annotated_value" {
+                panic!("Single-field tuple structs are treated as type aliases");
+            }
+        }
+    }
+
+    let name = &s.ast().ident;
+
+    Ok(s.gen_impl(quote! {
+        use processor as __processor;
+        use protocol as __protocol;
+
+        gen impl __processor::ProcessAnnotatedValue for @Self {
+            fn process_annotated_value(
+                __annotated: __protocol::Annotated<Self>,
+                __processor: &__processor::Processor,
+                __info: &__processor::ValueInfo
+            ) -> __protocol::Annotated<Self> {
+                __processor::ProcessAnnotatedValue::process_annotated_value(
+                    __annotated.map(|x| x.0),
+                    __processor,
+                    __info
+                ).map(#name)
+            }
+        }
+    }))
+}
+
 fn process_item_derive(s: synstructure::Structure) -> TokenStream {
+    let s = match process_wrapper_struct_derive(s) {
+        Ok(stream) => return stream,
+        Err(s) => s,
+    };
+
     let mut body = TokenStream::new();
     for variant in s.variants() {
         let mut variant = variant.clone();
@@ -76,7 +149,8 @@ fn process_item_derive(s: synstructure::Structure) -> TokenStream {
                 let pii_kind = pii_kind
                     .map(|x| quote!(Some(__processor::#x)))
                     .unwrap_or_else(|| quote!(None));
-                let cap = cap.map(|x| quote!(Some(__processor::#x)))
+                let cap = cap
+                    .map(|x| quote!(Some(__processor::#x)))
                     .unwrap_or_else(|| quote!(None));
                 (quote! {
                     #bi = __processor::ProcessAnnotatedValue::process_annotated_value(

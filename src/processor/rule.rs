@@ -860,6 +860,7 @@ impl<'a> PiiProcessor for RuleBasedPiiProcessor<'a> {
 
 #[cfg(test)]
 mod tests {
+    // TODO: Move those tests to tests/unit/
     use super::*;
     use protocol::Map;
 
@@ -1272,67 +1273,6 @@ mod tests {
     }
   }
 }"#
-        );
-    }
-
-    #[test]
-    fn test_rules_precedence() {
-        fn inner(cfg: &PiiConfig) {
-            #[derive(ProcessAnnotatedValue, Debug, Deserialize, Serialize, Clone)]
-            struct Event {
-                #[process_annotated_value(pii_kind = "databag")]
-                extra: Annotated<Map<Value>>,
-            }
-
-            let event = Annotated::<Event>::from_json(
-                r#"{"extra": {"foo": "Paid with card 1234-1234-1234-1234 on d/deadbeef1234"}}"#,
-            ).unwrap();
-
-            let processor = cfg.processor();
-            let processed_event = processor.process_root_value(event);
-
-            assert_eq_str!(
-                processed_event.to_json().unwrap(),
-                r#"{"extra":{"foo":null},"_meta":{"extra":{"foo":{"":{"rem":[["remove_all_message_keys","x"]]}}}}}"#
-            );
-        }
-
-        inner(
-            &PiiConfig::from_json(
-                r#"{
-          "applications": {
-            "databag": [
-              "remove_all_message_keys",
-              "@mac:hash"
-            ]
-          },
-          "rules": {
-            "remove_all_message_keys": {
-              "keyPattern": "foo",
-              "type": "redactPair"
-            }
-          }
-        }"#,
-            ).unwrap(),
-        );
-
-        inner(
-            &PiiConfig::from_json(
-                r#"{
-          "applications": {
-            "databag": [
-              "@mac:hash",
-              "remove_all_message_keys"
-            ]
-          },
-          "rules": {
-            "remove_all_message_keys": {
-              "keyPattern": "foo",
-              "type": "redactPair"
-            }
-          }
-        }"#,
-            ).unwrap(),
         );
     }
 }

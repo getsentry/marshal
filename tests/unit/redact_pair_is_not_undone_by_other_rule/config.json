@@ -1,0 +1,14 @@
+{
+  "applications": {
+    "databag": [
+      "remove_all_message_keys",
+      "@mac:hash"
+    ]
+  },
+  "rules": {
+    "remove_all_message_keys": {
+      "keyPattern": "foo",
+      "type": "redactPair"
+    }
+  }
+}

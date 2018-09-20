@@ -608,21 +608,21 @@ mod test_request {
                 map.insert("GOOGLE".to_string(), "1".to_string().into());
                 map
             }).into(),
-            headers: {
+            headers: Headers({
                 let mut map = Map::new();
                 map.insert(
                     "Referer".to_string(),
                     "https://google.com/".to_string().into(),
                 );
-                Annotated::from(Headers(map))
-            },
+                map
+            }).into(),
             env: {
                 let mut map = Map::new();
                 map.insert(
                     "REMOTE_ADDR".to_string(),
                     Value::String("213.47.147.207".to_string()).into(),
                 );
-                Annotated::from(map)
+                map.into()
             },
             other: {
                 let mut map = Map::new();
@@ -630,7 +630,7 @@ mod test_request {
                     "other".to_string(),
                     Value::String("value".to_string()).into(),
                 );
-                Annotated::from(map)
+                map.into()
             },
         };
 

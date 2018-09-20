@@ -1,0 +1,7 @@
+{
+    "request": {
+        "headers": {
+            "foo": "bar"
+        }
+    }
+}

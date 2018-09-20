@@ -1,0 +1,16 @@
+{
+    "applications": {
+        "databag": [
+            "remove_data"
+        ]
+    },
+    "rules": {
+        "remove_data": {
+            "type": "redactPair",
+            "keyPattern": "foo",
+            "redaction": {
+                "method": "remove"
+            }
+        }
+    }
+}
