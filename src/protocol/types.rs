@@ -546,10 +546,18 @@ mod request {
             write!(f, "a headers map")
         }
 
+        fn visit_seq<A: de::SeqAccess<'de>>(self, mut access: A) -> Result<Self::Value, A::Error> {
+            let mut map = Map::new();
+            while let Some((key, value)) = access.next_element()? {
+                map.insert(capitalize_header(key), value);
+            }
+            Ok(Headers(map))
+        }
+
         fn visit_map<A: de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
             let mut headers = Map::new();
-            while let Some(entry) = map.next_entry()? {
-                headers.insert(capitalize_header(entry.0), entry.1);
+            while let Some((key, value)) = map.next_entry()? {
+                headers.insert(capitalize_header(key), value);
             }
             Ok(Headers(headers))
         }
@@ -557,7 +565,7 @@ mod request {
 
     impl<'de> Deserialize<'de> for Headers {
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-            deserializer.deserialize_map(HeadersVisitor)
+            deserializer.deserialize_any(HeadersVisitor)
         }
     }
 }
@@ -739,6 +747,19 @@ mod test_request {
         map.insert("Accept".to_string(), "application/json".to_string().into());
         map.insert("X-Sentry".to_string(), "version=8".to_string().into());
         map.insert("-Other-".to_string(), "header".to_string().into());
+
+        let query = Annotated::from(Headers(map));
+        assert_eq_dbg!(query, serde_json::from_str(json).unwrap());
+    }
+
+    #[test]
+    fn test_header_from_sequence() {
+        let json = r#"[
+  ["accept", "application/json"]
+]"#;
+
+        let mut map = Map::new();
+        map.insert("Accept".to_string(), "application/json".to_string().into());
 
         let query = Annotated::from(Headers(map));
         assert_eq_dbg!(query, serde_json::from_str(json).unwrap());
