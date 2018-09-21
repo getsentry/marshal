@@ -3084,6 +3084,76 @@ mod test_debug_image {
     }
 }
 
+/// Geographical location of the end user or device.
+#[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
+pub struct Geo {
+    /// Two-letter country code (ISO 3166-1 alpha-2).
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "location", cap = "summary")]
+    pub country_code: Annotated<Option<String>>,
+
+    /// Human readable city name.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "location", cap = "summary")]
+    pub city: Annotated<Option<String>>,
+
+    /// Human readable region name or code.
+    #[serde(default, skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value(pii_kind = "location", cap = "summary")]
+    pub region: Annotated<Option<String>>,
+
+    /// Additional arbitrary fields for forwards compatibility.
+    #[serde(flatten)]
+    #[process_annotated_value(pii_kind = "databag")]
+    pub other: Annotated<Map<Value>>,
+}
+
+#[cfg(test)]
+mod test_geo {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_roundtrip() {
+        let json = r#"{
+  "country_code": "US",
+  "city": "San Francisco",
+  "region": "CA",
+  "other": "value"
+}"#;
+        let geo = Geo {
+            country_code: Some("US".to_string()).into(),
+            city: Some("San Francisco".to_string()).into(),
+            region: Some("CA".to_string()).into(),
+            other: {
+                let mut map = Map::new();
+                map.insert(
+                    "other".to_string(),
+                    Value::String("value".to_string()).into(),
+                );
+                Annotated::from(map)
+            },
+        };
+
+        assert_eq_dbg!(geo, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string_pretty(&geo).unwrap());
+    }
+
+    #[test]
+    fn test_default_values() {
+        let json = "{}";
+        let geo = Geo {
+            country_code: None.into(),
+            city: None.into(),
+            region: None.into(),
+            other: Default::default(),
+        };
+
+        assert_eq_dbg!(geo, serde_json::from_str(json).unwrap());
+        assert_eq_str!(json, serde_json::to_string(&geo).unwrap());
+    }
+}
+
 /// Debugging and processing meta information.
 #[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct DebugMeta {
@@ -3600,6 +3670,7 @@ mod event {
             let mut template_info = None;
             let mut threads = None;
             let mut tags = None;
+            let mut geo = None;
             let mut extra = None;
             let mut debug_meta = None;
             let mut client_sdk = None;
@@ -3664,6 +3735,7 @@ mod event {
                         threads = Some(Deserialize::deserialize(deserializer)?)
                     },
                     "tags" => tags = Some(tags::deserialize(deserializer)?),
+                    "geo" => geo = Some(Deserialize::deserialize(deserializer)?),
                     "extra" => extra = Some(Deserialize::deserialize(deserializer)?),
                     "debug_meta" => debug_meta = Some(Deserialize::deserialize(deserializer)?),
                     "sentry.interfaces.DebugMeta" => if debug_meta.is_none() {
@@ -3702,6 +3774,7 @@ mod event {
                 template_info: template_info.unwrap_or_default(),
                 threads: threads.unwrap_or_default(),
                 tags: tags.unwrap_or_default(),
+                geo: geo.unwrap_or_default(),
                 extra: extra.unwrap_or_default(),
                 debug_meta: debug_meta.unwrap_or_default(),
                 client_sdk: client_sdk.unwrap_or_default(),
@@ -3838,6 +3911,11 @@ pub struct Event {
     #[process_annotated_value(pii_kind = "databag")]
     pub tags: Annotated<Map<String>>,
 
+    /// Approximate geographical location of the end user or device.
+    #[serde(skip_serializing_if = "utils::is_none")]
+    #[process_annotated_value]
+    pub geo: Annotated<Option<Geo>>,
+
     /// Arbitrary extra information set by the user.
     #[serde(skip_serializing_if = "utils::is_empty_map")]
     #[process_annotated_value(pii_kind = "databag")]
@@ -3951,6 +4029,7 @@ mod test_event {
                 map.insert("tag".to_string(), "value".to_string().into());
                 Annotated::from(map)
             },
+            geo: None.into(),
             extra: {
                 let mut map = Map::new();
                 map.insert(
@@ -4004,6 +4083,7 @@ mod test_event {
             template_info: None.into(),
             threads: Default::default(),
             tags: Default::default(),
+            geo: None.into(),
             extra: Default::default(),
             debug_meta: None.into(),
             client_sdk: None.into(),
@@ -4079,6 +4159,7 @@ mod test_event {
             template_info: None.into(),
             threads: Default::default(),
             tags: Default::default(),
+            geo: None.into(),
             extra: Default::default(),
             debug_meta: None.into(),
             client_sdk: None.into(),

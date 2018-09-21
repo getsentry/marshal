@@ -11,36 +11,38 @@ use super::chunks::{self, Chunk};
 pub enum PiiKind {
     /// A freeform text potentially containing PII data.
     Freeform,
-    /// An ip address
+    /// An ip address.
     Ip,
-    /// A user, unique device or other PII ID
+    /// A user, unique device or other PII ID.
     Id,
-    /// A username or other user identifier
+    /// A username or other user identifier.
     Username,
     /// Hostname of a machine (server, pc or mobile device).
     Hostname,
-    /// Sensitive PII if they ever come up in the protocol (gender, religious orientation etc.)
+    /// Sensitive PII if they ever come up in the protocol (gender, religious orientation, etc).
     Sensitive,
-    /// First, last or real name of a person
+    /// First, last or real name of a person.
     Name,
-    /// An email address
+    /// An email address.
     Email,
-    /// An arbitrary structured data bag
+    /// Geographical location information.
+    Location,
+    /// An arbitrary structured data bag.
     Databag,
 }
 
 /// The type of cap applied to the value.
 #[derive(Copy, Clone, Debug)]
 pub enum Cap {
-    /// A summary text
+    /// A summary text.
     Summary,
-    /// A message text
+    /// A message text.
     Message,
-    /// A path
+    /// A path.
     Path,
-    /// A short path (typically just filename)
+    /// A short path (typically just filename).
     ShortPath,
-    /// Default limits for databags
+    /// An arbirtrary object with nested data.
     Databag,
 }
 
