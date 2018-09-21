@@ -212,6 +212,7 @@ fn pii_kind_to_enum_variant(name: &str) -> TokenStream {
         "sensitive" => quote!(PiiKind::Sensitive),
         "name" => quote!(PiiKind::Name),
         "email" => quote!(PiiKind::Email),
+        "location" => quote!(PiiKind::Location),
         "databag" => quote!(PiiKind::Databag),
         _ => panic!("invalid pii_kind variant '{}'", name),
     }
