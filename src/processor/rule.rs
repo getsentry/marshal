@@ -14,7 +14,7 @@ use sha2::{Sha256, Sha512};
 
 use protocol::{Annotated, Meta, Remark, RemarkType, Value};
 
-use super::builtin::BUILTIN_RULES;
+use super::builtin::BUILTIN_RULES_MAP;
 use super::chunks::{self, Chunk};
 use super::pii::{PiiKind, PiiProcessor, ProcessAnnotatedValue, ValueInfo};
 
@@ -580,7 +580,7 @@ impl PiiConfig {
                 spec: rule_spec,
                 cfg: self,
             })
-        } else if let Some(rule_spec) = BUILTIN_RULES.get(rule_id) {
+        } else if let Some(rule_spec) = BUILTIN_RULES_MAP.get(rule_id) {
             Some(Rule {
                 id: rule_id,
                 spec: rule_spec,

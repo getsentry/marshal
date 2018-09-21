@@ -5,7 +5,7 @@ use super::rule::{HashAlgorithm, Redaction, RuleSpec, RuleType};
 macro_rules! declare_builtin_rules {
     ($($rule_id:expr => $spec:expr;)*) => {
         lazy_static! {
-            pub(crate) static ref BUILTIN_RULES: BTreeMap<&'static str, &'static RuleSpec> = {
+            pub(crate) static ref BUILTIN_RULES_MAP: BTreeMap<&'static str, &'static RuleSpec> = {
                 let mut map = BTreeMap::new();
                 $(
                     map.insert($rule_id, Box::leak(Box::new($spec)) as &'static _);
@@ -13,6 +13,11 @@ macro_rules! declare_builtin_rules {
                 map
             };
         }
+
+        /// Names of all builtin rules
+        pub static BUILTIN_RULES: &[&'static str] = &[
+            $($rule_id,)*
+        ];
     }
 }
 
