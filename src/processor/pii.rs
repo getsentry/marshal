@@ -5,30 +5,36 @@ use protocol::{Annotated, Array, Map, Meta, Value, Values};
 
 use super::chunks::{self, Chunk};
 
-/// The type of PII that's contained in the field.
-#[derive(Copy, Clone, Debug, Deserialize, Serialize, Ord, PartialOrd, Eq, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum PiiKind {
-    /// A freeform text potentially containing PII data.
-    Freeform,
-    /// An ip address.
-    Ip,
-    /// A user, unique device or other PII ID.
-    Id,
-    /// A username or other user identifier.
-    Username,
-    /// Hostname of a machine (server, pc or mobile device).
-    Hostname,
-    /// Sensitive PII if they ever come up in the protocol (gender, religious orientation, etc).
-    Sensitive,
-    /// First, last or real name of a person.
-    Name,
-    /// An email address.
-    Email,
-    /// Geographical location information.
-    Location,
-    /// An arbitrary structured data bag.
-    Databag,
+macro_rules! define_pii_kind {
+    ($($variant:ident($str:expr) : $doc:expr;)*) => {
+        /// The type of PII that's contained in the field.
+        #[derive(Copy, Clone, Debug, Deserialize, Serialize, Ord, PartialOrd, Eq, PartialEq)]
+        #[serde(rename_all = "snake_case")]
+        pub enum PiiKind {
+            $(
+                #[doc=$doc]
+                $variant,
+            )*
+        }
+
+        /// Names of all PII kinds
+        pub static PII_KINDS: &[&'static str] = &[
+            $($str),*
+        ];
+    }
+}
+
+define_pii_kind! {
+    Freeform("freeform"): "A freeform text potentially containing PII data.";
+    Ip("ip"): "An ip address";
+    Id("id"): "A user, unique device or other PII ID";
+    Username("username"): "A username or other user identifier";
+    Hostname("hostname"): "Hostname of a machine (server, pc or mobile device).";
+    Sensitive("sensitive"): "Sensitive PII if they ever come up in the protocol (gender, religious orientation etc.)";
+    Name("name"): "First, last or real name of a person";
+    Email("email"): "An email address";
+    Location("location"): "Geographical location information.";
+    Databag("databag"): "An arbitrary structured data bag";
 }
 
 /// The type of cap applied to the value.

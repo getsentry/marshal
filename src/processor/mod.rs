@@ -6,5 +6,6 @@ mod rule;
 
 pub mod chunks;
 
+pub use self::builtin::BUILTIN_RULES;
 pub use self::pii::*;
 pub use self::rule::*;
