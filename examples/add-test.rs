@@ -36,10 +36,9 @@ fn pretty(json: &str) -> Result<String, Error> {
 fn check_diff(name: &str, before: &str, after: &str) -> Result<bool, Error> {
     if before == after {
         println!(
-            "{} Please check {}:\n{}",
+            "{} Please check {}:\n(no differences)",
             style(">").dim(),
-            name,
-            "(no differences)"
+            name
         );
     } else {
         println!(
