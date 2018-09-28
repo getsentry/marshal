@@ -33,6 +33,7 @@ macro_rules! run {
 
 fn normalize(input: &str) -> String {
     let event = Annotated::<Event>::from_json(input).expect("could not parse event");
+    println!("other: {:?}", event.value().unwrap().other.value().unwrap());
     event.to_json_pretty().expect("could not stringify event")
 }
 
