@@ -198,78 +198,6 @@ mod test_logentry {
     }
 }
 
-/// Reference to a source code repository.
-#[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
-pub struct RepoReference {
-    /// Name of the repository as registered in Sentry (required).
-    pub name: Annotated<String>,
-
-    /// Prefix to apply to source code when pairing it with files in the repository.
-    #[serde(default, skip_serializing_if = "utils::is_none")]
-    pub prefix: Annotated<Option<String>>,
-
-    /// Current reivision of the repository at build time.
-    #[serde(default, skip_serializing_if = "utils::is_none")]
-    pub revision: Annotated<Option<String>>,
-
-    /// Additional arbitrary fields for forwards compatibility.
-    #[serde(flatten)]
-    pub other: Annotated<Map<Value>>,
-}
-
-#[cfg(test)]
-mod test_repos {
-    use super::*;
-    use serde_json;
-
-    #[test]
-    fn test_roundtrip() {
-        let json = r#"{
-  "name": "marshal",
-  "prefix": "./marshal",
-  "revision": "e879d26974bbbb7f047105182f04fbfd4732c4e5",
-  "other": "value"
-}"#;
-
-        let repo = RepoReference {
-            name: "marshal".to_string().into(),
-            prefix: Some("./marshal".to_string()).into(),
-            revision: Some("e879d26974bbbb7f047105182f04fbfd4732c4e5".to_string()).into(),
-            other: {
-                let mut map = Map::new();
-                map.insert(
-                    "other".to_string(),
-                    Value::String("value".to_string()).into(),
-                );
-                Annotated::from(map)
-            },
-        };
-
-        assert_eq_dbg!(repo, serde_json::from_str(json).unwrap());
-        assert_eq_str!(json, serde_json::to_string_pretty(&repo).unwrap());
-    }
-
-    #[test]
-    fn test_default_values() {
-        let json = r#"{"name":"marshal"}"#;
-        let repo = RepoReference {
-            name: "marshal".to_string().into(),
-            prefix: None.into(),
-            revision: None.into(),
-            other: Default::default(),
-        };
-
-        assert_eq_dbg!(repo, serde_json::from_str(json).unwrap());
-        assert_eq_str!(json, serde_json::to_string(&repo).unwrap());
-    }
-
-    #[test]
-    fn test_invalid() {
-        let repo: Annotated<RepoReference> = Annotated::from_error("missing field `name`");
-        assert_eq_dbg!(repo, serde_json::from_str("{}").unwrap());
-    }
-}
-
 /// Information about the user who triggered an event.
 #[derive(Debug, Clone, Deserialize, PartialEq, ProcessAnnotatedValue, Serialize)]
 pub struct User {
@@ -3659,7 +3587,6 @@ mod event {
             let mut server_name = None;
             let mut release = None;
             let mut dist = None;
-            let mut repos = None;
             let mut environment = None;
             let mut user = None;
             let mut request = None;
@@ -3700,7 +3627,6 @@ mod event {
                     "server_name" => server_name = Some(Deserialize::deserialize(deserializer)?),
                     "release" => release = Some(Deserialize::deserialize(deserializer)?),
                     "dist" => dist = Some(Deserialize::deserialize(deserializer)?),
-                    "repos" => repos = Some(Deserialize::deserialize(deserializer)?),
                     "environment" => environment = Some(Deserialize::deserialize(deserializer)?),
                     "user" => user = Some(Deserialize::deserialize(deserializer)?),
                     "sentry.interfaces.User" => if user.is_none() {
@@ -3763,7 +3689,6 @@ mod event {
                 server_name: server_name.unwrap_or_default(),
                 release: release.unwrap_or_default(),
                 dist: dist.unwrap_or_default(),
-                repos: repos.unwrap_or_default(),
                 environment: environment.unwrap_or_default(),
                 user: user.unwrap_or_default(),
                 request: request.unwrap_or_default(),
@@ -3854,10 +3779,6 @@ pub struct Event {
     /// Program's distribution identifier.
     #[serde(skip_serializing_if = "utils::is_none")]
     pub dist: Annotated<Option<String>>,
-
-    /// References to source code repositories.
-    #[serde(skip_serializing_if = "utils::is_empty_map")]
-    pub repos: Annotated<Map<RepoReference>>,
 
     /// Environment the environment was generated in ("production" or "development").
     #[serde(skip_serializing_if = "utils::is_none")]
@@ -4014,7 +3935,6 @@ mod test_event {
             server_name: Some("myhost".to_string()).into(),
             release: Some("myrelease".to_string()).into(),
             dist: Some("mydist".to_string()).into(),
-            repos: Default::default(),
             environment: Some("myenv".to_string()).into(),
             user: None.into(),
             request: None.into(),
@@ -4072,7 +3992,6 @@ mod test_event {
             server_name: None.into(),
             release: None.into(),
             dist: None.into(),
-            repos: Default::default(),
             environment: None.into(),
             user: None.into(),
             request: None.into(),
@@ -4148,7 +4067,6 @@ mod test_event {
             server_name: None.into(),
             release: None.into(),
             dist: None.into(),
-            repos: Default::default(),
             environment: None.into(),
             user: None.into(),
             request: None.into(),
