@@ -28,3 +28,4 @@ stable rust at the moment.
 
 It depends on branched versions of serde at the moment which are pinned in the
 `Cargo.toml`.
+
